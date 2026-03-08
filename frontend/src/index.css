@@ -1,0 +1,529 @@
+body {
+  background-color: #F2F2F7;
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+margin: 0;
+padding: 20px;
+}
+.card {
+background: white;
+border-radius: 16px;
+padding: 16px;
+margin-bottom: 12px;
+box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.title {
+font-size: 24px;
+font-weight: bold;
+margin-bottom: 16px;
+justify-content: center;
+display: flex;
+}
+.card-title {
+font-size: 18px;
+font-weight: 600;
+margin: 0 0 4px 0;
+}
+.card-subtitle {
+color: #8E8E93;
+margin: 0;
+}
+.add-button {
+width: 100%;
+padding: 16px;
+background: #007AFF;
+color: white;
+border: none;
+border-radius: 12px;
+font-size: 16px;
+font-weight: 600;
+cursor: pointer;
+margin-top: 8px;
+margin-bottom: 20px;
+}
+.add-button:hover {
+background: #0056CC;
+}
+/* Modal Styles */
+.modal-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.5);
+display: flex;
+align-items: center;
+justify-content: center;
+z-index: 1000;
+}
+.modal {
+background: white;
+border-radius: 20px;
+padding: 24px;
+width: 90%;
+max-width: 400px;
+box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+}
+.modal-title {
+font-size: 20px;
+font-weight: bold;
+margin-bottom: 20px;
+text-align: center;
+}
+.form-group {
+margin-bottom: 16px;
+}
+.form-group label {
+display: block;
+font-size: 14px;
+font-weight: 600;
+margin-bottom: 6px;
+color: #333;
+}
+.form-group input {
+width: 100%;
+padding: 12px;
+border: 1px solid #ddd;
+border-radius: 10px;
+font-size: 16px;
+box-sizing: border-box;
+}
+.modal-buttons {
+display: flex;
+gap: 12px;
+margin-top: 24px;
+}
+.cancel-btn, .save-btn {
+flex: 1;
+padding: 14px;
+border: none;
+border-radius: 12px;
+font-size: 16px;
+font-weight: 600;
+cursor: pointer;
+}
+.cancel-btn {
+background: #F2F2F7;
+color: #333;
+}
+.save-btn {
+background: #007AFF;
+color: white;
+}
+/* Card with delete button */
+.card-content {
+display: flex;
+justify-content: space-between;
+align-items: center;
+}
+.delete-btn-icon {
+background: transparent;
+color: #FF3B30;
+border: 2px solid #FF3B30;
+border-radius: 50%;
+width: 32px;
+height: 32px;
+font-size: 16px;
+font-weight: bold;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+line-height: 1;
+}
+.delete-btn-icon:hover {
+background: #FF3B30;
+color: white;
+}
+/* Clickable card */
+.clickable {
+cursor: pointer;
+transition: transform 0.1s;
+}
+.clickable:hover {
+transform: scale(1.02);
+}
+.clickable:active {
+transform: scale(0.98);
+}
+/* Header with back button */
+.header-with-back {
+display: flex;
+align-items: center;
+gap: 12px;
+margin-bottom: 16px;
+justify-content: center;
+}
+.back-btn {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  color: #000;
+  border: 2px solid #000;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.2s;
+}
+.section-title {
+font-size: 18px;
+font-weight: 600;
+color: #8E8E93;
+margin-bottom: 12px;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+}
+.student-card {
+border-left: 4px solid #007AFF;
+}
+/* Exam card styles */
+.exam-card {
+border-left: 4px solid #34C759;
+padding: 16px;
+}
+.exam-header {
+display: flex;
+justify-content: space-between;
+align-items: flex-start;
+margin-bottom: 12px;
+}
+/* Upload area */
+.upload-area {
+border: 2px dashed #C7C7CC;
+border-radius: 12px;
+padding: 24px;
+margin-bottom: 20px;
+text-align: center;
+color: #8E8E93;
+cursor: pointer;
+transition: all 0.2s;
+}
+.upload-area:hover {
+border-color: #007AFF;
+background: #F2F2F7;
+}
+.upload-icon {
+font-size: 32px;
+margin-bottom: 8px;
+}
+/* Image container */
+.image-container {
+position: relative;
+cursor: pointer;
+}
+.exam-image {
+width: 100%;
+max-height: 300px;
+object-fit: cover;
+border-radius: 12px;
+}
+.image-hint {
+position: absolute;
+bottom: 8px;
+left: 50%;
+transform: translateX(-50%);
+background: rgba(0,0,0,0.6);
+color: white;
+padding: 4px 12px;
+border-radius: 16px;
+font-size: 12px;
+margin: 0;
+}
+
+/* ── NEW CLASSES ── */
+
+/* Right side of exam list card (badge + delete) */
+.exam-right {
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+/* Small photo indicator badge on exam list */
+.has-photo-badge {
+font-size: 16px;
+line-height: 1;
+}
+
+/* Date + score row on exam detail view */
+.exam-detail-info {
+display: flex;
+gap: 8px;
+flex-wrap: wrap;
+margin-bottom: 20px;
+}
+
+/* Individual info pill */
+.detail-badge {
+background: #F2F2F7;
+color: #3A3A3C;
+font-size: 13px;
+font-weight: 600;
+padding: 6px 14px;
+border-radius: 20px;
+}
+
+/* Full-width delete button at bottom of exam detail */
+.delete-button-full {
+  width: 32px;
+  height: 32px;
+  padding: 14px;
+  background: transparent;
+  color: #FF3B30;
+  border: 2px solid #FF3B30;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  margin-top: 20px;
+  margin: auto;
+  transition: all 0.2s;
+  }
+
+.delete-button-full:hover {
+background: #FF3B30;
+color: white;
+}
+
+/* Student profile header in exams view */
+.student-profile-header {
+display: flex;
+flex-direction: column;
+align-items: center;
+margin-bottom: 24px;
+}
+
+.student-profile-avatar {
+width: 90px;
+height: 90px;
+border-radius: 50%;
+object-fit: cover;
+border: 3px solid #007AFF;
+box-shadow: 0 4px 12px rgba(0, 122, 255, 0.25);
+margin-bottom: 10px;
+}
+
+.student-profile-icon {
+width: 90px;
+height: 90px;
+border-radius: 50%;
+background: #F2F2F7;
+border: 3px solid #C7C7CC;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 42px;
+margin-bottom: 10px;
+}
+
+.student-profile-name {
+font-size: 22px;
+font-weight: 700;
+margin: 0;
+text-align: center;
+}
+.student-card-left {
+display: flex;
+align-items: center;
+gap: 12px;
+}
+
+/* Student photo avatar (uploaded image) */
+.student-avatar {
+width: 44px;
+height: 44px;
+border-radius: 50%;
+object-fit: cover;
+border: 2px solid #007AFF;
+flex-shrink: 0;
+}
+
+/* Default icon avatar (no photo) */
+.student-avatar-icon {
+width: 44px;
+height: 44px;
+border-radius: 50%;
+background: #F2F2F7;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 22px;
+flex-shrink: 0;
+border: 2px solid #C7C7CC;
+}
+
+/* Photo upload tap area inside modal */
+.student-photo-upload {
+border: 2px dashed #C7C7CC;
+border-radius: 12px;
+padding: 20px;
+text-align: center;
+cursor: pointer;
+transition: all 0.2s;
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 6px;
+}
+.student-photo-upload:hover {
+border-color: #007AFF;
+background: #F2F2F7;
+}
+
+/* Preview image inside modal upload area */
+.student-photo-preview {
+width: 80px;
+height: 80px;
+border-radius: 50%;
+object-fit: cover;
+border: 3px solid #007AFF;
+}
+/* ── QR PRINT STYLES ── */
+
+/* Green secondary button for Print QR Codes */
+.print-qr-button {
+  width: 25%;
+  padding: 14px;
+  background: transparent;
+  color: #34C759;
+  border: 2px solid #34C759;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: auto;
+  transition: all 0.2s;
+  }
+  .print-qr-button:hover {
+  background: #34C759;
+  color: white;
+  }
+  
+  /* Full-screen overlay for print sheet */
+  .print-overlay {
+  position: fixed;
+  inset: 0;
+  background: white;
+  z-index: 2000;
+  overflow-y: auto;
+  }
+  
+  /* Toolbar (hidden when printing) */
+  .print-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: #1C1C1E;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  }
+  .print-toolbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  }
+  .print-toolbar-actions {
+  display: flex;
+  gap: 10px;
+  }
+  .print-go-btn {
+  background: #34C759;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  }
+  .print-close-btn {
+  background: #FF3B30;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  }
+  
+  /* Grid of QR cards */
+  .print-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 20px;
+  justify-content: flex-start;
+  }
+  
+  /* Individual cut-out card */
+  .qr-card-print {
+  width: 160px;
+  border: 1px dashed #AAAAAA;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 6px;
+  box-sizing: border-box;
+  page-break-inside: avoid;
+  }
+  
+  .qr-print-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #007AFF;
+  }
+  .qr-print-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #F2F2F7;
+  border: 2px solid #C7C7CC;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  }
+  .qr-print-code {
+  width: 120px;
+  height: 120px;
+  }
+  .qr-print-name {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  margin: 0;
+  }
+  .qr-print-batch {
+  font-size: 10px;
+  color: #8E8E93;
+  text-align: center;
+  margin: 0;
+  }
+  
+  /* Print media — hide toolbar, show only cards */
+  @media print {
+    .no-print { display: none !important; }
+    .print-overlay { position: static; overflow: visible; }
+    .print-sheet { padding: 0; }
+    body > div > *:not(.print-overlay) { display: none !important; }
+  }
