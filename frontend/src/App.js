@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
 
-const API = 'https://japanese-tracker-production.up.railway.app/api';
+const API = process.env.REACT_APP_API || 'http://localhost:5000/api';
 // Compress image before sending to backend (~300KB max)
 const compressImage = (file, maxWidth = 800, quality = 0.6) => {
   return new Promise((resolve) => {
