@@ -276,8 +276,9 @@ function App() {
   // ── RENDER: Students ───────────────────────────────────────────
   const renderStudents = () => (
     <>
+    <button className="back-btn" onClick={goBack}>←</button>
       <div className="header-with-back">
-        <button className="back-btn" onClick={goBack}>←</button>
+        
         <h1 className="title">{selectedBatch.name}</h1>
       </div>
       <h2 className="section-title">Students</h2>
