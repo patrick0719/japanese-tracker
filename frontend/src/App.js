@@ -277,7 +277,7 @@ function App() {
   const renderStudents = () => (
     <>
       <div className="header-with-back">
-        <button className="back-btn" onClick={goBack}>← Back</button>
+        <button className="back-btn" onClick={goBack}>←</button>
         <h1 className="title">{selectedBatch.name}</h1>
       </div>
       <h2 className="section-title">Students</h2>
@@ -309,7 +309,7 @@ function App() {
   const renderExams = () => (
     <>
       <div className="header-with-back">
-        <button className="back-btn" onClick={goBack}>← Back</button>
+        <button className="back-btn" onClick={goBack}>←</button>
       </div>
       <div className="student-profile-header">
         {selectedStudent.photo
@@ -341,7 +341,7 @@ function App() {
   const renderExamDetail = () => (
     <>
       <div className="header-with-back">
-        <button className="back-btn" onClick={goBack}>← Back</button>
+        <button className="back-btn" onClick={goBack}>←</button>
         <h1 className="title">{selectedExam.name}</h1>
       </div>
       <div className="exam-detail-info">
