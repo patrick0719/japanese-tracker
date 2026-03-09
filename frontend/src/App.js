@@ -62,11 +62,22 @@ function App() {
   const fetchBatches = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API}/batches`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds
+      
+      const res = await fetch(`${API}/batches`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
       const data = await res.json();
       setBatches(data);
-    } catch {
-      alert('Cannot connect to server. Make sure backend is running on port 5000.');
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        alert('Connection timed out. Please try again.');
+      } else {
+        alert('Cannot connect to server. Check your internet connection.');
+      }
     } finally {
       setLoading(false);
     }
