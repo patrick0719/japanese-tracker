@@ -833,7 +833,7 @@ function App() {
 
         {/* Hidden — keep old empty state removed */}
         {false && (
-          <div>
+          <div></div>
         )}
 
         <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
