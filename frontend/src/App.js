@@ -767,37 +767,73 @@ function App() {
 
         <h2 className="section-title">Exam Pages ({allImages.length} pages)</h2>
 
-        <div className="photo-gallery">
-          {allImages.map((img, idx) => (
-            <div key={idx} className="photo-thumbnail">
-              <img src={img} alt={`Page ${idx + 1}`} onClick={() => window.open(img, '_blank')} />
-              <span className="page-number">Page {idx + 1}</span>
-              <button className="delete-page-btn" onClick={() => deleteImagePage(selectedExam._id, idx)}>✕</button>
-            </div>
-          ))}
-
-          <div className="add-photo-btn" onClick={() => openScanner(selectedExam._id)}>
-            <div className="add-icon">📷</div>
-            <span>Scan Page</span>
-          </div>
-
-          <div className="add-photo-btn" onClick={() => triggerFileInput(selectedExam._id)}>
-            <div className="add-icon">🖼️</div>
-            <span>Upload</span>
-          </div>
+        {/* Action buttons — always visible */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, padding: '0 4px' }}>
+          <button className="save-btn" style={{ flex: 1 }} onClick={() => openScanner(selectedExam._id)}>
+            📷 Scan Page
+          </button>
+          <button className="cancel-btn" style={{ flex: 1 }} onClick={() => triggerFileInput(selectedExam._id)}>
+            🖼️ Upload Page
+          </button>
         </div>
 
-        {allImages.length === 0 && (
+        {/* Document pages — vertical list like Files app */}
+        {allImages.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>📄</div>
-            <p style={{ color: '#8E8E93', marginBottom: 20 }}>No pages yet</p>
-            <button className="save-btn" style={{ marginRight: 10 }} onClick={() => openScanner(selectedExam._id)}>
-              📷 Scan Document
-            </button>
-            <button className="cancel-btn" onClick={() => triggerFileInput(selectedExam._id)}>
-              🖼️ Upload Photo
-            </button>
+            <p style={{ color: '#8E8E93' }}>No pages yet. Scan or upload to add.</p>
           </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px' }}>
+            {allImages.map((img, idx) => (
+              <div key={idx} style={{
+                background: '#fff',
+                borderRadius: 12,
+                boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+                overflow: 'hidden',
+                position: 'relative'
+              }}>
+                {/* Page header */}
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '8px 12px', background: '#f5f5f7', borderBottom: '1px solid #e5e5ea'
+                }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>Page {idx + 1}</span>
+                  <button
+                    onClick={() => deleteImagePage(selectedExam._id, idx)}
+                    style={{
+                      background: 'none', border: 'none', color: '#ff3b30',
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '2px 6px'
+                    }}
+                  >
+                    🗑 Delete
+                  </button>
+                </div>
+                {/* Document image — A4 proportions, full width */}
+                <img
+                  src={img}
+                  alt={`Page ${idx + 1}`}
+                  onClick={() => window.open(img, '_blank')}
+                  style={{
+                    width: '100%',
+                    aspectRatio: '210 / 297',
+                    objectFit: 'contain',
+                    display: 'block',
+                    background: '#fafafa',
+                    cursor: 'zoom-in'
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Spacer before delete button */}
+        <div style={{ height: 16 }} />
+
+        {/* Hidden — keep old empty state removed */}
+        {false && (
+          <div>
         )}
 
         <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
