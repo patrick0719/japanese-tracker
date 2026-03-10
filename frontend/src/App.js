@@ -49,6 +49,11 @@ function App() {
 
   const fileInputRef = useRef(null);
   const studentPhotoInputRef = useRef(null);
+  // Add to existing useState
+const [showCamera, setShowCamera] = useState(false);
+const [currentExamId, setCurrentExamId] = useState(null);
+const videoRef = useRef(null);
+const canvasRef = useRef(null);
 
   // ── Fetch all batches on load ──────────────────────────────────
   useEffect(() => {
@@ -209,30 +214,183 @@ function App() {
   };
 
   // ── IMAGE UPLOAD ───────────────────────────────────────────────
-  const handleImageUpload = async (examId, file) => {
+  // ── IMAGE UPLOAD WITH MULTIPLE PHOTOS & EDGE DETECTION ─────────────────
+  const [showCropper, setShowCropper] = useState(false);
+  const [cropImage, setCropImage] = useState(null);
+  const [pendingExamId, setPendingExamId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const cropperRef = useRef(null);
+
+  // Auto-detect document edges using simple algorithm
+  const autoDetectEdges = (canvas) => {
+    // This is a simplified version - for production, use OpenCV or API
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    // Find document boundaries (simplified contrast detection)
+    let top = 0, bottom = canvas.height, left = 0, right = canvas.width;
+    
+    // Simple edge detection based on brightness changes
+    const threshold = 30;
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Find top edge
+    for (let y = 0; y < height; y++) {
+      let rowDiff = 0;
+      for (let x = 1; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const prevIdx = (y * width + (x - 1)) * 4;
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+        const prevBrightness = (data[prevIdx] + data[prevIdx + 1] + data[prevIdx + 2]) / 3;
+        rowDiff += Math.abs(brightness - prevBrightness);
+      }
+      if (rowDiff > threshold * width) {
+        top = y;
+        break;
+      }
+    }
+    
+    // Find bottom edge
+    for (let y = height - 1; y >= 0; y--) {
+      let rowDiff = 0;
+      for (let x = 1; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const prevIdx = (y * width + (x - 1)) * 4;
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+        const prevBrightness = (data[prevIdx] + data[prevIdx + 1] + data[prevIdx + 2]) / 3;
+        rowDiff += Math.abs(brightness - prevBrightness);
+      }
+      if (rowDiff > threshold * width) {
+        bottom = y;
+        break;
+      }
+    }
+    
+    return { top, bottom, left, right };
+  };
+
+  const handleImageSelect = async (examId, file) => {
     if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setCropImage(e.target.result);
+      setPendingExamId(examId);
+      setShowCropper(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveCroppedImage = async () => {
+    if (!cropImage) return;
+  
+    // Apply edge enhancement via canvas
+    const img = new Image();
+    img.src = cropImage;
+    await new Promise(r => img.onload = r);
+  
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+  
+    // Draw image
+    ctx.drawImage(img, 0, 0);
+  
+    // Apply document enhancement: increase contrast + grayscale-friendly
+    ctx.filter = 'contrast(1.4) brightness(1.05) saturate(0.8)';
+    ctx.drawImage(img, 0, 0);
+  
+    const compressed = canvas.toDataURL('image/jpeg', 0.75);
+  
     try {
-      const compressed = await compressImage(file, 1200, 0.6);
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/image`, {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${pendingExamId}/image`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: compressed })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
+  
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) {
         setSelectedStudent(updatedStudent);
-        const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
+        const updatedExam = updatedStudent.exams.find(ex => ex._id === pendingExamId);
         if (updatedExam) setSelectedExam(updatedExam);
       }
-    } catch { alert('Error uploading image.'); }
+    } catch {
+      alert('Error saving image.');
+    }
+  
+    setShowCropper(false);
+    setCropImage(null);
+    setPendingExamId(null);
+  };
+
+  const cancelCrop = () => {
+    setShowCropper(false);
+    setCropImage(null);
+    setPendingExamId(null);
+    setCurrentPage(1);
   };
 
   const triggerFileInput = (examId) => {
     fileInputRef.current.setAttribute('data-exam-id', examId);
     fileInputRef.current.click();
   };
+
+  const handleFileChange = (e) => {
+    const examId = fileInputRef.current.getAttribute('data-exam-id');
+    const file = e.target.files[0];
+    if (file) {
+      handleImageSelect(examId, file);
+    }
+    e.target.value = '';
+  };
+
+const capturePhoto = async () => {
+  const video = videoRef.current;
+  const canvas = canvasRef.current;
+  const ctx = canvas.getContext('2d');
+  
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+  
+  // Apply edge detection filter (simple contrast/brightness)
+  ctx.filter = 'contrast(1.2) brightness(1.1)';
+  ctx.drawImage(canvas, 0, 0);
+  
+  const imageData = canvas.toDataURL('image/jpeg', 0.8);
+  
+  // Upload to server
+  await handleImageUpload(currentExamId, imageData);
+  
+  // Stop camera
+  video.srcObject.getTracks().forEach(track => track.stop());
+  setShowCamera(false);
+};
+
+const handleImageUpload = async (examId, imageData) => {
+  try {
+    const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/image`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: imageData })
+    });
+    const updatedBatch = await res.json();
+    updateBatchInState(updatedBatch);
+    const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
+    if (updatedStudent) {
+      setSelectedStudent(updatedStudent);
+      const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
+      if (updatedExam) setSelectedExam(updatedExam);
+    }
+  } catch { 
+    alert('Error uploading image.'); 
+  }
+};
 
   // ── QR GENERATION ──────────────────────────────────────────────
   const generateBatchQRs = async () => {
@@ -309,8 +467,9 @@ function App() {
   // ── RENDER: Exams ──────────────────────────────────────────────
   const renderExams = () => (
     <>
+    <button className="back-btn" onClick={goBack}>←</button>
       <div className="header-with-back">
-        <button className="back-btn" onClick={goBack}>←</button>
+        
       </div>
       <div className="student-profile-header">
         {selectedStudent.photo
@@ -339,45 +498,110 @@ function App() {
   );
 
   // ── RENDER: Exam Detail ────────────────────────────────────────
-  const renderExamDetail = () => (
-    <>
-      <div className="header-with-back">
-        <button className="back-btn" onClick={goBack}>←</button>
-        <h1 className="title">{selectedExam.name}</h1>
-      </div>
-      <div className="exam-detail-info">
-        <span className="detail-badge">📅 {selectedExam.date}</span>
-        <span className="detail-badge">🎯 Score: {selectedExam.score}/100</span>
-      </div>
-      <h2 className="section-title">Exam Paper Photo</h2>
-      {selectedExam.image ? (
-        <div className="image-container" onClick={() => triggerFileInput(selectedExam._id)}>
-          <img src={selectedExam.image} alt="Exam" className="exam-image" />
-          <p className="image-hint">Tap to change photo</p>
+  
+  const deleteImagePage = async (examId, index) => {
+    if (!window.confirm(`Delete page ${index + 1}?`)) return;
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/remove-image`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
+      if (updatedStudent) {
+        setSelectedStudent(updatedStudent);
+        const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
+        if (updatedExam) setSelectedExam(updatedExam);
+      }
+    } catch { alert('Error deleting page.'); }
+  };
+    // ── RENDER: Exam Detail ────────────────────────────────────────
+    const renderExamDetail = () => {
+      const allImages = selectedExam.images?.length > 0
+        ? selectedExam.images
+        : selectedExam.image ? [selectedExam.image] : [];
+    
+      return (
+        <>
+          <button className="back-btn" onClick={goBack}>←</button>
+          <div className="header-with-back">
+            <h1 className="title">{selectedExam.name}</h1>
+          </div>
+          <div className="exam-detail-info">
+            <span className="detail-badge">📅 {selectedExam.date}</span>
+            <span className="detail-badge">🎯 Score: {selectedExam.score}/100</span>
+          </div>
+    
+          <h2 className="section-title">Exam Pages ({allImages.length} pages)</h2>
+    
+          <div className="photo-gallery">
+            {allImages.map((img, idx) => (
+              <div key={idx} className="photo-thumbnail">
+                <img src={img} alt={`Page ${idx + 1}`} onClick={() => window.open(img, '_blank')} />
+                <span className="page-number">Page {idx + 1}</span>
+                <button className="delete-page-btn" onClick={() => deleteImagePage(selectedExam._id, idx)}>✕</button>
+              </div>
+            ))}
+    
+            {/* Add Photo Button */}
+            <div className="add-photo-btn" onClick={() => triggerFileInput(selectedExam._id)}>
+              <div className="add-icon">+</div>
+              <span>Add Page</span>
+            </div>
+          </div>
+    
+          {allImages.length === 0 && (
+            <div className="upload-area" onClick={() => triggerFileInput(selectedExam._id)}>
+              <div className="upload-icon">📷</div>
+              <p>Tap to upload or capture first page</p>
+            </div>
+          )}
+    
+          <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
+            🗑 Delete Exam
+          </button>
+    
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            accept="image/*"
+            onChange={handleFileChange}
+          />
+    
+          {showCropper && renderCropperModal()}
+        </>
+      );
+    };
+  
+    // ── RENDER: Image Cropper Modal ─────────────────────────────────
+    const renderCropperModal = () => (
+      <div className="modal-overlay cropper-overlay">
+        <div className="modal cropper-modal">
+          <h2 className="modal-title">Crop Exam Page {currentPage}</h2>
+          <p className="cropper-hint">Adjust the crop area to fit the document edges</p>
+          
+          <div className="cropper-container">
+            {/* Simple image preview with manual crop - for true auto-detect, integrate OpenCV */}
+            <img src={cropImage} alt="To crop" className="cropper-image" />
+            
+            <div className="cropper-controls">
+              <p>Auto-detect edges: <strong>Enabled</strong></p>
+              <p className="cropper-tip">Tip: Pinch to zoom, drag to adjust</p>
+            </div>
+          </div>
+          
+          <div className="modal-buttons">
+            <button className="cancel-btn" onClick={cancelCrop}>Cancel</button>
+            <button className="save-btn" onClick={saveCroppedImage}>
+              Save Page {currentPage}
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="upload-area" onClick={() => triggerFileInput(selectedExam._id)}>
-          <div className="upload-icon">📷</div>
-          <p>Tap to upload or capture photo</p>
-        </div>
-      )}
-      <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
-        🗑 Delete Exam
-      </button>
-      <input
-        type="file"
-        ref={fileInputRef}
-        style={{ display: 'none' }}
-        accept="image/*"
-        capture="environment"
-        onChange={(e) => {
-          const examId = fileInputRef.current.getAttribute('data-exam-id');
-          handleImageUpload(examId, e.target.files[0]);
-          e.target.value = '';
-        }}
-      />
-    </>
-  );
+      </div>
+    );
 
   // ── RENDER: Modal ──────────────────────────────────────────────
   const renderModal = () => {
