@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 
 const API = 'https://japanese-tracker-production.up.railway.app/api';
-// Compress image before sending to backend (~300KB max)
+
+// Compress image before sending to backend
 const compressImage = (file, maxWidth = 800, quality = 0.6) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -27,15 +28,409 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
   });
 };
 
+// ── DOCUMENT SCANNER COMPONENT ─────────────────────────────────────────────
+function DocumentScanner({ onCapture, onClose }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const overlayCanvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const cvReadyRef = useRef(false);
+
+  const [status, setStatus] = useState('Initializing camera...');
+  const [detected, setDetected] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const stableCountRef = useRef(0);
+
+  // Load OpenCV.js dynamically
+  useEffect(() => {
+    if (window.cv && window.cv.Mat) {
+      cvReadyRef.current = true;
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+    script.async = true;
+    script.onload = () => {
+      const checkCV = setInterval(() => {
+        if (window.cv && window.cv.Mat) {
+          cvReadyRef.current = true;
+          clearInterval(checkCV);
+        }
+      }, 100);
+    };
+    document.head.appendChild(script);
+    return () => {
+      if (document.head.contains(script)) document.head.removeChild(script);
+    };
+  }, []);
+
+  // Start camera
+  useEffect(() => {
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          setStatus('Point camera at document');
+          startDetection();
+        }
+      } catch (err) {
+        setStatus('Camera access denied. Please allow camera.');
+      }
+    };
+    startCamera();
+    return () => stopAll();
+  }, []); // eslint-disable-line
+
+  const stopAll = () => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+  };
+
+  // ── EDGE DETECTION LOOP ──────────────────────────────────────────
+  const detectDocument = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const overlay = overlayCanvasRef.current;
+
+    if (!video || !canvas || !overlay || video.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(detectDocument);
+      return;
+    }
+
+    const W = video.videoWidth;
+    const H = video.videoHeight;
+    canvas.width = W;
+    canvas.height = H;
+    overlay.width = overlay.offsetWidth;
+    overlay.height = overlay.offsetHeight;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, W, H);
+
+    const oCtx = overlay.getContext('2d');
+    oCtx.clearRect(0, 0, overlay.width, overlay.height);
+
+    let corners = null;
+
+    if (cvReadyRef.current && window.cv && window.cv.Mat) {
+      try {
+        corners = detectWithOpenCV(canvas, W, H);
+      } catch (e) {
+        corners = null;
+      }
+    }
+
+    if (!corners) {
+      corners = detectWithCanvas(canvas, W, H);
+    }
+
+    if (corners) {
+      drawCorners(oCtx, corners, overlay.width, overlay.height, W, H);
+      setDetected(true);
+      setStatus('Document detected! Hold still...');
+      stableCountRef.current += 1;
+
+      // Auto-capture after 30 stable frames (~1 second)
+      if (stableCountRef.current >= 30 && !capturing) {
+        setCapturing(true);
+        setTimeout(() => captureDocument(corners, W, H), 200);
+        return;
+      }
+    } else {
+      setDetected(false);
+      stableCountRef.current = 0;
+      setStatus('Point camera at document');
+    }
+
+    animFrameRef.current = requestAnimationFrame(detectDocument);
+  }, [capturing]); // eslint-disable-line
+
+  const startDetection = () => {
+    animFrameRef.current = requestAnimationFrame(detectDocument);
+  };
+
+  // ── OPENCV DETECTION ─────────────────────────────────────────────
+  const detectWithOpenCV = (canvas, W, H) => {
+    const cv = window.cv;
+    const src = cv.imread(canvas);
+    const gray = new cv.Mat();
+    const blurred = new cv.Mat();
+    const edges = new cv.Mat();
+    const contours = new cv.MatVector();
+    const hierarchy = new cv.Mat();
+
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+    cv.Canny(blurred, edges, 75, 200);
+    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    let bestCorners = null;
+    let maxArea = 0;
+    const minArea = W * H * 0.1;
+
+    for (let i = 0; i < contours.size(); i++) {
+      const contour = contours.get(i);
+      const peri = cv.arcLength(contour, true);
+      const approx = new cv.Mat();
+      cv.approxPolyDP(contour, approx, 0.02 * peri, true);
+
+      if (approx.rows === 4) {
+        const area = cv.contourArea(approx);
+        if (area > maxArea && area > minArea) {
+          maxArea = area;
+          const pts = [];
+          for (let j = 0; j < 4; j++) {
+            pts.push({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] });
+          }
+          bestCorners = orderCorners(pts);
+        }
+      }
+      approx.delete();
+      contour.delete();
+    }
+
+    src.delete(); gray.delete(); blurred.delete(); edges.delete();
+    contours.delete(); hierarchy.delete();
+    return bestCorners;
+  };
+
+  // ── FALLBACK CANVAS DETECTION ────────────────────────────────────
+  const detectWithCanvas = (canvas, W, H) => {
+    const ctx = canvas.getContext('2d');
+    const SAMPLE = 4;
+    const sW = Math.floor(W / SAMPLE);
+    const sH = Math.floor(H / SAMPLE);
+    const imageData = ctx.getImageData(0, 0, W, H);
+    const data = imageData.data;
+
+    let minX = sW, maxX = 0, minY = sH, maxY = 0;
+    const threshold = 180;
+    let found = false;
+
+    for (let y = 0; y < sH; y++) {
+      for (let x = 0; x < sW; x++) {
+        const idx = (y * SAMPLE * W + x * SAMPLE) * 4;
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+        if (brightness > threshold) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          found = true;
+        }
+      }
+    }
+
+    if (!found) return null;
+    const rx = minX * SAMPLE;
+    const ry = minY * SAMPLE;
+    const rw = (maxX - minX) * SAMPLE;
+    const rh = (maxY - minY) * SAMPLE;
+    if (rw < W * 0.2 || rh < H * 0.2) return null;
+
+    return [
+      { x: rx, y: ry },
+      { x: rx + rw, y: ry },
+      { x: rx + rw, y: ry + rh },
+      { x: rx, y: ry + rh }
+    ];
+  };
+
+  const orderCorners = (pts) => {
+    const sorted = [...pts].sort((a, b) => a.y - b.y);
+    const top = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
+    const bottom = sorted.slice(2).sort((a, b) => a.x - b.x);
+    return [top[0], top[1], bottom[1], bottom[0]];
+  };
+
+  const drawCorners = (ctx, corners, oW, oH, W, H) => {
+    const scaleX = oW / W;
+    const scaleY = oH / H;
+    const pts = corners.map(p => ({ x: p.x * scaleX, y: p.y * scaleY }));
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.strokeStyle = '#00FF88';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,255,136,0.12)';
+    ctx.fill();
+
+    pts.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#00FF88';
+      ctx.fill();
+    });
+  };
+
+  // ── CAPTURE ──────────────────────────────────────────────────────
+  const captureDocument = (corners, W, H) => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    stopAll();
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const [tl, tr, br, bl] = corners;
+    const maxW = Math.max(
+      Math.hypot(tr.x - tl.x, tr.y - tl.y),
+      Math.hypot(br.x - bl.x, br.y - bl.y)
+    );
+    const maxH = Math.max(
+      Math.hypot(bl.x - tl.x, bl.y - tl.y),
+      Math.hypot(br.x - tr.x, br.y - tr.y)
+    );
+
+    const dst = document.createElement('canvas');
+    dst.width = Math.round(maxW);
+    dst.height = Math.round(maxH);
+
+    if (cvReadyRef.current && window.cv) {
+      try {
+        const cv = window.cv;
+        const src = cv.imread(canvas);
+        const dstMat = new cv.Mat();
+        const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
+        ]);
+        const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          0, 0, maxW, 0, maxW, maxH, 0, maxH
+        ]);
+        const M = cv.getPerspectiveTransform(srcPts, dstPts);
+        cv.warpPerspective(src, dstMat, M, new cv.Size(maxW, maxH));
+
+        // Enhance for document readability
+        const gray = new cv.Mat();
+        cv.cvtColor(dstMat, gray, cv.COLOR_RGBA2GRAY);
+        const sharp = new cv.Mat();
+        cv.adaptiveThreshold(gray, sharp, 255,
+          cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
+        cv.imshow(dst, sharp);
+
+        src.delete(); dstMat.delete(); srcPts.delete();
+        dstPts.delete(); M.delete(); gray.delete(); sharp.delete();
+      } catch (e) {
+        simpleCrop(canvas, corners, dst);
+      }
+    } else {
+      simpleCrop(canvas, corners, dst);
+    }
+
+    onCapture(dst.toDataURL('image/jpeg', 0.85));
+  };
+
+  const simpleCrop = (srcCanvas, corners, dstCanvas) => {
+    const [tl, tr, br, bl] = corners;
+    const x = Math.min(tl.x, bl.x);
+    const y = Math.min(tl.y, tr.y);
+    const w = Math.max(tr.x, br.x) - x;
+    const h = Math.max(bl.y, br.y) - y;
+    dstCanvas.width = w;
+    dstCanvas.height = h;
+    const ctx = dstCanvas.getContext('2d');
+    ctx.filter = 'contrast(1.4) brightness(1.05)';
+    ctx.drawImage(srcCanvas, x, y, w, h, 0, 0, w, h);
+  };
+
+  const manualCapture = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    const W = video.videoWidth;
+    const H = video.videoHeight;
+    canvas.width = W;
+    canvas.height = H;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    stopAll();
+    const corners = [
+      { x: W * 0.05, y: H * 0.05 },
+      { x: W * 0.95, y: H * 0.05 },
+      { x: W * 0.95, y: H * 0.95 },
+      { x: W * 0.05, y: H * 0.95 }
+    ];
+    captureDocument(corners, W, H);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
+      display: 'flex', flexDirection: 'column'
+    }}>
+      <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+        <video
+          ref={videoRef}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          playsInline muted
+        />
+        <canvas
+          ref={overlayCanvasRef}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+        />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+        <div style={{
+          position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)',
+          background: detected ? 'rgba(0,200,100,0.85)' : 'rgba(0,0,0,0.65)',
+          color: '#fff', padding: '8px 18px', borderRadius: 20,
+          fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', backdropFilter: 'blur(8px)'
+        }}>
+          {capturing ? '✅ Capturing...' : detected ? '🟢 ' + status : '🔍 ' + status}
+        </div>
+
+        {!detected && (
+          <div style={{
+            position: 'absolute', top: '10%', left: '5%', right: '5%', bottom: '20%',
+            border: '2px dashed rgba(255,255,255,0.4)', borderRadius: 12, pointerEvents: 'none'
+          }} />
+        )}
+      </div>
+
+      <div style={{
+        background: '#111', padding: '16px 24px',
+        display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between'
+      }}>
+        <button onClick={onClose} style={{
+          background: 'rgba(255,255,255,0.15)', color: '#fff',
+          border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, cursor: 'pointer'
+        }}>
+          Cancel
+        </button>
+        <div style={{ color: '#aaa', fontSize: 12, textAlign: 'center', flex: 1 }}>
+          Auto-captures when document detected
+        </div>
+        <button onClick={manualCapture} style={{
+          background: '#fff', color: '#000', border: 'none', borderRadius: 10,
+          padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer'
+        }}>
+          📸 Capture
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ────────────────────────────────────────────────────────────────
 function App() {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [view, setView] = useState('batches');
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedExam, setSelectedExam] = useState(null);
-
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [newName, setNewName] = useState('');
@@ -43,19 +438,14 @@ function App() {
   const [newScore, setNewScore] = useState('');
   const [newStudentPhoto, setNewStudentPhoto] = useState(null);
   const [saving, setSaving] = useState(false);
-
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanningExamId, setScanningExamId] = useState(null);
 
   const fileInputRef = useRef(null);
   const studentPhotoInputRef = useRef(null);
-  // Add to existing useState
-const [showCamera, setShowCamera] = useState(false);
-const [currentExamId, setCurrentExamId] = useState(null);
-const videoRef = useRef(null);
-const canvasRef = useRef(null);
 
-  // ── Fetch all batches on load ──────────────────────────────────
   useEffect(() => {
     fetchBatches();
     const params = new URLSearchParams(window.location.search);
@@ -68,13 +458,9 @@ const canvasRef = useRef(null);
     try {
       setLoading(true);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds
-      
-      const res = await fetch(`${API}/batches`, {
-        signal: controller.signal
-      });
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(`${API}/batches`, { signal: controller.signal });
       clearTimeout(timeoutId);
-      
       const data = await res.json();
       setBatches(data);
     } catch (err) {
@@ -88,7 +474,6 @@ const canvasRef = useRef(null);
     }
   };
 
-  // Resolve deep-link after batches loaded
   useEffect(() => {
     if (!pendingDeepLink || batches.length === 0) return;
     const { batchId, studentId } = pendingDeepLink;
@@ -102,13 +487,11 @@ const canvasRef = useRef(null);
     setPendingDeepLink(null);
   }, [pendingDeepLink, batches]);
 
-  // ── Helper: sync updated batch into state ──────────────────────
   const updateBatchInState = (updatedBatch) => {
     setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
     if (selectedBatch?._id === updatedBatch._id) setSelectedBatch(updatedBatch);
   };
 
-  // ── Navigation ─────────────────────────────────────────────────
   const goToStudents = (batch) => { setSelectedBatch(batch); setView('students'); };
   const goToExams = (student) => { setSelectedStudent(student); setView('exams'); };
   const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); };
@@ -119,7 +502,6 @@ const canvasRef = useRef(null);
     else if (view === 'students') { setView('batches'); setSelectedBatch(null); }
   };
 
-  // ── Modal ──────────────────────────────────────────────────────
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
     setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null);
@@ -129,14 +511,12 @@ const canvasRef = useRef(null);
     setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null);
   };
 
-  // ── SAVE ───────────────────────────────────────────────────────
   const saveBatch = async () => {
     if (!newName) return;
     setSaving(true);
     try {
       const res = await fetch(`${API}/batches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName })
       });
       const newBatch = await res.json();
@@ -151,8 +531,7 @@ const canvasRef = useRef(null);
     setSaving(true);
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, photo: newStudentPhoto })
       });
       const updatedBatch = await res.json();
@@ -167,8 +546,7 @@ const canvasRef = useRef(null);
     setSaving(true);
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newExamName, score: parseInt(newScore) })
       });
       const updatedBatch = await res.json();
@@ -180,7 +558,6 @@ const canvasRef = useRef(null);
     setSaving(false);
   };
 
-  // ── DELETE ─────────────────────────────────────────────────────
   const deleteBatch = async (id, e) => {
     e.stopPropagation();
     if (!window.confirm('Delete this batch?')) return;
@@ -213,126 +590,39 @@ const canvasRef = useRef(null);
     } catch { alert('Error deleting exam.'); }
   };
 
-  // ── IMAGE UPLOAD ───────────────────────────────────────────────
-  // ── IMAGE UPLOAD WITH MULTIPLE PHOTOS & EDGE DETECTION ─────────────────
-  const [showCropper, setShowCropper] = useState(false);
-  const [cropImage, setCropImage] = useState(null);
-  const [pendingExamId, setPendingExamId] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const cropperRef = useRef(null);
-
-  // Auto-detect document edges using simple algorithm
-  const autoDetectEdges = (canvas) => {
-    // This is a simplified version - for production, use OpenCV or API
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    
-    // Find document boundaries (simplified contrast detection)
-    let top = 0, bottom = canvas.height, left = 0, right = canvas.width;
-    
-    // Simple edge detection based on brightness changes
-    const threshold = 30;
-    const width = canvas.width;
-    const height = canvas.height;
-    
-    // Find top edge
-    for (let y = 0; y < height; y++) {
-      let rowDiff = 0;
-      for (let x = 1; x < width; x++) {
-        const idx = (y * width + x) * 4;
-        const prevIdx = (y * width + (x - 1)) * 4;
-        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-        const prevBrightness = (data[prevIdx] + data[prevIdx + 1] + data[prevIdx + 2]) / 3;
-        rowDiff += Math.abs(brightness - prevBrightness);
-      }
-      if (rowDiff > threshold * width) {
-        top = y;
-        break;
-      }
-    }
-    
-    // Find bottom edge
-    for (let y = height - 1; y >= 0; y--) {
-      let rowDiff = 0;
-      for (let x = 1; x < width; x++) {
-        const idx = (y * width + x) * 4;
-        const prevIdx = (y * width + (x - 1)) * 4;
-        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-        const prevBrightness = (data[prevIdx] + data[prevIdx + 1] + data[prevIdx + 2]) / 3;
-        rowDiff += Math.abs(brightness - prevBrightness);
-      }
-      if (rowDiff > threshold * width) {
-        bottom = y;
-        break;
-      }
-    }
-    
-    return { top, bottom, left, right };
-  };
-
-  const handleImageSelect = async (examId, file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setCropImage(e.target.result);
-      setPendingExamId(examId);
-      setShowCropper(true);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const saveCroppedImage = async () => {
-    if (!cropImage) return;
-  
-    // Apply edge enhancement via canvas
-    const img = new Image();
-    img.src = cropImage;
-    await new Promise(r => img.onload = r);
-  
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-  
-    // Draw image
-    ctx.drawImage(img, 0, 0);
-  
-    // Apply document enhancement: increase contrast + grayscale-friendly
-    ctx.filter = 'contrast(1.4) brightness(1.05) saturate(0.8)';
-    ctx.drawImage(img, 0, 0);
-  
-    const compressed = canvas.toDataURL('image/jpeg', 0.75);
-  
+  const deleteImagePage = async (examId, index) => {
+    if (!window.confirm(`Delete page ${index + 1}?`)) return;
     try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${pendingExamId}/image`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: compressed })
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/remove-image`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
-  
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) {
         setSelectedStudent(updatedStudent);
-        const updatedExam = updatedStudent.exams.find(ex => ex._id === pendingExamId);
+        const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
         if (updatedExam) setSelectedExam(updatedExam);
       }
-    } catch {
-      alert('Error saving image.');
-    }
-  
-    setShowCropper(false);
-    setCropImage(null);
-    setPendingExamId(null);
+    } catch { alert('Error deleting page.'); }
   };
 
-  const cancelCrop = () => {
-    setShowCropper(false);
-    setCropImage(null);
-    setPendingExamId(null);
-    setCurrentPage(1);
+  const uploadImage = async (examId, imageData) => {
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/image`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
+      if (updatedStudent) {
+        setSelectedStudent(updatedStudent);
+        const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
+        if (updatedExam) setSelectedExam(updatedExam);
+      }
+    } catch { alert('Error saving image.'); }
   };
 
   const triggerFileInput = (examId) => {
@@ -340,59 +630,29 @@ const canvasRef = useRef(null);
     fileInputRef.current.click();
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const examId = fileInputRef.current.getAttribute('data-exam-id');
     const file = e.target.files[0];
     if (file) {
-      handleImageSelect(examId, file);
+      const compressed = await compressImage(file, 1200, 0.75);
+      await uploadImage(examId, compressed);
     }
     e.target.value = '';
   };
 
-const capturePhoto = async () => {
-  const video = videoRef.current;
-  const canvas = canvasRef.current;
-  const ctx = canvas.getContext('2d');
-  
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0);
-  
-  // Apply edge detection filter (simple contrast/brightness)
-  ctx.filter = 'contrast(1.2) brightness(1.1)';
-  ctx.drawImage(canvas, 0, 0);
-  
-  const imageData = canvas.toDataURL('image/jpeg', 0.8);
-  
-  // Upload to server
-  await handleImageUpload(currentExamId, imageData);
-  
-  // Stop camera
-  video.srcObject.getTracks().forEach(track => track.stop());
-  setShowCamera(false);
-};
+  const openScanner = (examId) => {
+    setScanningExamId(examId);
+    setShowScanner(true);
+  };
 
-const handleImageUpload = async (examId, imageData) => {
-  try {
-    const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/image`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: imageData })
-    });
-    const updatedBatch = await res.json();
-    updateBatchInState(updatedBatch);
-    const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
-    if (updatedStudent) {
-      setSelectedStudent(updatedStudent);
-      const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
-      if (updatedExam) setSelectedExam(updatedExam);
+  const handleScanCapture = async (imageData) => {
+    setShowScanner(false);
+    if (scanningExamId) {
+      await uploadImage(scanningExamId, imageData);
+      setScanningExamId(null);
     }
-  } catch { 
-    alert('Error uploading image.'); 
-  }
-};
+  };
 
-  // ── QR GENERATION ──────────────────────────────────────────────
   const generateBatchQRs = async () => {
     const results = await Promise.all(
       selectedBatch.students.map(async (student) => {
@@ -404,7 +664,6 @@ const handleImageUpload = async (examId, imageData) => {
     setPrintQRs(results);
   };
 
-  // ── LOADING ────────────────────────────────────────────────────
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: 36 }}>⏳</div>
@@ -412,7 +671,6 @@ const handleImageUpload = async (examId, imageData) => {
     </div>
   );
 
-  // ── RENDER: Batches ────────────────────────────────────────────
   const renderBatches = () => (
     <>
       <h1 className="title">My Batches</h1>
@@ -431,12 +689,10 @@ const handleImageUpload = async (examId, imageData) => {
     </>
   );
 
-  // ── RENDER: Students ───────────────────────────────────────────
   const renderStudents = () => (
     <>
-    <button className="back-btn" onClick={goBack}>←</button>
+      <button className="back-btn" onClick={goBack}>←</button>
       <div className="header-with-back">
-        
         <h1 className="title">{selectedBatch.name}</h1>
       </div>
       <h2 className="section-title">Students</h2>
@@ -464,13 +720,9 @@ const handleImageUpload = async (examId, imageData) => {
     </>
   );
 
-  // ── RENDER: Exams ──────────────────────────────────────────────
   const renderExams = () => (
     <>
-    <button className="back-btn" onClick={goBack}>←</button>
-      <div className="header-with-back">
-        
-      </div>
+      <button className="back-btn" onClick={goBack}>←</button>
       <div className="student-profile-header">
         {selectedStudent.photo
           ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
@@ -487,7 +739,7 @@ const handleImageUpload = async (examId, imageData) => {
               <p className="card-subtitle">{exam.date} • Score: {exam.score}/100</p>
             </div>
             <div className="exam-right">
-              {exam.image && <span className="has-photo-badge">📷</span>}
+              {(exam.images?.length > 0 || exam.image) && <span className="has-photo-badge">📷</span>}
               <button className="delete-btn-icon" onClick={(e) => deleteExam(exam._id, e)}>✕</button>
             </div>
           </div>
@@ -497,113 +749,72 @@ const handleImageUpload = async (examId, imageData) => {
     </>
   );
 
-  // ── RENDER: Exam Detail ────────────────────────────────────────
-  
-  const deleteImagePage = async (examId, index) => {
-    if (!window.confirm(`Delete page ${index + 1}?`)) return;
-    try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/remove-image`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index })
-      });
-      const updatedBatch = await res.json();
-      updateBatchInState(updatedBatch);
-      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
-      if (updatedStudent) {
-        setSelectedStudent(updatedStudent);
-        const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
-        if (updatedExam) setSelectedExam(updatedExam);
-      }
-    } catch { alert('Error deleting page.'); }
-  };
-    // ── RENDER: Exam Detail ────────────────────────────────────────
-    const renderExamDetail = () => {
-      const allImages = selectedExam.images?.length > 0
-        ? selectedExam.images
-        : selectedExam.image ? [selectedExam.image] : [];
-    
-      return (
-        <>
-          <button className="back-btn" onClick={goBack}>←</button>
-          <div className="header-with-back">
-            <h1 className="title">{selectedExam.name}</h1>
-          </div>
-          <div className="exam-detail-info">
-            <span className="detail-badge">📅 {selectedExam.date}</span>
-            <span className="detail-badge">🎯 Score: {selectedExam.score}/100</span>
-          </div>
-    
-          <h2 className="section-title">Exam Pages ({allImages.length} pages)</h2>
-    
-          <div className="photo-gallery">
-            {allImages.map((img, idx) => (
-              <div key={idx} className="photo-thumbnail">
-                <img src={img} alt={`Page ${idx + 1}`} onClick={() => window.open(img, '_blank')} />
-                <span className="page-number">Page {idx + 1}</span>
-                <button className="delete-page-btn" onClick={() => deleteImagePage(selectedExam._id, idx)}>✕</button>
-              </div>
-            ))}
-    
-            {/* Add Photo Button */}
-            <div className="add-photo-btn" onClick={() => triggerFileInput(selectedExam._id)}>
-              <div className="add-icon">+</div>
-              <span>Add Page</span>
+  const renderExamDetail = () => {
+    const allImages = selectedExam.images?.length > 0
+      ? selectedExam.images
+      : selectedExam.image ? [selectedExam.image] : [];
+
+    return (
+      <>
+        <button className="back-btn" onClick={goBack}>←</button>
+        <div className="header-with-back">
+          <h1 className="title">{selectedExam.name}</h1>
+        </div>
+        <div className="exam-detail-info">
+          <span className="detail-badge">📅 {selectedExam.date}</span>
+          <span className="detail-badge">🎯 Score: {selectedExam.score}/100</span>
+        </div>
+
+        <h2 className="section-title">Exam Pages ({allImages.length} pages)</h2>
+
+        <div className="photo-gallery">
+          {allImages.map((img, idx) => (
+            <div key={idx} className="photo-thumbnail">
+              <img src={img} alt={`Page ${idx + 1}`} onClick={() => window.open(img, '_blank')} />
+              <span className="page-number">Page {idx + 1}</span>
+              <button className="delete-page-btn" onClick={() => deleteImagePage(selectedExam._id, idx)}>✕</button>
             </div>
+          ))}
+
+          <div className="add-photo-btn" onClick={() => openScanner(selectedExam._id)}>
+            <div className="add-icon">📷</div>
+            <span>Scan Page</span>
           </div>
-    
-          {allImages.length === 0 && (
-            <div className="upload-area" onClick={() => triggerFileInput(selectedExam._id)}>
-              <div className="upload-icon">📷</div>
-              <p>Tap to upload or capture first page</p>
-            </div>
-          )}
-    
-          <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
-            🗑 Delete Exam
-          </button>
-    
-          <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            accept="image/*"
-            onChange={handleFileChange}
-          />
-    
-          {showCropper && renderCropperModal()}
-        </>
-      );
-    };
-  
-    // ── RENDER: Image Cropper Modal ─────────────────────────────────
-    const renderCropperModal = () => (
-      <div className="modal-overlay cropper-overlay">
-        <div className="modal cropper-modal">
-          <h2 className="modal-title">Crop Exam Page {currentPage}</h2>
-          <p className="cropper-hint">Adjust the crop area to fit the document edges</p>
-          
-          <div className="cropper-container">
-            {/* Simple image preview with manual crop - for true auto-detect, integrate OpenCV */}
-            <img src={cropImage} alt="To crop" className="cropper-image" />
-            
-            <div className="cropper-controls">
-              <p>Auto-detect edges: <strong>Enabled</strong></p>
-              <p className="cropper-tip">Tip: Pinch to zoom, drag to adjust</p>
-            </div>
-          </div>
-          
-          <div className="modal-buttons">
-            <button className="cancel-btn" onClick={cancelCrop}>Cancel</button>
-            <button className="save-btn" onClick={saveCroppedImage}>
-              Save Page {currentPage}
-            </button>
+
+          <div className="add-photo-btn" onClick={() => triggerFileInput(selectedExam._id)}>
+            <div className="add-icon">🖼️</div>
+            <span>Upload</span>
           </div>
         </div>
-      </div>
-    );
 
-  // ── RENDER: Modal ──────────────────────────────────────────────
+        {allImages.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>📄</div>
+            <p style={{ color: '#8E8E93', marginBottom: 20 }}>No pages yet</p>
+            <button className="save-btn" style={{ marginRight: 10 }} onClick={() => openScanner(selectedExam._id)}>
+              📷 Scan Document
+            </button>
+            <button className="cancel-btn" onClick={() => triggerFileInput(selectedExam._id)}>
+              🖼️ Upload Photo
+            </button>
+          </div>
+        )}
+
+        <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
+          🗑 Delete Exam
+        </button>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          accept="image/*"
+          onChange={handleFileChange}
+        />
+      </>
+    );
+  };
+
   const renderModal = () => {
     if (!showModal) return null;
     const titles = { batch: 'Add New Batch', student: 'Add New Student', exam: 'Add New Exam' };
@@ -670,7 +881,6 @@ const handleImageUpload = async (examId, imageData) => {
     );
   };
 
-  // ── RENDER: Print QRs ──────────────────────────────────────────
   const renderPrintQRs = () => {
     if (!printQRs) return null;
     return (
@@ -707,6 +917,12 @@ const handleImageUpload = async (examId, imageData) => {
       {view === 'examDetail' && renderExamDetail()}
       {renderModal()}
       {renderPrintQRs()}
+      {showScanner && (
+        <DocumentScanner
+          onCapture={handleScanCapture}
+          onClose={() => { setShowScanner(false); setScanningExamId(null); }}
+        />
+      )}
     </div>
   );
 }
