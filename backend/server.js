@@ -30,10 +30,19 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.log('MongoDB error:', err));
 
-const batchSchema = new mongoose.Schema({
-  name: String,
-  students: [{ name: String, photo: String, exams: [{ name: String, date: String, score: Number, image: String }] }]
-});
+  const batchSchema = new mongoose.Schema({
+    name: String,
+    students: [{ 
+      name: String, 
+      photo: String, 
+      exams: [{ 
+        name: String, 
+        date: String, 
+        score: Number, 
+        images: [String] // Array of images for multiple pages
+      }] 
+    }]
+  });
 const Batch = mongoose.model('Batch', batchSchema);
 
 app.get('/api/batches', async (req, res) => {
@@ -79,9 +88,16 @@ app.patch('/api/batches/:batchId/students/:studentId/exams/:examId/image', async
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     const exam = student.exams.id(req.params.examId);
-    exam.image = req.body.image;
-    await batch.save(); res.json(batch);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    
+    // Push new image to array instead of replacing
+    if (!exam.images) exam.images = [];
+    exam.images.push(req.body.image);
+    
+    await batch.save(); 
+    res.json(batch);
+  } catch (err) { 
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 app.delete('/api/batches/:batchId/students/:studentId/exams/:examId', async (req, res) => {
@@ -91,6 +107,21 @@ app.delete('/api/batches/:batchId/students/:studentId/exams/:examId', async (req
     student.exams = student.exams.filter(e => e._id.toString() !== req.params.examId);
     await batch.save(); res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.patch('/api/batches/:batchId/students/:studentId/exams/:examId/remove-image', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    const exam = student.exams.id(req.params.examId);
+    const { index } = req.body;
+    if (exam.images && exam.images[index] !== undefined) {
+      exam.images.splice(index, 1);
+    }
+    await batch.save();
+    res.json(batch);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
