@@ -1077,6 +1077,66 @@ function App() {
     );
   };
 
+  const handlePrint = () => {
+    // Open a fresh window with only the QR cards — guaranteed to print correctly
+    const win = window.open('', '_blank', 'width=800,height=600');
+    const cardsHtml = printQRs.map(item => `
+      <div class="qr-card">
+        ${item.photo ? `<img src="${item.photo}" class="avatar" />` : '<div class="avatar-placeholder">👤</div>'}
+        <img src="${item.dataUrl}" class="qr" />
+        <p class="name">${item.name}</p>
+        <p class="batch">${selectedBatch.name}</p>
+      </div>
+    `).join('');
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>QR Codes — ${selectedBatch.name}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: sans-serif; background: #fff; }
+          .sheet {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding: 20px;
+            justify-content: flex-start;
+          }
+          .qr-card {
+            width: 160px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 12px 8px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            page-break-inside: avoid;
+          }
+          .avatar { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
+          .avatar-placeholder { width: 60px; height: 60px; border-radius: 50%; background: #eee; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+          .qr { width: 120px; height: 120px; }
+          .name { font-size: 13px; font-weight: 700; text-align: center; color: #111; }
+          .batch { font-size: 11px; color: #666; text-align: center; }
+          @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">${cardsHtml}</div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
   const renderPrintQRs = () => {
     if (!printQRs) return null;
     return (
@@ -1084,7 +1144,7 @@ function App() {
         <div className="print-toolbar no-print">
           <span className="print-toolbar-title">QR Codes — {selectedBatch.name}</span>
           <div className="print-toolbar-actions">
-            <button className="print-go-btn" onClick={() => window.print()}>🖨 Print</button>
+            <button className="print-go-btn" onClick={handlePrint}>🖨 Print</button>
             <button className="print-close-btn" onClick={() => setPrintQRs(null)}>✕ Close</button>
           </div>
         </div>
