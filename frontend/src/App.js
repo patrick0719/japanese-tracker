@@ -110,70 +110,151 @@ function ImageViewer({ images, startIndex, onClose }) {
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
 function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRetake }) {
-  const imgRef = useRef(null);
+  const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const draggingRef = useRef(null);
-  const [imgRect, setImgRect] = useState(null);
+  const imgBitmapRef = useRef(null);
+  const [ready, setReady] = useState(false);
 
-  // Get rendered image position after it loads
-  const updateImgRect = useCallback(() => {
-    if (imgRef.current) {
-      const r = imgRef.current.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) {
-        setImgRect({ left: r.left, top: r.top, width: r.width, height: r.height });
-      }
-    }
-  }, []);
+  // Load the captured image once
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      imgBitmapRef.current = img;
+      setReady(true);
+    };
+    img.src = dataUrl;
+  }, [dataUrl]);
+
+  // Compute how the image fits inside the container (letterbox)
+  const getLayout = useCallback(() => {
+    if (!containerRef.current || !imgBitmapRef.current) return null;
+    const { width: cW, height: cH } = containerRef.current.getBoundingClientRect();
+    const scale = Math.min(cW / imgW, cH / imgH);
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
+    return { cW, cH, drawW, drawH, offsetX: (cW - drawW) / 2, offsetY: (cH - drawH) / 2, scale };
+  }, [imgW, imgH]);
+
+  // Draw image + crop overlay onto canvas
+  const redraw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const layout = getLayout();
+    if (!canvas || !layout || !imgBitmapRef.current || !corners) return;
+
+    const { cW, cH, drawW, drawH, offsetX, offsetY } = layout;
+    canvas.width = cW;
+    canvas.height = cH;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, cW, cH);
+
+    // Draw image
+    ctx.drawImage(imgBitmapRef.current, offsetX, offsetY, drawW, drawH);
+
+    // Convert image coord → canvas pixel
+    const toPx = (c) => ({
+      x: offsetX + (c.x / imgW) * drawW,
+      y: offsetY + (c.y / imgH) * drawH,
+    });
+    const pts = corners.map(toPx);
+
+    // Dim area outside crop
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, cW, cH);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.clip();
+    ctx.clearRect(0, 0, cW, cH);
+    ctx.drawImage(imgBitmapRef.current, offsetX, offsetY, drawW, drawH);
+    ctx.restore();
+
+    // Crop border
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.strokeStyle = '#00FF88';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Corner handles
+    pts.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
+      ctx.fillStyle = '#00FF88';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    });
+  }, [corners, imgW, imgH, getLayout]);
 
   useEffect(() => {
-    window.addEventListener('resize', updateImgRect);
-    // Fallback poll in case onLoad already fired before mount
-    const t = setTimeout(updateImgRect, 100);
-    return () => {
-      window.removeEventListener('resize', updateImgRect);
-      clearTimeout(t);
-    };
-  }, [updateImgRect]);
+    if (ready) redraw();
+  }, [ready, redraw]);
 
-  // Convert image coordinates → screen pixels
-  const toScreen = (c) => {
-    if (!imgRect) return { x: 0, y: 0 };
+  // Re-fit on resize
+  useEffect(() => {
+    const handler = () => { if (ready) redraw(); };
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [ready, redraw]);
+
+  // Touch / mouse helpers
+  const getPos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    // Scale from CSS pixels to canvas pixels
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
     return {
-      x: (c.x / imgW) * imgRect.width,
-      y: (c.y / imgH) * imgRect.height
+      x: (src.clientX - rect.left) * scaleX,
+      y: (src.clientY - rect.top) * scaleY,
     };
   };
 
-  // Convert screen pixels (relative to imgRect) → image coordinates
-  const toImage = (screenX, screenY) => ({
-    x: Math.max(0, Math.min(imgW, (screenX / imgRect.width) * imgW)),
-    y: Math.max(0, Math.min(imgH, (screenY / imgRect.height) * imgH))
-  });
+  const findCorner = useCallback((cx, cy) => {
+    const layout = getLayout();
+    if (!layout || !corners) return -1;
+    const { offsetX, offsetY, drawW, drawH } = layout;
+    for (let i = 0; i < corners.length; i++) {
+      const px = offsetX + (corners[i].x / imgW) * drawW;
+      const py = offsetY + (corners[i].y / imgH) * drawH;
+      if (Math.hypot(cx - px, cy - py) < 44) return i;
+    }
+    return -1;
+  }, [getLayout, corners, imgW, imgH]);
 
-  const onPointerDown = (e, idx) => {
+  const onPointerDown = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    draggingRef.current = idx;
+    const { x, y } = getPos(e);
+    draggingRef.current = findCorner(x, y);
   };
 
   const onPointerMove = (e) => {
-    if (draggingRef.current === null || !imgRect) return;
+    if (draggingRef.current == null || draggingRef.current < 0) return;
     e.preventDefault();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const pos = toImage(clientX - imgRect.left, clientY - imgRect.top);
-    setCorners(prev => prev.map((c, i) => i === draggingRef.current ? pos : c));
+    const layout = getLayout();
+    if (!layout) return;
+    const { x, y } = getPos(e);
+    const { offsetX, offsetY, drawW, drawH } = layout;
+    const imgCoord = {
+      x: Math.max(0, Math.min(imgW, ((x - offsetX) / drawW) * imgW)),
+      y: Math.max(0, Math.min(imgH, ((y - offsetY) / drawH) * imgH)),
+    };
+    setCorners(prev => prev.map((c, i) => i === draggingRef.current ? imgCoord : c));
   };
 
   const onPointerUp = () => { draggingRef.current = null; };
 
-  const screenPts = corners.map(toScreen);
-
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-      {/* Top bar */}
-      <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <button onClick={onRetake} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer' }}>
+      {/* Top bar — above the canvas, always tappable */}
+      <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, position: 'relative', zIndex: 10 }}>
+        <button onClick={onRetake} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '8px 12px' }}>
           ← Retake
         </button>
         <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
@@ -185,76 +266,24 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
         Drag the green corners to adjust
       </div>
 
-      {/* Container */}
-      <div
-        ref={containerRef}
-        style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
-        onMouseMove={onPointerMove}
-        onMouseUp={onPointerUp}
-        onTouchMove={onPointerMove}
-        onTouchEnd={onPointerUp}
-      >
-        {/* The captured image */}
-        <img
-          ref={imgRef}
-          src={dataUrl}
-          alt="captured"
-          onLoad={updateImgRect}
-          draggable={false}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', userSelect: 'none' }}
-        />
-
-        {/* SVG crop outline — positioned over the image */}
-        {imgRect && (
-          <svg style={{
-            position: 'absolute',
-            left: imgRect.left - (containerRef.current?.getBoundingClientRect().left || 0),
-            top: imgRect.top - (containerRef.current?.getBoundingClientRect().top || 0),
-            width: imgRect.width,
-            height: imgRect.height,
-            pointerEvents: 'none',
-            overflow: 'visible'
-          }}>
-            <polygon
-              points={screenPts.map(p => `${p.x},${p.y}`).join(' ')}
-              fill="rgba(0,255,136,0.15)"
-              stroke="#00FF88"
-              strokeWidth="2.5"
-            />
-          </svg>
+      {/* Canvas fills remaining space */}
+      <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {!ready && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: '#fff', fontSize: 14 }}>Loading image…</span>
+          </div>
         )}
-
-        {/* Draggable corner handles */}
-        {imgRect && corners.map((c, idx) => {
-          const sp = toScreen(c);
-          const containerLeft = containerRef.current?.getBoundingClientRect().left || 0;
-          const containerTop = containerRef.current?.getBoundingClientRect().top || 0;
-          const left = imgRect.left - containerLeft + sp.x;
-          const top = imgRect.top - containerTop + sp.y;
-          return (
-            <div
-              key={idx}
-              onMouseDown={(e) => onPointerDown(e, idx)}
-              onTouchStart={(e) => onPointerDown(e, idx)}
-              style={{
-                position: 'absolute',
-                left: left - 24, top: top - 24,
-                width: 48, height: 48,
-                borderRadius: '50%',
-                background: '#00FF88',
-                border: '3px solid #fff',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
-                cursor: 'grab',
-                touchAction: 'none',
-                zIndex: 10,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18
-              }}
-            >
-              {['↖','↗','↘','↙'][idx]}
-            </div>
-          );
-        })}
+        <canvas
+          ref={canvasRef}
+          style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none' }}
+          onMouseDown={onPointerDown}
+          onMouseMove={onPointerMove}
+          onMouseUp={onPointerUp}
+          onMouseLeave={onPointerUp}
+          onTouchStart={onPointerDown}
+          onTouchMove={onPointerMove}
+          onTouchEnd={onPointerUp}
+        />
       </div>
     </div>
   );
