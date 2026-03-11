@@ -171,13 +171,20 @@ function DocumentScanner({ onCapture, onClose }) {
     const hierarchy = new cv.Mat();
 
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-    cv.Canny(blurred, edges, 75, 200);
-    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    cv.GaussianBlur(gray, blurred, new cv.Size(9, 9), 0);
+    cv.Canny(blurred, edges, 50, 150);
+
+    // Dilate edges to close gaps
+    const kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+    const dilated = new cv.Mat();
+    cv.dilate(edges, dilated, kernel);
+
+    cv.findContours(dilated, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
     let bestCorners = null;
     let maxArea = 0;
-    const minArea = W * H * 0.25;
+    const minArea = W * H * 0.25; // Must be at least 25% of screen
+    const maxArea2 = W * H * 0.98; // Not bigger than 98% of screen
 
     for (let i = 0; i < contours.size(); i++) {
       const contour = contours.get(i);
@@ -187,13 +194,25 @@ function DocumentScanner({ onCapture, onClose }) {
 
       if (approx.rows === 4) {
         const area = cv.contourArea(approx);
-        if (area > maxArea && area > minArea) {
-          maxArea = area;
+        if (area > maxArea && area > minArea && area < maxArea2) {
+          // Check if it's roughly rectangular (not too skewed)
           const pts = [];
           for (let j = 0; j < 4; j++) {
             pts.push({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] });
           }
-          bestCorners = orderCorners(pts);
+          const ordered = orderCorners(pts);
+          const [tl, tr, br, bl] = ordered;
+          
+          // Check aspect ratio — document should be taller than wide or close
+          const docW = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+          const docH = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+          const ratio = docH / docW;
+          
+          // Accept ratio between 0.5 and 2.5 (portrait or landscape paper)
+          if (ratio > 0.5 && ratio < 2.5) {
+            maxArea = area;
+            bestCorners = ordered;
+          }
         }
       }
       approx.delete();
@@ -201,7 +220,7 @@ function DocumentScanner({ onCapture, onClose }) {
     }
 
     src.delete(); gray.delete(); blurred.delete(); edges.delete();
-    contours.delete(); hierarchy.delete();
+    contours.delete(); hierarchy.delete(); kernel.delete(); dilated.delete();
     return bestCorners;
   };
 
