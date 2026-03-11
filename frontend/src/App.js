@@ -597,7 +597,7 @@ function SplashScreen() {
       flashes++;
       setCount(flashes);
       if (flashes >= 4) clearInterval(interval);
-    }, 800); }, 2000);
+    }, 1200); }, 2000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -620,7 +620,7 @@ function SplashScreen() {
           maxWidth: 500,
           objectFit: 'contain',
           opacity: opacity,
-          transition: 'opacity 0.45s ease-in-out',
+          transition: 'opacity 0.5s ease-in-out',
         }}
       />
       <p style={{ color: '#aaa', fontSize: 14, letterSpacing: 1 }}>Loading...</p>
