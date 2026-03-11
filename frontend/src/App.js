@@ -620,7 +620,7 @@ function SplashScreen() {
           maxWidth: 320,
           objectFit: 'contain',
           opacity: opacity,
-          transition: 'opacity 0.28s ease-in-out',
+          transition: 'opacity 3s ease-in-out',
         }}
       />
       <p style={{ color: '#aaa', fontSize: 14, letterSpacing: 1 }}>Loading...</p>
