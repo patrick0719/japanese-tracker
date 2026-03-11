@@ -596,8 +596,8 @@ function SplashScreen() {
     const interval = setInterval(() => {
       flashes++;
       setCount(flashes);
-      if (flashes >= 6) clearInterval(interval);
-    }, 350);
+      if (flashes >= 4) clearInterval(interval);
+    }, 600);
     return () => clearInterval(interval);
   }, []);
 
