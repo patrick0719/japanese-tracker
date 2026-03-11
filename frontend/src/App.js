@@ -592,13 +592,13 @@ function SplashScreen() {
 
   useEffect(() => {
     // Flash: alternate opacity 6 times (flash in/out 3 times)
-    let flashes = 0; setCount(0);
-    const interval = setInterval(() => {
+    let flashes = 0;
+    const timer = setTimeout(() => { const interval = setInterval(() => {
       flashes++;
       setCount(flashes);
       if (flashes >= 4) clearInterval(interval);
-    }, 600);
-    return () => clearInterval(interval);
+    }, 800); }, 2000);
+    return () => clearTimeout(timer);
   }, []);
 
   const opacity = count % 2 === 0 ? 1 : 0.15;
