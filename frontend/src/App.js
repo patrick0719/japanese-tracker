@@ -127,6 +127,7 @@ function DocumentScanner({ onCapture, onClose }) {
   const [corners, setCorners] = useState(null);
   const draggingRef = useRef(null);
   const cropContainerRef = useRef(null);
+  const [cropReady, setCropReady] = useState(false);
 
   const [status, setStatus] = useState('Initializing camera...');
   const [detected, setDetected] = useState(false);
@@ -338,7 +339,7 @@ function DocumentScanner({ onCapture, onClose }) {
   };
 
   // ── RENDER ───────────────────────────────────────────────────────
-  if (phase === 'crop' && capturedDataUrl && corners) {
+  if (phase === 'crop' && capturedDataUrl && corners && imgSize.w > 1) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#1a1a1a', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
         {/* Top bar */}
@@ -358,7 +359,7 @@ function DocumentScanner({ onCapture, onClose }) {
 
         {/* Image + draggable corners */}
         <div
-          ref={cropContainerRef}
+          ref={(el) => { cropContainerRef.current = el; if (el && !cropReady) setCropReady(true); }}
           style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}
           onMouseMove={onContainerMove}
           onMouseUp={onContainerEnd}
