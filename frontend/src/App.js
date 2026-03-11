@@ -111,6 +111,7 @@ function ImageViewer({ images, startIndex, onClose }) {
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
 function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRetake }) {
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   const draggingRef = useRef(null);
   const loadedImgRef = useRef(null);
   const cornersRef = useRef(corners);
@@ -121,9 +122,10 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   // Draw everything onto the canvas
   const draw = useCallback((img, crns) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const cW = canvas.offsetWidth;
-    const cH = canvas.offsetHeight;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    const cW = container.offsetWidth;
+    const cH = container.offsetHeight;
     if (!cW || !cH) return;
 
     canvas.width = cW;
@@ -288,18 +290,20 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
       <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center', padding: '6px 0', flexShrink: 0 }}>
         Drag the green corners to adjust
       </div>
-      {/* Canvas — fills all remaining space, handles all touch/mouse */}
-      <canvas
-        ref={canvasRef}
-        style={{ flex: 1, display: 'block', width: '100%', touchAction: 'none', background: '#000' }}
-        onMouseDown={onPointerDown}
-        onMouseMove={onPointerMove}
-        onMouseUp={onPointerUp}
-        onMouseLeave={onPointerUp}
-        onTouchStart={onPointerDown}
-        onTouchMove={onPointerMove}
-        onTouchEnd={onPointerUp}
-      />
+      {/* Wrapper gives the canvas measurable dimensions */}
+      <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#000' }}>
+        <canvas
+          ref={canvasRef}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }}
+          onMouseDown={onPointerDown}
+          onMouseMove={onPointerMove}
+          onMouseUp={onPointerUp}
+          onMouseLeave={onPointerUp}
+          onTouchStart={onPointerDown}
+          onTouchMove={onPointerMove}
+          onTouchEnd={onPointerUp}
+        />
+      </div>
     </div>
   );
 }
