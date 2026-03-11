@@ -28,8 +28,87 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
   });
 };
 
-// ── DOCUMENT SCANNER COMPONENT ─────────────────────────────────────────────
-// ── DOCUMENT SCANNER COMPONENT ─────────────────────────────────────────────
+// ── IMAGE VIEWER COMPONENT ──────────────────────────────────────────────────
+function ImageViewer({ images, startIndex, onClose }) {
+  const [current, setCurrent] = useState(startIndex || 0);
+  const touchStartX = useRef(null);
+
+  const prev = () => setCurrent(i => Math.max(0, i - 1));
+  const next = () => setCurrent(i => Math.min(images.length - 1, i + 1));
+
+  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
+    touchStartX.current = null;
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
+      display: 'flex', flexDirection: 'column'
+    }}>
+      {/* Top bar */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 20px', background: 'rgba(0,0,0,0.8)'
+      }}>
+        <button onClick={onClose} style={{
+          background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1
+        }}>✕</button>
+        <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
+          Page {current + 1} / {images.length}
+        </span>
+        <div style={{ width: 32 }} />
+      </div>
+
+      {/* Image */}
+      <div
+        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        <img
+          src={images[current]}
+          alt={`Page ${current + 1}`}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
+      </div>
+
+      {/* Bottom nav */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '16px 24px', background: 'rgba(0,0,0,0.8)'
+      }}>
+        <button onClick={prev} disabled={current === 0} style={{
+          background: current === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
+          color: '#fff', border: 'none', borderRadius: 10,
+          padding: '10px 24px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer'
+        }}>‹</button>
+
+        {/* Dot indicators */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {images.map((_, i) => (
+            <div key={i} onClick={() => setCurrent(i)} style={{
+              width: i === current ? 20 : 8, height: 8,
+              borderRadius: 4, background: i === current ? '#fff' : 'rgba(255,255,255,0.4)',
+              cursor: 'pointer', transition: 'all 0.2s'
+            }} />
+          ))}
+        </div>
+
+        <button onClick={next} disabled={current === images.length - 1} style={{
+          background: current === images.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
+          color: '#fff', border: 'none', borderRadius: 10,
+          padding: '10px 24px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer'
+        }}>›</button>
+      </div>
+    </div>
+  );
+}
+
+// ── DOCUMENT SCANNER COMPONENT (CamScanner-style) ──────────────────────────
 function DocumentScanner({ onCapture, onClose }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -39,12 +118,23 @@ function DocumentScanner({ onCapture, onClose }) {
   const stableCountRef = useRef(0);
   const lastCornersRef = useRef(null);
 
+  // phase: 'camera' | 'crop'
+  const [phase, setPhase] = useState('camera');
+  const [capturedDataUrl, setCapturedDataUrl] = useState(null);
+  const [imgSize, setImgSize] = useState({ w: 1, h: 1 });
+
+  // 4 draggable corners [TL, TR, BR, BL]
+  const [corners, setCorners] = useState(null);
+  const draggingRef = useRef(null);
+  const cropContainerRef = useRef(null);
+
   const [status, setStatus] = useState('Initializing camera...');
   const [detected, setDetected] = useState(false);
-  const [capturing, setCapturing] = useState(false);
   const capturingRef = useRef(false);
 
+  // ── CAMERA PHASE ─────────────────────────────────────────────────
   useEffect(() => {
+    if (phase !== 'camera') return;
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -55,128 +145,30 @@ function DocumentScanner({ onCapture, onClose }) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
           setStatus('Point camera at document');
-          animFrameRef.current = requestAnimationFrame(detect);
+          animFrameRef.current = requestAnimationFrame(detectLoop);
         }
-      } catch {
-        setStatus('Camera access denied.');
-      }
+      } catch { setStatus('Camera access denied.'); }
     };
     startCamera();
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
     };
-  }, []); // eslint-disable-line
+  }, [phase]); // eslint-disable-line
 
-  // ── FAST EDGE DETECTION using pixel contrast ──────────────────────
-  const findDocumentCorners = (imageData, W, H) => {
-    const data = imageData.data;
-    const STEP = 3; // sample every 3 pixels for speed
-
-    // Build edge map using Sobel-like operator
-    const edges = new Uint8Array(W * H);
-    for (let y = STEP; y < H - STEP; y += STEP) {
-      for (let x = STEP; x < W - STEP; x += STEP) {
-        const idx = (y * W + x) * 4;
-        const idxR = (y * W + x + STEP) * 4;
-        const idxD = ((y + STEP) * W + x) * 4;
-        const bright = (data[idx] + data[idx+1] + data[idx+2]) / 3;
-        const brightR = (data[idxR] + data[idxR+1] + data[idxR+2]) / 3;
-        const brightD = (data[idxD] + data[idxD+1] + data[idxD+2]) / 3;
-        const grad = Math.abs(bright - brightR) + Math.abs(bright - brightD);
-        if (grad > 40) edges[y * W + x] = 255;
-      }
-    }
-
-    // Find bounding box of strongest edges
-    // Scan from each side to find first strong edge line
-    const MARGIN = Math.floor(W * 0.05);
-    let top = -1, bottom = -1, left = -1, right = -1;
-
-    // Find top edge
-    for (let y = MARGIN; y < H / 2 && top === -1; y++) {
-      let count = 0;
-      for (let x = MARGIN; x < W - MARGIN; x++) {
-        if (edges[y * W + x]) count++;
-      }
-      if (count > W * 0.25) top = y;
-    }
-
-    // Find bottom edge
-    for (let y = H - MARGIN; y > H / 2 && bottom === -1; y--) {
-      let count = 0;
-      for (let x = MARGIN; x < W - MARGIN; x++) {
-        if (edges[y * W + x]) count++;
-      }
-      if (count > W * 0.25) bottom = y;
-    }
-
-    // Find left edge
-    for (let x = MARGIN; x < W / 2 && left === -1; x++) {
-      let count = 0;
-      for (let y = MARGIN; y < H - MARGIN; y++) {
-        if (edges[y * W + x]) count++;
-      }
-      if (count > H * 0.2) left = x;
-    }
-
-    // Find right edge
-    for (let x = W - MARGIN; x > W / 2 && right === -1; x--) {
-      let count = 0;
-      for (let y = MARGIN; y < H - MARGIN; y++) {
-        if (edges[y * W + x]) count++;
-      }
-      if (count > H * 0.2) right = x;
-    }
-
-    if (top === -1 || bottom === -1 || left === -1 || right === -1) return null;
-
-    const docW = right - left;
-    const docH = bottom - top;
-
-    // Must cover at least 30% of screen
-    if (docW < W * 0.3 || docH < H * 0.3) return null;
-
-    // Aspect ratio check — paper-like
-    const ratio = docH / docW;
-    if (ratio < 0.4 || ratio > 3.0) return null;
-
-    return [
-      { x: left, y: top },
-      { x: right, y: top },
-      { x: right, y: bottom },
-      { x: left, y: bottom }
-    ];
-  };
-
-  // ── CHECK STABILITY — corners must not move much ──────────────────
-  const isCornersStable = (prev, curr) => {
-    if (!prev) return false;
-    const threshold = 15;
-    return prev.every((p, i) =>
-      Math.abs(p.x - curr[i].x) < threshold &&
-      Math.abs(p.y - curr[i].y) < threshold
-    );
-  };
-
-  const detect = () => {
+  // ── EDGE HINT LOOP (dotted guide only, no auto-capture) ───────────
+  const detectLoop = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const overlay = overlayCanvasRef.current;
-
     if (!video || !canvas || !overlay || video.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(detect);
+      animFrameRef.current = requestAnimationFrame(detectLoop);
       return;
     }
-
     const W = video.videoWidth;
     const H = video.videoHeight;
-
-    // Process at half resolution for speed
-    const SW = Math.floor(W / 2);
-    const SH = Math.floor(H / 2);
-    canvas.width = SW;
-    canvas.height = SH;
+    const SW = Math.floor(W / 2), SH = Math.floor(H / 2);
+    canvas.width = SW; canvas.height = SH;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, SW, SH);
     const imageData = ctx.getImageData(0, 0, SW, SH);
@@ -186,121 +178,251 @@ function DocumentScanner({ onCapture, onClose }) {
     const oCtx = overlay.getContext('2d');
     oCtx.clearRect(0, 0, overlay.width, overlay.height);
 
-    const rawCorners = findDocumentCorners(imageData, SW, SH);
-
-    // Scale corners back to full resolution
-    const corners = rawCorners ? rawCorners.map(p => ({ x: p.x * 2, y: p.y * 2 })) : null;
-
-    if (corners) {
-      // Draw overlay
-      const scaleX = overlay.width / W;
-      const scaleY = overlay.height / H;
-      const pts = corners.map(p => ({ x: p.x * scaleX, y: p.y * scaleY }));
-
+    const raw = findEdgeHint(imageData, SW, SH);
+    if (raw) {
+      const scaled = raw.map(p => ({ x: p.x * 2, y: p.y * 2 }));
+      const sx = overlay.width / W, sy = overlay.height / H;
+      const pts = scaled.map(p => ({ x: p.x * sx, y: p.y * sy }));
       oCtx.beginPath();
       oCtx.moveTo(pts[0].x, pts[0].y);
       pts.forEach(p => oCtx.lineTo(p.x, p.y));
       oCtx.closePath();
       oCtx.strokeStyle = '#00FF88';
       oCtx.lineWidth = 3;
+      oCtx.setLineDash([10, 6]);
       oCtx.stroke();
-      oCtx.fillStyle = 'rgba(0,255,136,0.1)';
+      oCtx.setLineDash([]);
+      oCtx.fillStyle = 'rgba(0,255,136,0.08)';
       oCtx.fill();
       pts.forEach(p => {
         oCtx.beginPath();
-        oCtx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+        oCtx.arc(p.x, p.y, 9, 0, Math.PI * 2);
         oCtx.fillStyle = '#00FF88';
         oCtx.fill();
       });
-
-      if (isCornersStable(lastCornersRef.current, corners)) {
-        stableCountRef.current += 1;
-      } else {
-        stableCountRef.current = 0;
-      }
-      lastCornersRef.current = corners;
-
-      const remaining = Math.max(0, Math.ceil((60 - stableCountRef.current) / 20));
+      lastCornersRef.current = scaled;
       setDetected(true);
-      if (remaining > 0) {
-        setStatus(`Document detected! Hold still... ${remaining}s`);
-      } else {
-        setStatus('Document detected!');
-      }
-
-      // Auto-capture after 60 stable frames (~2 seconds)
-      if (stableCountRef.current >= 60 && !capturingRef.current) {
-        capturingRef.current = true;
-        setCapturing(true);
-        setTimeout(() => doCapture(corners, W, H), 300);
-        return;
-      }
+      setStatus('Document in frame — tap 📸 to capture');
     } else {
-      stableCountRef.current = 0;
       lastCornersRef.current = null;
       setDetected(false);
       setStatus('Point camera at document');
     }
-
-    animFrameRef.current = requestAnimationFrame(detect);
+    animFrameRef.current = requestAnimationFrame(detectLoop);
   };
 
-  // ── CAPTURE & CROP ────────────────────────────────────────────────
-  const doCapture = (corners, W, H) => {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-
-    // Draw full-res frame to canvas
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-
-    canvas.width = W;
-    canvas.height = H;
-    canvas.getContext('2d').drawImage(video, 0, 0, W, H);
-
-    const [tl, tr, br, bl] = corners;
-    const x = Math.max(0, Math.min(tl.x, bl.x) - 10);
-    const y = Math.max(0, Math.min(tl.y, tr.y) - 10);
-    const w = Math.min(W - x, Math.max(tr.x, br.x) - x + 10);
-    const h = Math.min(H - y, Math.max(bl.y, br.y) - y + 10);
-
-    const dst = document.createElement('canvas');
-    dst.width = w;
-    dst.height = h;
-    const dCtx = dst.getContext('2d');
-    dCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
-
-    onCapture(dst.toDataURL('image/jpeg', 0.9));
+  const findEdgeHint = (imageData, W, H) => {
+    const data = imageData.data;
+    const STEP = 4;
+    const edges = new Uint8Array(W * H);
+    for (let y = STEP; y < H - STEP; y += STEP) {
+      for (let x = STEP; x < W - STEP; x += STEP) {
+        const i = (y * W + x) * 4;
+        const ir = (y * W + x + STEP) * 4;
+        const id = ((y + STEP) * W + x) * 4;
+        const b = (data[i] + data[i+1] + data[i+2]) / 3;
+        const br = (data[ir] + data[ir+1] + data[ir+2]) / 3;
+        const bd = (data[id] + data[id+1] + data[id+2]) / 3;
+        if (Math.abs(b - br) + Math.abs(b - bd) > 35) edges[y * W + x] = 1;
+      }
+    }
+    const M = Math.floor(W * 0.04);
+    let top = -1, bottom = -1, left = -1, right = -1;
+    for (let y = M; y < H / 2 && top === -1; y++) {
+      let c = 0; for (let x = M; x < W - M; x++) if (edges[y * W + x]) c++;
+      if (c > W * 0.2) top = y;
+    }
+    for (let y = H - M; y > H / 2 && bottom === -1; y--) {
+      let c = 0; for (let x = M; x < W - M; x++) if (edges[y * W + x]) c++;
+      if (c > W * 0.2) bottom = y;
+    }
+    for (let x = M; x < W / 2 && left === -1; x++) {
+      let c = 0; for (let y = M; y < H - M; y++) if (edges[y * W + x]) c++;
+      if (c > H * 0.15) left = x;
+    }
+    for (let x = W - M; x > W / 2 && right === -1; x--) {
+      let c = 0; for (let y = M; y < H - M; y++) if (edges[y * W + x]) c++;
+      if (c > H * 0.15) right = x;
+    }
+    if (top === -1 || bottom === -1 || left === -1 || right === -1) return null;
+    if ((right - left) < W * 0.25 || (bottom - top) < H * 0.25) return null;
+    return [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }];
   };
 
-  const manualCapture = () => {
+  // ── TAKE PHOTO → go to crop phase ────────────────────────────────
+  const takePhoto = () => {
     if (capturingRef.current) return;
+    capturingRef.current = true;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
-
-    capturingRef.current = true;
-    setCapturing(true);
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
 
-    const W = video.videoWidth;
-    const H = video.videoHeight;
-    canvas.width = W;
-    canvas.height = H;
-    canvas.getContext('2d').drawImage(video, 0, 0);
+    const W = video.videoWidth, H = video.videoHeight;
+    canvas.width = W; canvas.height = H;
+    canvas.getContext('2d').drawImage(video, 0, 0, W, H);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    setCapturedDataUrl(dataUrl);
 
-    // Use last detected corners or full frame
-    const corners = lastCornersRef.current || [
-      { x: W * 0.05, y: H * 0.05 },
-      { x: W * 0.95, y: H * 0.05 },
-      { x: W * 0.95, y: H * 0.95 },
-      { x: W * 0.05, y: H * 0.95 }
+    // Init corners from detection or default
+    const detected = lastCornersRef.current;
+    const initCorners = detected ? [
+      { ...detected[0] }, { ...detected[1] }, { ...detected[2] }, { ...detected[3] }
+    ] : [
+      { x: W * 0.08, y: H * 0.08 },
+      { x: W * 0.92, y: H * 0.08 },
+      { x: W * 0.92, y: H * 0.92 },
+      { x: W * 0.08, y: H * 0.92 }
     ];
-    doCapture(corners, W, H);
+    setImgSize({ w: W, h: H });
+    setCorners(initCorners);
+    setPhase('crop');
   };
 
+  // ── CROP PHASE — draggable corners ───────────────────────────────
+  const getPointerPos = (e, rect) => {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: ((clientX - rect.left) / rect.width) * imgSize.w,
+      y: ((clientY - rect.top) / rect.height) * imgSize.h
+    };
+  };
+
+  const onCornerStart = (e, idx) => {
+    e.preventDefault();
+    e.stopPropagation();
+    draggingRef.current = idx;
+  };
+
+  const onContainerMove = (e) => {
+    if (draggingRef.current === null) return;
+    e.preventDefault();
+    const rect = cropContainerRef.current.getBoundingClientRect();
+    const pos = getPointerPos(e, rect);
+    const clamped = {
+      x: Math.max(0, Math.min(imgSize.w, pos.x)),
+      y: Math.max(0, Math.min(imgSize.h, pos.y))
+    };
+    setCorners(prev => prev.map((c, i) => i === draggingRef.current ? clamped : c));
+  };
+
+  const onContainerEnd = () => { draggingRef.current = null; };
+
+  const confirmCrop = () => {
+    if (!corners || !capturedDataUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      const [tl, tr, br, bl] = corners;
+      const x = Math.max(0, Math.min(tl.x, bl.x) - 6);
+      const y = Math.max(0, Math.min(tl.y, tr.y) - 6);
+      const w = Math.min(imgSize.w - x, Math.max(tr.x, br.x) - x + 6);
+      const h = Math.min(imgSize.h - y, Math.max(bl.y, br.y) - y + 6);
+      const dst = document.createElement('canvas');
+      dst.width = Math.round(w); dst.height = Math.round(h);
+      dst.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h);
+      onCapture(dst.toDataURL('image/jpeg', 0.92));
+    };
+    img.src = capturedDataUrl;
+  };
+
+  const retake = () => {
+    capturingRef.current = false;
+    setCapturedDataUrl(null);
+    setCorners(null);
+    stableCountRef.current = 0;
+    lastCornersRef.current = null;
+    setDetected(false);
+    setPhase('camera');
+  };
+
+  // ── RENDER ───────────────────────────────────────────────────────
+  if (phase === 'crop' && capturedDataUrl && corners) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#1a1a1a', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+        {/* Top bar */}
+        <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button onClick={retake} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer' }}>
+            ← Retake
+          </button>
+          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
+          <button onClick={confirmCrop} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+            Use ✓
+          </button>
+        </div>
+
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center', padding: '8px 0' }}>
+          Drag the green corners to adjust
+        </div>
+
+        {/* Image + draggable corners */}
+        <div
+          ref={cropContainerRef}
+          style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}
+          onMouseMove={onContainerMove}
+          onMouseUp={onContainerEnd}
+          onTouchMove={onContainerMove}
+          onTouchEnd={onContainerEnd}
+        >
+          <img src={capturedDataUrl} alt="capture" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', userSelect: 'none' }} draggable={false} />
+
+          {/* SVG overlay for crop lines */}
+          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+            <polygon
+              points={corners.map(c => {
+                const el = cropContainerRef.current;
+                if (!el) return '0,0';
+                const rect = el.getBoundingClientRect();
+                // find rendered image bounds
+                const imgAR = imgSize.w / imgSize.h;
+                const boxAR = rect.width / rect.height;
+                let iw, ih, ox, oy;
+                if (imgAR > boxAR) { iw = rect.width; ih = rect.width / imgAR; ox = 0; oy = (rect.height - ih) / 2; }
+                else { ih = rect.height; iw = rect.height * imgAR; ox = (rect.width - iw) / 2; oy = 0; }
+                return `${ox + (c.x / imgSize.w) * iw},${oy + (c.y / imgSize.h) * ih}`;
+              }).join(' ')}
+              fill="rgba(0,255,136,0.12)"
+              stroke="#00FF88"
+              strokeWidth="2"
+            />
+          </svg>
+
+          {/* Draggable corner handles */}
+          {corners.map((c, idx) => {
+            const el = cropContainerRef.current;
+            if (!el) return null;
+            const rect = el.getBoundingClientRect();
+            const imgAR = imgSize.w / imgSize.h;
+            const boxAR = rect.width / rect.height;
+            let iw, ih, ox, oy;
+            if (imgAR > boxAR) { iw = rect.width; ih = rect.width / imgAR; ox = 0; oy = (rect.height - ih) / 2; }
+            else { ih = rect.height; iw = rect.height * imgAR; ox = (rect.width - iw) / 2; oy = 0; }
+            const px = ox + (c.x / imgSize.w) * iw;
+            const py = oy + (c.y / imgSize.h) * ih;
+            return (
+              <div key={idx}
+                onMouseDown={(e) => onCornerStart(e, idx)}
+                onTouchStart={(e) => onCornerStart(e, idx)}
+                style={{
+                  position: 'absolute', left: px - 22, top: py - 22,
+                  width: 44, height: 44, borderRadius: '50%',
+                  background: '#00FF88', border: '3px solid #fff',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                  cursor: 'grab', touchAction: 'none', zIndex: 10,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16
+                }}>
+                {['↖','↗','↘','↙'][idx]}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Camera phase
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
@@ -310,40 +432,41 @@ function DocumentScanner({ onCapture, onClose }) {
 
         <div style={{
           position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)',
-          background: detected ? 'rgba(0,180,80,0.9)' : 'rgba(0,0,0,0.7)',
+          background: detected ? 'rgba(0,160,70,0.92)' : 'rgba(0,0,0,0.72)',
           color: '#fff', padding: '8px 20px', borderRadius: 20,
           fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap'
         }}>
-          {capturing ? '✅ Capturing...' : detected ? '🟢 ' + status : '🔍 ' + status}
+          {detected ? '🟢 ' + status : '🔍 ' + status}
         </div>
 
-        {!detected && !capturing && (
+        {/* Dotted guide when nothing detected */}
+        {!detected && (
           <div style={{
-            position: 'absolute', top: '8%', left: '4%', right: '4%', bottom: '15%',
-            border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 16, pointerEvents: 'none',
+            position: 'absolute', top: '8%', left: '5%', right: '5%', bottom: '18%',
+            border: '2px dashed rgba(255,255,255,0.4)', borderRadius: 12, pointerEvents: 'none',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Place document here</span>
+            <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>Place document inside</span>
           </div>
         )}
       </div>
 
-      <div style={{ background: '#111', padding: '16px 24px', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, cursor: 'pointer' }}>
+      <div style={{ background: '#111', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, cursor: 'pointer' }}>
           Cancel
         </button>
-        <div style={{ color: '#888', fontSize: 12, textAlign: 'center', flex: 1 }}>
-          {detected ? 'Keep still for auto-capture' : 'Auto-detects document edges'}
-        </div>
-        <button onClick={manualCapture} disabled={capturing} style={{ background: capturing ? '#555' : '#fff', color: '#000', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-          📸 Capture
+        <button onClick={takePhoto} style={{
+          background: '#fff', color: '#000', border: 'none', borderRadius: 50,
+          width: 64, height: 64, fontSize: 26, fontWeight: 700, cursor: 'pointer',
+          boxShadow: '0 0 0 4px rgba(255,255,255,0.3)'
+        }}>
+          📸
         </button>
+        <div style={{ width: 80 }} />
       </div>
     </div>
   );
 }
-
-// ── MAIN APP ────────────────────────────────────────────────────────────────
 
 // ── MAIN APP ────────────────────────────────────────────────────────────────
 function App() {
@@ -364,6 +487,7 @@ function App() {
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
   const [scanningExamId, setScanningExamId] = useState(null);
+  const [imageViewer, setImageViewer] = useState(null); // { images, index }
 
   const fileInputRef = useRef(null);
   const studentPhotoInputRef = useRef(null);
@@ -734,7 +858,7 @@ function App() {
                 <img
                   src={img}
                   alt={`Page ${idx + 1}`}
-                  onClick={() => window.open(img, '_blank')}
+                  onClick={() => setImageViewer({ images: allImages, index: idx })}
                   style={{
                     width: '100%',
                     aspectRatio: '210 / 297',
@@ -879,6 +1003,13 @@ function App() {
         <DocumentScanner
           onCapture={handleScanCapture}
           onClose={() => { setShowScanner(false); setScanningExamId(null); }}
+        />
+      )}
+      {imageViewer && (
+        <ImageViewer
+          images={imageViewer.images}
+          startIndex={imageViewer.index}
+          onClose={() => setImageViewer(null)}
         />
       )}
     </div>
