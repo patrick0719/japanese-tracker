@@ -617,10 +617,10 @@ function SplashScreen() {
         alt="Sage Asian"
         style={{
           width: '72%',
-          maxWidth: 320,
+          maxWidth: 500,
           objectFit: 'contain',
           opacity: opacity,
-          transition: 'opacity 3s ease-in-out',
+          transition: 'opacity 0.45s ease-in-out',
         }}
       />
       <p style={{ color: '#aaa', fontSize: 14, letterSpacing: 1 }}>Loading...</p>
