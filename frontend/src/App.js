@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 
 const API = 'https://japanese-tracker-production.up.railway.app/api';
@@ -116,18 +116,24 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   const [imgRect, setImgRect] = useState(null);
 
   // Get rendered image position after it loads
-  const updateImgRect = () => {
+  const updateImgRect = useCallback(() => {
     if (imgRef.current) {
       const r = imgRef.current.getBoundingClientRect();
-      setImgRect({ left: r.left, top: r.top, width: r.width, height: r.height });
+      if (r.width > 0 && r.height > 0) {
+        setImgRect({ left: r.left, top: r.top, width: r.width, height: r.height });
+      }
     }
-  };
-
-  useLayoutEffect(() => {
-    updateImgRect();
-    window.addEventListener('resize', updateImgRect);
-    return () => window.removeEventListener('resize', updateImgRect);
   }, []);
+
+  useEffect(() => {
+    window.addEventListener('resize', updateImgRect);
+    // Fallback poll in case onLoad already fired before mount
+    const t = setTimeout(updateImgRect, 100);
+    return () => {
+      window.removeEventListener('resize', updateImgRect);
+      clearTimeout(t);
+    };
+  }, [updateImgRect]);
 
   // Convert image coordinates → screen pixels
   const toScreen = (c) => {
@@ -182,7 +188,7 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
       {/* Container */}
       <div
         ref={containerRef}
-        style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' }}
+        style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
         onMouseMove={onPointerMove}
         onMouseUp={onPointerUp}
         onTouchMove={onPointerMove}
