@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import QRCode from 'qrcode';
 
 const API = 'https://japanese-tracker-production.up.railway.app/api';
@@ -108,6 +108,152 @@ function ImageViewer({ images, startIndex, onClose }) {
   );
 }
 
+// ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
+function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRetake }) {
+  const imgRef = useRef(null);
+  const containerRef = useRef(null);
+  const draggingRef = useRef(null);
+  const [imgRect, setImgRect] = useState(null);
+
+  // Get rendered image position after it loads
+  const updateImgRect = () => {
+    if (imgRef.current) {
+      const r = imgRef.current.getBoundingClientRect();
+      setImgRect({ left: r.left, top: r.top, width: r.width, height: r.height });
+    }
+  };
+
+  useLayoutEffect(() => {
+    updateImgRect();
+    window.addEventListener('resize', updateImgRect);
+    return () => window.removeEventListener('resize', updateImgRect);
+  }, []);
+
+  // Convert image coordinates → screen pixels
+  const toScreen = (c) => {
+    if (!imgRect) return { x: 0, y: 0 };
+    return {
+      x: (c.x / imgW) * imgRect.width,
+      y: (c.y / imgH) * imgRect.height
+    };
+  };
+
+  // Convert screen pixels (relative to imgRect) → image coordinates
+  const toImage = (screenX, screenY) => ({
+    x: Math.max(0, Math.min(imgW, (screenX / imgRect.width) * imgW)),
+    y: Math.max(0, Math.min(imgH, (screenY / imgRect.height) * imgH))
+  });
+
+  const onPointerDown = (e, idx) => {
+    e.preventDefault();
+    e.stopPropagation();
+    draggingRef.current = idx;
+  };
+
+  const onPointerMove = (e) => {
+    if (draggingRef.current === null || !imgRect) return;
+    e.preventDefault();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const pos = toImage(clientX - imgRect.left, clientY - imgRect.top);
+    setCorners(prev => prev.map((c, i) => i === draggingRef.current ? pos : c));
+  };
+
+  const onPointerUp = () => { draggingRef.current = null; };
+
+  const screenPts = corners.map(toScreen);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+      {/* Top bar */}
+      <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+        <button onClick={onRetake} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer' }}>
+          ← Retake
+        </button>
+        <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
+        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+          Use ✓
+        </button>
+      </div>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center', padding: '6px 0', flexShrink: 0 }}>
+        Drag the green corners to adjust
+      </div>
+
+      {/* Container */}
+      <div
+        ref={containerRef}
+        style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' }}
+        onMouseMove={onPointerMove}
+        onMouseUp={onPointerUp}
+        onTouchMove={onPointerMove}
+        onTouchEnd={onPointerUp}
+      >
+        {/* The captured image */}
+        <img
+          ref={imgRef}
+          src={dataUrl}
+          alt="captured"
+          onLoad={updateImgRect}
+          draggable={false}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', userSelect: 'none' }}
+        />
+
+        {/* SVG crop outline — positioned over the image */}
+        {imgRect && (
+          <svg style={{
+            position: 'absolute',
+            left: imgRect.left - (containerRef.current?.getBoundingClientRect().left || 0),
+            top: imgRect.top - (containerRef.current?.getBoundingClientRect().top || 0),
+            width: imgRect.width,
+            height: imgRect.height,
+            pointerEvents: 'none',
+            overflow: 'visible'
+          }}>
+            <polygon
+              points={screenPts.map(p => `${p.x},${p.y}`).join(' ')}
+              fill="rgba(0,255,136,0.15)"
+              stroke="#00FF88"
+              strokeWidth="2.5"
+            />
+          </svg>
+        )}
+
+        {/* Draggable corner handles */}
+        {imgRect && corners.map((c, idx) => {
+          const sp = toScreen(c);
+          const containerLeft = containerRef.current?.getBoundingClientRect().left || 0;
+          const containerTop = containerRef.current?.getBoundingClientRect().top || 0;
+          const left = imgRect.left - containerLeft + sp.x;
+          const top = imgRect.top - containerTop + sp.y;
+          return (
+            <div
+              key={idx}
+              onMouseDown={(e) => onPointerDown(e, idx)}
+              onTouchStart={(e) => onPointerDown(e, idx)}
+              style={{
+                position: 'absolute',
+                left: left - 24, top: top - 24,
+                width: 48, height: 48,
+                borderRadius: '50%',
+                background: '#00FF88',
+                border: '3px solid #fff',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+                cursor: 'grab',
+                touchAction: 'none',
+                zIndex: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18
+              }}
+            >
+              {['↖','↗','↘','↙'][idx]}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── DOCUMENT SCANNER COMPONENT (CamScanner-style) ──────────────────────────
 function DocumentScanner({ onCapture, onClose }) {
   const videoRef = useRef(null);
@@ -125,9 +271,6 @@ function DocumentScanner({ onCapture, onClose }) {
 
   // 4 draggable corners [TL, TR, BR, BL]
   const [corners, setCorners] = useState(null);
-  const draggingRef = useRef(null);
-  const cropContainerRef = useRef(null);
-  const [cropReady, setCropReady] = useState(false);
 
   const [status, setStatus] = useState('Initializing camera...');
   const [detected, setDetected] = useState(false);
@@ -281,35 +424,7 @@ function DocumentScanner({ onCapture, onClose }) {
     setPhase('crop');
   };
 
-  // ── CROP PHASE — draggable corners ───────────────────────────────
-  const getPointerPos = (e, rect) => {
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return {
-      x: ((clientX - rect.left) / rect.width) * imgSize.w,
-      y: ((clientY - rect.top) / rect.height) * imgSize.h
-    };
-  };
 
-  const onCornerStart = (e, idx) => {
-    e.preventDefault();
-    e.stopPropagation();
-    draggingRef.current = idx;
-  };
-
-  const onContainerMove = (e) => {
-    if (draggingRef.current === null) return;
-    e.preventDefault();
-    const rect = cropContainerRef.current.getBoundingClientRect();
-    const pos = getPointerPos(e, rect);
-    const clamped = {
-      x: Math.max(0, Math.min(imgSize.w, pos.x)),
-      y: Math.max(0, Math.min(imgSize.h, pos.y))
-    };
-    setCorners(prev => prev.map((c, i) => i === draggingRef.current ? clamped : c));
-  };
-
-  const onContainerEnd = () => { draggingRef.current = null; };
 
   const confirmCrop = () => {
     if (!corners || !capturedDataUrl) return;
@@ -338,89 +453,17 @@ function DocumentScanner({ onCapture, onClose }) {
     setPhase('camera');
   };
 
-  // ── RENDER ───────────────────────────────────────────────────────
-  if (phase === 'crop' && capturedDataUrl && corners && imgSize.w > 1) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, background: '#1a1a1a', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-        {/* Top bar */}
-        <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button onClick={retake} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer' }}>
-            ← Retake
-          </button>
-          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
-          <button onClick={confirmCrop} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-            Use ✓
-          </button>
-        </div>
-
-        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center', padding: '8px 0' }}>
-          Drag the green corners to adjust
-        </div>
-
-        {/* Image + draggable corners */}
-        <div
-          ref={(el) => { cropContainerRef.current = el; if (el && !cropReady) setCropReady(true); }}
-          style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}
-          onMouseMove={onContainerMove}
-          onMouseUp={onContainerEnd}
-          onTouchMove={onContainerMove}
-          onTouchEnd={onContainerEnd}
-        >
-          <img src={capturedDataUrl} alt="capture" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', userSelect: 'none' }} draggable={false} />
-
-          {/* SVG overlay for crop lines */}
-          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-            <polygon
-              points={corners.map(c => {
-                const el = cropContainerRef.current;
-                if (!el) return '0,0';
-                const rect = el.getBoundingClientRect();
-                // find rendered image bounds
-                const imgAR = imgSize.w / imgSize.h;
-                const boxAR = rect.width / rect.height;
-                let iw, ih, ox, oy;
-                if (imgAR > boxAR) { iw = rect.width; ih = rect.width / imgAR; ox = 0; oy = (rect.height - ih) / 2; }
-                else { ih = rect.height; iw = rect.height * imgAR; ox = (rect.width - iw) / 2; oy = 0; }
-                return `${ox + (c.x / imgSize.w) * iw},${oy + (c.y / imgSize.h) * ih}`;
-              }).join(' ')}
-              fill="rgba(0,255,136,0.12)"
-              stroke="#00FF88"
-              strokeWidth="2"
-            />
-          </svg>
-
-          {/* Draggable corner handles */}
-          {corners.map((c, idx) => {
-            const el = cropContainerRef.current;
-            if (!el) return null;
-            const rect = el.getBoundingClientRect();
-            const imgAR = imgSize.w / imgSize.h;
-            const boxAR = rect.width / rect.height;
-            let iw, ih, ox, oy;
-            if (imgAR > boxAR) { iw = rect.width; ih = rect.width / imgAR; ox = 0; oy = (rect.height - ih) / 2; }
-            else { ih = rect.height; iw = rect.height * imgAR; ox = (rect.width - iw) / 2; oy = 0; }
-            const px = ox + (c.x / imgSize.w) * iw;
-            const py = oy + (c.y / imgSize.h) * ih;
-            return (
-              <div key={idx}
-                onMouseDown={(e) => onCornerStart(e, idx)}
-                onTouchStart={(e) => onCornerStart(e, idx)}
-                style={{
-                  position: 'absolute', left: px - 22, top: py - 22,
-                  width: 44, height: 44, borderRadius: '50%',
-                  background: '#00FF88', border: '3px solid #fff',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-                  cursor: 'grab', touchAction: 'none', zIndex: 10,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16
-                }}>
-                {['↖','↗','↘','↙'][idx]}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+  // ── CROP RENDER ──────────────────────────────────────────────────
+  if (phase === 'crop' && capturedDataUrl && corners) {
+    return <CropScreen
+      dataUrl={capturedDataUrl}
+      imgW={imgSize.w}
+      imgH={imgSize.h}
+      corners={corners}
+      setCorners={setCorners}
+      onConfirm={confirmCrop}
+      onRetake={retake}
+    />;
   }
 
   // Camera phase
