@@ -29,380 +29,321 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
 };
 
 // ── DOCUMENT SCANNER COMPONENT ─────────────────────────────────────────────
+// ── DOCUMENT SCANNER COMPONENT ─────────────────────────────────────────────
 function DocumentScanner({ onCapture, onClose }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const overlayCanvasRef = useRef(null);
   const streamRef = useRef(null);
   const animFrameRef = useRef(null);
-  const cvReadyRef = useRef(false);
+  const stableCountRef = useRef(0);
+  const lastCornersRef = useRef(null);
 
   const [status, setStatus] = useState('Initializing camera...');
   const [detected, setDetected] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const stableCountRef = useRef(0);
+  const capturingRef = useRef(false);
 
-  // Load OpenCV.js dynamically
-  useEffect(() => {
-    if (window.cv && window.cv.Mat) {
-      cvReadyRef.current = true;
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
-    script.async = true;
-    script.onload = () => {
-      const checkCV = setInterval(() => {
-        if (window.cv && window.cv.Mat) {
-          cvReadyRef.current = true;
-          clearInterval(checkCV);
-        }
-      }, 100);
-    };
-    document.head.appendChild(script);
-    return () => {
-      if (document.head.contains(script)) document.head.removeChild(script);
-    };
-  }, []);
-
-  // Start camera
   useEffect(() => {
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
           setStatus('Point camera at document');
-          startDetection();
+          animFrameRef.current = requestAnimationFrame(detect);
         }
-      } catch (err) {
-        setStatus('Camera access denied. Please allow camera.');
+      } catch {
+        setStatus('Camera access denied.');
       }
     };
     startCamera();
-    return () => stopAll();
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    };
   }, []); // eslint-disable-line
 
-  const stopAll = () => {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+  // ── FAST EDGE DETECTION using pixel contrast ──────────────────────
+  const findDocumentCorners = (imageData, W, H) => {
+    const data = imageData.data;
+    const STEP = 3; // sample every 3 pixels for speed
+
+    // Build edge map using Sobel-like operator
+    const edges = new Uint8Array(W * H);
+    for (let y = STEP; y < H - STEP; y += STEP) {
+      for (let x = STEP; x < W - STEP; x += STEP) {
+        const idx = (y * W + x) * 4;
+        const idxR = (y * W + x + STEP) * 4;
+        const idxD = ((y + STEP) * W + x) * 4;
+        const bright = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+        const brightR = (data[idxR] + data[idxR+1] + data[idxR+2]) / 3;
+        const brightD = (data[idxD] + data[idxD+1] + data[idxD+2]) / 3;
+        const grad = Math.abs(bright - brightR) + Math.abs(bright - brightD);
+        if (grad > 40) edges[y * W + x] = 255;
+      }
+    }
+
+    // Find bounding box of strongest edges
+    // Scan from each side to find first strong edge line
+    const MARGIN = Math.floor(W * 0.05);
+    let top = -1, bottom = -1, left = -1, right = -1;
+
+    // Find top edge
+    for (let y = MARGIN; y < H / 2 && top === -1; y++) {
+      let count = 0;
+      for (let x = MARGIN; x < W - MARGIN; x++) {
+        if (edges[y * W + x]) count++;
+      }
+      if (count > W * 0.25) top = y;
+    }
+
+    // Find bottom edge
+    for (let y = H - MARGIN; y > H / 2 && bottom === -1; y--) {
+      let count = 0;
+      for (let x = MARGIN; x < W - MARGIN; x++) {
+        if (edges[y * W + x]) count++;
+      }
+      if (count > W * 0.25) bottom = y;
+    }
+
+    // Find left edge
+    for (let x = MARGIN; x < W / 2 && left === -1; x++) {
+      let count = 0;
+      for (let y = MARGIN; y < H - MARGIN; y++) {
+        if (edges[y * W + x]) count++;
+      }
+      if (count > H * 0.2) left = x;
+    }
+
+    // Find right edge
+    for (let x = W - MARGIN; x > W / 2 && right === -1; x--) {
+      let count = 0;
+      for (let y = MARGIN; y < H - MARGIN; y++) {
+        if (edges[y * W + x]) count++;
+      }
+      if (count > H * 0.2) right = x;
+    }
+
+    if (top === -1 || bottom === -1 || left === -1 || right === -1) return null;
+
+    const docW = right - left;
+    const docH = bottom - top;
+
+    // Must cover at least 30% of screen
+    if (docW < W * 0.3 || docH < H * 0.3) return null;
+
+    // Aspect ratio check — paper-like
+    const ratio = docH / docW;
+    if (ratio < 0.4 || ratio > 3.0) return null;
+
+    return [
+      { x: left, y: top },
+      { x: right, y: top },
+      { x: right, y: bottom },
+      { x: left, y: bottom }
+    ];
   };
 
-  // ── EDGE DETECTION LOOP ──────────────────────────────────────────
-  const detectDocument = useCallback(() => {
+  // ── CHECK STABILITY — corners must not move much ──────────────────
+  const isCornersStable = (prev, curr) => {
+    if (!prev) return false;
+    const threshold = 15;
+    return prev.every((p, i) =>
+      Math.abs(p.x - curr[i].x) < threshold &&
+      Math.abs(p.y - curr[i].y) < threshold
+    );
+  };
+
+  const detect = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const overlay = overlayCanvasRef.current;
 
     if (!video || !canvas || !overlay || video.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(detectDocument);
+      animFrameRef.current = requestAnimationFrame(detect);
       return;
     }
 
     const W = video.videoWidth;
     const H = video.videoHeight;
-    canvas.width = W;
-    canvas.height = H;
+
+    // Process at half resolution for speed
+    const SW = Math.floor(W / 2);
+    const SH = Math.floor(H / 2);
+    canvas.width = SW;
+    canvas.height = SH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, SW, SH);
+    const imageData = ctx.getImageData(0, 0, SW, SH);
+
     overlay.width = overlay.offsetWidth;
     overlay.height = overlay.offsetHeight;
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, W, H);
-
     const oCtx = overlay.getContext('2d');
     oCtx.clearRect(0, 0, overlay.width, overlay.height);
 
-    let corners = null;
+    const rawCorners = findDocumentCorners(imageData, SW, SH);
 
-    if (cvReadyRef.current && window.cv && window.cv.Mat) {
-      try {
-        corners = detectWithOpenCV(canvas, W, H);
-      } catch (e) {
-        corners = null;
-      }
-    }
-
-    if (!corners) {
-      corners = detectWithCanvas(canvas, W, H);
-    }
+    // Scale corners back to full resolution
+    const corners = rawCorners ? rawCorners.map(p => ({ x: p.x * 2, y: p.y * 2 })) : null;
 
     if (corners) {
-      drawCorners(oCtx, corners, overlay.width, overlay.height, W, H);
-      setDetected(true);
-      const remaining = Math.ceil((90 - stableCountRef.current) / 30);
-      setStatus(`Document detected! Hold still... ${remaining}s`);
-      stableCountRef.current += 1;
+      // Draw overlay
+      const scaleX = overlay.width / W;
+      const scaleY = overlay.height / H;
+      const pts = corners.map(p => ({ x: p.x * scaleX, y: p.y * scaleY }));
 
-      // Auto-capture after 30 stable frames (~1 second)
-      if (stableCountRef.current >= 90 && !capturing) {
+      oCtx.beginPath();
+      oCtx.moveTo(pts[0].x, pts[0].y);
+      pts.forEach(p => oCtx.lineTo(p.x, p.y));
+      oCtx.closePath();
+      oCtx.strokeStyle = '#00FF88';
+      oCtx.lineWidth = 3;
+      oCtx.stroke();
+      oCtx.fillStyle = 'rgba(0,255,136,0.1)';
+      oCtx.fill();
+      pts.forEach(p => {
+        oCtx.beginPath();
+        oCtx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+        oCtx.fillStyle = '#00FF88';
+        oCtx.fill();
+      });
+
+      if (isCornersStable(lastCornersRef.current, corners)) {
+        stableCountRef.current += 1;
+      } else {
+        stableCountRef.current = 0;
+      }
+      lastCornersRef.current = corners;
+
+      const remaining = Math.max(0, Math.ceil((60 - stableCountRef.current) / 20));
+      setDetected(true);
+      if (remaining > 0) {
+        setStatus(`Document detected! Hold still... ${remaining}s`);
+      } else {
+        setStatus('Document detected!');
+      }
+
+      // Auto-capture after 60 stable frames (~2 seconds)
+      if (stableCountRef.current >= 60 && !capturingRef.current) {
+        capturingRef.current = true;
         setCapturing(true);
-        setTimeout(() => captureDocument(corners, W, H), 200);
+        setTimeout(() => doCapture(corners, W, H), 300);
         return;
       }
     } else {
-      setDetected(false);
       stableCountRef.current = 0;
+      lastCornersRef.current = null;
+      setDetected(false);
       setStatus('Point camera at document');
     }
 
-    animFrameRef.current = requestAnimationFrame(detectDocument);
-  }, [capturing]); // eslint-disable-line
-
-  const startDetection = () => {
-    animFrameRef.current = requestAnimationFrame(detectDocument);
+    animFrameRef.current = requestAnimationFrame(detect);
   };
 
-  // ── OPENCV DETECTION ─────────────────────────────────────────────
-  const detectWithOpenCV = (canvas, W, H) => {
-    const cv = window.cv;
-    const src = cv.imread(canvas);
-    const gray = new cv.Mat();
-    const blurred = new cv.Mat();
-    const edges = new cv.Mat();
-    const contours = new cv.MatVector();
-    const hierarchy = new cv.Mat();
-
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray, blurred, new cv.Size(9, 9), 0);
-    cv.Canny(blurred, edges, 50, 150);
-
-    // Dilate edges to close gaps
-    const kernel = cv.Mat.ones(3, 3, cv.CV_8U);
-    const dilated = new cv.Mat();
-    cv.dilate(edges, dilated, kernel);
-
-    cv.findContours(dilated, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-    let bestCorners = null;
-    let maxArea = 0;
-    const minArea = W * H * 0.25; // Must be at least 25% of screen
-    const maxArea2 = W * H * 0.98; // Not bigger than 98% of screen
-
-    for (let i = 0; i < contours.size(); i++) {
-      const contour = contours.get(i);
-      const peri = cv.arcLength(contour, true);
-      const approx = new cv.Mat();
-      cv.approxPolyDP(contour, approx, 0.02 * peri, true);
-
-      if (approx.rows === 4) {
-        const area = cv.contourArea(approx);
-        if (area > maxArea && area > minArea && area < maxArea2) {
-          // Check if it's roughly rectangular (not too skewed)
-          const pts = [];
-          for (let j = 0; j < 4; j++) {
-            pts.push({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] });
-          }
-          const ordered = orderCorners(pts);
-          const [tl, tr, br, bl] = ordered;
-          
-          // Check aspect ratio — document should be taller than wide or close
-          const docW = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-          const docH = Math.hypot(bl.x - tl.x, bl.y - tl.y);
-          const ratio = docH / docW;
-          
-          // Accept ratio between 0.5 and 2.5 (portrait or landscape paper)
-          if (ratio > 0.5 && ratio < 2.5) {
-            maxArea = area;
-            bestCorners = ordered;
-          }
-        }
-      }
-      approx.delete();
-      contour.delete();
-    }
-
-    src.delete(); gray.delete(); blurred.delete(); edges.delete();
-    contours.delete(); hierarchy.delete(); kernel.delete(); dilated.delete();
-    return bestCorners;
-  };
-
-  // ── FALLBACK CANVAS DETECTION ────────────────────────────────────
-  const detectWithCanvas = (canvas, W, H) => {
-    // Disabled fallback — too many false positives
-    // Only use OpenCV detection
-    return null;
-  };
-
-  const orderCorners = (pts) => {
-    const sorted = [...pts].sort((a, b) => a.y - b.y);
-    const top = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
-    const bottom = sorted.slice(2).sort((a, b) => a.x - b.x);
-    return [top[0], top[1], bottom[1], bottom[0]];
-  };
-
-  const drawCorners = (ctx, corners, oW, oH, W, H) => {
-    const scaleX = oW / W;
-    const scaleY = oH / H;
-    const pts = corners.map(p => ({ x: p.x * scaleX, y: p.y * scaleY }));
-
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    pts.forEach(p => ctx.lineTo(p.x, p.y));
-    ctx.closePath();
-    ctx.strokeStyle = '#00FF88';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(0,255,136,0.12)';
-    ctx.fill();
-
-    pts.forEach(p => {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = '#00FF88';
-      ctx.fill();
-    });
-  };
-
-  // ── CAPTURE ──────────────────────────────────────────────────────
-  const captureDocument = (corners, W, H) => {
+  // ── CAPTURE & CROP ────────────────────────────────────────────────
+  const doCapture = (corners, W, H) => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    stopAll();
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
 
+    // Draw full-res frame to canvas
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+
+    canvas.width = W;
+    canvas.height = H;
+    canvas.getContext('2d').drawImage(video, 0, 0, W, H);
 
     const [tl, tr, br, bl] = corners;
-    const maxW = Math.max(
-      Math.hypot(tr.x - tl.x, tr.y - tl.y),
-      Math.hypot(br.x - bl.x, br.y - bl.y)
-    );
-    const maxH = Math.max(
-      Math.hypot(bl.x - tl.x, bl.y - tl.y),
-      Math.hypot(br.x - tr.x, br.y - tr.y)
-    );
+    const x = Math.max(0, Math.min(tl.x, bl.x) - 10);
+    const y = Math.max(0, Math.min(tl.y, tr.y) - 10);
+    const w = Math.min(W - x, Math.max(tr.x, br.x) - x + 10);
+    const h = Math.min(H - y, Math.max(bl.y, br.y) - y + 10);
 
     const dst = document.createElement('canvas');
-    dst.width = Math.round(maxW);
-    dst.height = Math.round(maxH);
+    dst.width = w;
+    dst.height = h;
+    const dCtx = dst.getContext('2d');
+    dCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
 
-    if (cvReadyRef.current && window.cv) {
-      try {
-        const cv = window.cv;
-        const src = cv.imread(canvas);
-        const dstMat = new cv.Mat();
-        const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-          tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
-        ]);
-        const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-          0, 0, maxW, 0, maxW, maxH, 0, maxH
-        ]);
-        const M = cv.getPerspectiveTransform(srcPts, dstPts);
-        cv.warpPerspective(src, dstMat, M, new cv.Size(maxW, maxH));
-
-        // Enhance for document readability
-        // Keep color, just show warped image
-        cv.imshow(dst, dstMat);
-
-        src.delete(); dstMat.delete(); srcPts.delete();
-        dstPts.delete(); M.delete();
-      } catch (e) {
-        simpleCrop(canvas, corners, dst);
-      }
-    } else {
-      simpleCrop(canvas, corners, dst);
-    }
-
-    onCapture(dst.toDataURL('image/jpeg', 0.85));
-  };
-
-  const simpleCrop = (srcCanvas, corners, dstCanvas) => {
-    const [tl, tr, br, bl] = corners;
-    const x = Math.min(tl.x, bl.x);
-    const y = Math.min(tl.y, tr.y);
-    const w = Math.max(tr.x, br.x) - x;
-    const h = Math.max(bl.y, br.y) - y;
-    dstCanvas.width = w;
-    dstCanvas.height = h;
-    const ctx = dstCanvas.getContext('2d');
-    ctx.filter = 'contrast(1.4) brightness(1.05)';
-    ctx.drawImage(srcCanvas, x, y, w, h, 0, 0, w, h);
+    onCapture(dst.toDataURL('image/jpeg', 0.9));
   };
 
   const manualCapture = () => {
+    if (capturingRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
+
+    capturingRef.current = true;
+    setCapturing(true);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+
     const W = video.videoWidth;
     const H = video.videoHeight;
     canvas.width = W;
     canvas.height = H;
     canvas.getContext('2d').drawImage(video, 0, 0);
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    stopAll();
-    const corners = [
+
+    // Use last detected corners or full frame
+    const corners = lastCornersRef.current || [
       { x: W * 0.05, y: H * 0.05 },
       { x: W * 0.95, y: H * 0.05 },
       { x: W * 0.95, y: H * 0.95 },
       { x: W * 0.05, y: H * 0.95 }
     ];
-    captureDocument(corners, W, H);
+    doCapture(corners, W, H);
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
-      display: 'flex', flexDirection: 'column'
-    }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-        <video
-          ref={videoRef}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          playsInline muted
-        />
-        <canvas
-          ref={overlayCanvasRef}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-        />
+        <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+        <canvas ref={overlayCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
         <div style={{
           position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)',
-          background: detected ? 'rgba(0,200,100,0.85)' : 'rgba(0,0,0,0.65)',
-          color: '#fff', padding: '8px 18px', borderRadius: 20,
-          fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', backdropFilter: 'blur(8px)'
+          background: detected ? 'rgba(0,180,80,0.9)' : 'rgba(0,0,0,0.7)',
+          color: '#fff', padding: '8px 20px', borderRadius: 20,
+          fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap'
         }}>
           {capturing ? '✅ Capturing...' : detected ? '🟢 ' + status : '🔍 ' + status}
         </div>
 
-        {!detected && (
+        {!detected && !capturing && (
           <div style={{
-            position: 'absolute', top: '10%', left: '5%', right: '5%', bottom: '20%',
-            border: '2px dashed rgba(255,255,255,0.4)', borderRadius: 12, pointerEvents: 'none'
-          }} />
+            position: 'absolute', top: '8%', left: '4%', right: '4%', bottom: '15%',
+            border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 16, pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Place document here</span>
+          </div>
         )}
       </div>
 
-      <div style={{
-        background: '#111', padding: '16px 24px',
-        display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between'
-      }}>
-        <button onClick={onClose} style={{
-          background: 'rgba(255,255,255,0.15)', color: '#fff',
-          border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, cursor: 'pointer'
-        }}>
+      <div style={{ background: '#111', padding: '16px 24px', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, cursor: 'pointer' }}>
           Cancel
         </button>
-        <div style={{ color: '#aaa', fontSize: 12, textAlign: 'center', flex: 1 }}>
-          Auto-captures when document detected
+        <div style={{ color: '#888', fontSize: 12, textAlign: 'center', flex: 1 }}>
+          {detected ? 'Keep still for auto-capture' : 'Auto-detects document edges'}
         </div>
-        <button onClick={manualCapture} style={{
-          background: '#fff', color: '#000', border: 'none', borderRadius: 10,
-          padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer'
-        }}>
+        <button onClick={manualCapture} disabled={capturing} style={{ background: capturing ? '#555' : '#fff', color: '#000', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
           📸 Capture
         </button>
       </div>
     </div>
   );
 }
+
+// ── MAIN APP ────────────────────────────────────────────────────────────────
 
 // ── MAIN APP ────────────────────────────────────────────────────────────────
 function App() {
