@@ -761,7 +761,7 @@ function App() {
                 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>Page {idx + 1}</span>
                   <button
-                    onClick={() => deleteImagePage(selectedExam._id, idx)}
+                    onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
                     style={{
                       background: 'none', border: 'none', color: '#ff3b30',
                       fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '2px 6px'
