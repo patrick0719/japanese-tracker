@@ -118,18 +118,22 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
 
   // Load the captured image once
   useEffect(() => {
+    // dataUrl is already loaded (just captured), so this should be instant
     const img = new Image();
     img.onload = () => {
       imgBitmapRef.current = img;
       setReady(true);
     };
+    img.onerror = () => console.error('CropScreen: failed to load dataUrl');
     img.src = dataUrl;
   }, [dataUrl]);
 
   // Compute how the image fits inside the container (letterbox)
   const getLayout = useCallback(() => {
     if (!containerRef.current || !imgBitmapRef.current) return null;
-    const { width: cW, height: cH } = containerRef.current.getBoundingClientRect();
+    const cW = containerRef.current.offsetWidth;
+    const cH = containerRef.current.offsetHeight;
+    if (!cW || !cH) return null;
     const scale = Math.min(cW / imgW, cH / imgH);
     const drawW = imgW * scale;
     const drawH = imgH * scale;
@@ -193,7 +197,13 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   }, [corners, imgW, imgH, getLayout]);
 
   useEffect(() => {
-    if (ready) redraw();
+    if (!ready) return;
+    // Double RAF: wait for browser layout so offsetWidth/Height are populated
+    let raf1, raf2;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => redraw());
+    });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
   }, [ready, redraw]);
 
   // Re-fit on resize
@@ -269,13 +279,13 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
       {/* Canvas fills remaining space */}
       <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {!ready && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
             <span style={{ color: '#fff', fontSize: 14 }}>Loading image…</span>
           </div>
         )}
         <canvas
           ref={canvasRef}
-          style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none' }}
+          style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none', opacity: ready ? 1 : 0 }}
           onMouseDown={onPointerDown}
           onMouseMove={onPointerMove}
           onMouseUp={onPointerUp}
