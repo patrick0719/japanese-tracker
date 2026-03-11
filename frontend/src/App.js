@@ -123,10 +123,12 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   const draw = useCallback((img, crns) => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
+    console.log('[draw] canvas:', canvas ? 'ok' : 'NULL', 'container:', container ? 'ok' : 'NULL');
     if (!canvas || !container) return;
     const cW = container.offsetWidth;
     const cH = container.offsetHeight;
-    if (!cW || !cH) return;
+    console.log('[draw] container size:', cW, 'x', cH, 'imgW:', imgW, 'imgH:', imgH, 'img:', img ? img.naturalWidth+'x'+img.naturalHeight : 'NULL');
+    if (!cW || !cH || !imgW || !imgH) return;
 
     canvas.width = cW;
     canvas.height = cH;
@@ -191,15 +193,24 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
 
   // Load image then draw — runs once on mount
   useEffect(() => {
+    console.log('[CropScreen] mounted, dataUrl length:', dataUrl ? dataUrl.length : 0);
+    console.log('[CropScreen] imgW:', imgW, 'imgH:', imgH);
+    console.log('[CropScreen] corners:', corners);
     const img = new Image();
     img.onload = () => {
+      console.log('[CropScreen] image loaded:', img.naturalWidth, img.naturalHeight);
       loadedImgRef.current = img;
-      // Small timeout ensures the canvas element has rendered and has real dimensions
       setTimeout(() => {
+        const container = containerRef.current;
+        const canvas = canvasRef.current;
+        console.log('[CropScreen] container:', container ? container.offsetWidth + 'x' + container.offsetHeight : 'NULL');
+        console.log('[CropScreen] canvas:', canvas ? 'exists' : 'NULL');
         draw(img, cornersRef.current);
       }, 50);
     };
+    img.onerror = (e) => console.error('[CropScreen] image FAILED to load', e);
     img.src = dataUrl;
+    console.log('[CropScreen] set img.src, type:', dataUrl ? dataUrl.substring(0, 30) : 'empty');
   }, []); // eslint-disable-line
 
   // Redraw whenever corners change (dragging)
@@ -454,13 +465,18 @@ function DocumentScanner({ onCapture, onClose }) {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
 
-    const W = video.videoWidth, H = video.videoHeight;
+    // Read dimensions and capture frame BEFORE stopping the stream
+    const W = video.videoWidth || video.clientWidth;
+    const H = video.videoHeight || video.clientHeight;
     canvas.width = W; canvas.height = H;
     canvas.getContext('2d').drawImage(video, 0, 0, W, H);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+    // Stop stream only after capture
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+
     setCapturedDataUrl(dataUrl);
 
     // Init corners from detection or default
