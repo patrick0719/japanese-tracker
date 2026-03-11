@@ -675,6 +675,7 @@ function App() {
         alert('Cannot connect to server. Check your internet connection.');
       }
     } finally {
+      await new Promise(r => setTimeout(r, 4000));
       setLoading(false);
     }
   };
