@@ -137,11 +137,12 @@ function DocumentScanner({ onCapture, onClose }) {
     if (corners) {
       drawCorners(oCtx, corners, overlay.width, overlay.height, W, H);
       setDetected(true);
-      setStatus('Document detected! Hold still...');
+      const remaining = Math.ceil((90 - stableCountRef.current) / 30);
+      setStatus(`Document detected! Hold still... ${remaining}s`);
       stableCountRef.current += 1;
 
       // Auto-capture after 30 stable frames (~1 second)
-      if (stableCountRef.current >= 30 && !capturing) {
+      if (stableCountRef.current >= 90 && !capturing) {
         setCapturing(true);
         setTimeout(() => captureDocument(corners, W, H), 200);
         return;
@@ -176,7 +177,7 @@ function DocumentScanner({ onCapture, onClose }) {
 
     let bestCorners = null;
     let maxArea = 0;
-    const minArea = W * H * 0.1;
+    const minArea = W * H * 0.25;
 
     for (let i = 0; i < contours.size(); i++) {
       const contour = contours.get(i);
@@ -206,44 +207,9 @@ function DocumentScanner({ onCapture, onClose }) {
 
   // ── FALLBACK CANVAS DETECTION ────────────────────────────────────
   const detectWithCanvas = (canvas, W, H) => {
-    const ctx = canvas.getContext('2d');
-    const SAMPLE = 4;
-    const sW = Math.floor(W / SAMPLE);
-    const sH = Math.floor(H / SAMPLE);
-    const imageData = ctx.getImageData(0, 0, W, H);
-    const data = imageData.data;
-
-    let minX = sW, maxX = 0, minY = sH, maxY = 0;
-    const threshold = 180;
-    let found = false;
-
-    for (let y = 0; y < sH; y++) {
-      for (let x = 0; x < sW; x++) {
-        const idx = (y * SAMPLE * W + x * SAMPLE) * 4;
-        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-        if (brightness > threshold) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-          found = true;
-        }
-      }
-    }
-
-    if (!found) return null;
-    const rx = minX * SAMPLE;
-    const ry = minY * SAMPLE;
-    const rw = (maxX - minX) * SAMPLE;
-    const rh = (maxY - minY) * SAMPLE;
-    if (rw < W * 0.2 || rh < H * 0.2) return null;
-
-    return [
-      { x: rx, y: ry },
-      { x: rx + rw, y: ry },
-      { x: rx + rw, y: ry + rh },
-      { x: rx, y: ry + rh }
-    ];
+    // Disabled fallback — too many false positives
+    // Only use OpenCV detection
+    return null;
   };
 
   const orderCorners = (pts) => {
