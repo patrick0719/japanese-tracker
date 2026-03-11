@@ -313,15 +313,11 @@ function DocumentScanner({ onCapture, onClose }) {
         cv.warpPerspective(src, dstMat, M, new cv.Size(maxW, maxH));
 
         // Enhance for document readability
-        const gray = new cv.Mat();
-        cv.cvtColor(dstMat, gray, cv.COLOR_RGBA2GRAY);
-        const sharp = new cv.Mat();
-        cv.adaptiveThreshold(gray, sharp, 255,
-          cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
-        cv.imshow(dst, sharp);
+        // Keep color, just show warped image
+        cv.imshow(dst, dstMat);
 
         src.delete(); dstMat.delete(); srcPts.delete();
-        dstPts.delete(); M.delete(); gray.delete(); sharp.delete();
+        dstPts.delete(); M.delete();
       } catch (e) {
         simpleCrop(canvas, corners, dst);
       }
@@ -632,14 +628,13 @@ function App() {
 
   const handleFileChange = async (e) => {
     const examId = fileInputRef.current.getAttribute('data-exam-id');
-    const file = e.target.files[0];
-    if (file) {
+    const files = Array.from(e.target.files);
+    for (const file of files) {
       const compressed = await compressImage(file, 1200, 0.75);
       await uploadImage(examId, compressed);
     }
     e.target.value = '';
   };
-
   const openScanner = (examId) => {
     setScanningExamId(examId);
     setShowScanner(true);
@@ -845,6 +840,7 @@ function App() {
           ref={fileInputRef}
           style={{ display: 'none' }}
           accept="image/*"
+          multiple
           onChange={handleFileChange}
         />
       </>
