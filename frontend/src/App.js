@@ -584,8 +584,8 @@ function DocumentScanner({ onCapture, onClose }) {
 
 
 // ── LOGIN SCREEN ─────────────────────────────────────────────────────────────
-const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'sageAsian2024';
+const ADMIN_USER = 'sagebulacan97';
+const ADMIN_PASS = 'July142018';
 const AUTH_KEY = 'sage_auth';
 
 function LoginScreen({ onLogin }) {
