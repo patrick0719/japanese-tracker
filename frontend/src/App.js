@@ -813,6 +813,7 @@ function App() {
   const [selectedExam, setSelectedExam] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
+  const [editingStudent, setEditingStudent] = useState(null);
   const [newName, setNewName] = useState('');
   const [newExamName, setNewExamName] = useState('');
   const [newScore, setNewScore] = useState('');
@@ -928,9 +929,34 @@ function App() {
     setModalType(type); setShowModal(true);
     setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null);
   };
+  const openEditStudent = (student, e) => {
+    e.stopPropagation();
+    setEditingStudent(student);
+    setNewName(student.name);
+    setNewStudentStatus(student.status || 'Regular');
+    setNewStudentPhoto(student.photo || null);
+    setModalType('editStudent');
+    setShowModal(true);
+  };
   const closeModal = () => {
     setShowModal(false);
+    setEditingStudent(null);
     setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular');
+  };
+
+  const updateStudent = async () => {
+    if (!newName || !editingStudent) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${editingStudent._id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      closeModal();
+    } catch { alert('Error updating student.'); }
+    setSaving(false);
   };
 
   const saveBatch = async () => {
@@ -1238,7 +1264,12 @@ function App() {
                 <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
               </div>
             </div>
-            {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}>✕</button>}
+            {!isViewer && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }} onClick={(e) => openEditStudent(student, e)}>✎</button>
+                <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}>✕</button>
+              </div>
+            )}
           </div>
         </div>
       ))}
@@ -1411,7 +1442,7 @@ function App() {
 
   const renderModal = () => {
     if (!showModal) return null;
-    const titles = { batch: 'Add New Batch', student: 'Add New Student', category: 'Add Exam Category', exam: 'Add New Exam' };
+    const titles = { batch: 'Add New Batch', student: 'Add New Student', editStudent: 'Edit Student', category: 'Add Exam Category', exam: 'Add New Exam' };
     return (
       <div className="modal-overlay">
         <div className="modal">
@@ -1432,7 +1463,7 @@ function App() {
                 <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder="Score (0-100)" min="0" max="100" />
               </div>
             </>
-          ) : modalType === 'student' ? (
+          ) : modalType === 'student' || modalType === 'editStudent' ? (
             <>
               <div className="form-group">
                 <label>Name:</label>
@@ -1479,7 +1510,7 @@ function App() {
           <div className="modal-buttons">
             <button className="cancel-btn" onClick={closeModal} disabled={saving}>Cancel</button>
             <button className="save-btn" disabled={saving}
-              onClick={modalType === 'batch' ? saveBatch : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
+              onClick={modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
               {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
