@@ -1129,8 +1129,11 @@ function App() {
   };
 
   const generateBatchQRs = async () => {
+    const studentsToGenerate = isViewer
+      ? selectedBatch.students.filter(s => s.status === 'Selected')
+      : selectedBatch.students;
     const results = await Promise.all(
-      selectedBatch.students.map(async (student) => {
+      studentsToGenerate.map(async (student) => {
         const url = `${window.location.origin}${window.location.pathname}?phgic=1&batch=${selectedBatch._id}&student=${student._id}`;
         const dataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2 });
         return { name: student.name, photo: student.photo, dataUrl };
