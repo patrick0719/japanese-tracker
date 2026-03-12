@@ -840,17 +840,24 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const batchId = params.get('batch');
     const studentId = params.get('student');
+    const isPhgicScan = params.get('phgic') === '1';
     if (batchId && studentId) {
-      // QR scan — fetch all batches, no teacher filter needed
-      setIsStudentView(true);
+      if (isPhgicScan) {
+        // PHGIC QR scan — auto set as viewer, no login needed
+        localStorage.setItem(AUTH_KEY, 'true');
+        localStorage.setItem(ROLE_KEY, 'viewer');
+        setIsLoggedIn(true);
+        setIsViewer(true);
+      } else {
+        setIsStudentView(true);
+      }
       setPendingDeepLink({ batchId, studentId });
       fetchBatches(null);
     } else {
-      // Normal teacher login flow — only fetch if already logged in + teacher saved
       const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
       const role = localStorage.getItem(ROLE_KEY);
       if (isAuth && role === 'viewer') {
-        fetchBatches(null); // viewer sees all batches
+        fetchBatches(null);
       } else {
         const saved = localStorage.getItem(TEACHER_KEY);
         const teacher = saved ? JSON.parse(saved) : null;
@@ -858,7 +865,6 @@ function App() {
           fetchBatches(teacher._id);
         }
       }
-      // else: show login or teacher select — no loading needed
     }
   }, []);
 
@@ -892,7 +898,7 @@ function App() {
     if (!student) return;
     setSelectedBatch(batch);
     setSelectedStudent(student);
-    setView('exams');
+    setView('categories');
     setPendingDeepLink(null);
   }, [pendingDeepLink, batches]);
 
@@ -1009,6 +1015,19 @@ function App() {
     } catch { alert('Error deleting student.'); }
   };
 
+  const toggleStudentStatus = async (student, e) => {
+    e.stopPropagation();
+    const newStatus = student.status === 'Selected' ? 'Regular' : 'Selected';
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${student._id}/status`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+    } catch { alert('Error updating status.'); }
+  };
+
   const deleteCategory = async (catId, e) => {
     if (e) e.stopPropagation();
     if (!window.confirm('Delete this category and all its exams?')) return;
@@ -1107,7 +1126,7 @@ function App() {
   const generateBatchQRs = async () => {
     const results = await Promise.all(
       selectedBatch.students.map(async (student) => {
-        const url = `${window.location.origin}${window.location.pathname}?batch=${selectedBatch._id}&student=${student._id}`;
+        const url = `${window.location.origin}${window.location.pathname}?phgic=1&batch=${selectedBatch._id}&student=${student._id}`;
         const dataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2 });
         return { name: student.name, photo: student.photo, dataUrl };
       })
@@ -1191,9 +1210,18 @@ function App() {
                 : <span className="student-avatar-icon">👤</span>
               }
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
-                  {student.status === 'Selected' && <span style={{ background: '#007AFF', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>SELECTED</span>}
+                  <span
+                    onClick={!isViewer ? (e) => toggleStudentStatus(student, e) : undefined}
+                    style={{
+                      background: student.status === 'Selected' ? '#007AFF' : '#e5e5ea',
+                      color: student.status === 'Selected' ? '#fff' : '#6e6e73',
+                      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                      cursor: isViewer ? 'default' : 'pointer'
+                    }}>
+                    {student.status === 'Selected' ? 'SELECTED' : 'REGULAR'}
+                  </span>
                 </div>
                 <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
               </div>
