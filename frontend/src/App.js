@@ -797,7 +797,7 @@ function SplashScreen() {
 
 function App() {
   const [batches, setBatches] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [view, setView] = useState('batches');
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -829,9 +829,19 @@ function App() {
     const batchId = params.get('batch');
     const studentId = params.get('student');
     if (batchId && studentId) {
-      // QR scan — student view, no login needed
+      // QR scan — fetch all batches, no teacher filter needed
       setIsStudentView(true);
       setPendingDeepLink({ batchId, studentId });
+      fetchBatches(null);
+    } else {
+      // Normal teacher login flow — only fetch if already logged in + teacher saved
+      const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
+      const saved = localStorage.getItem(TEACHER_KEY);
+      const teacher = saved ? JSON.parse(saved) : null;
+      if (isAuth && teacher) {
+        fetchBatches(teacher._id);
+      }
+      // else: show login or teacher select — no loading needed
     }
   }, []);
 
