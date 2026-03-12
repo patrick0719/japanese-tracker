@@ -586,7 +586,11 @@ function DocumentScanner({ onCapture, onClose }) {
 // ── LOGIN SCREEN ─────────────────────────────────────────────────────────────
 const ADMIN_USER = 'sagebulacan97';
 const ADMIN_PASS = 'July142018';
+const PHGIC_USER = 'PHGIC';
+const PHGIC_PASS = 'phgic';
 const AUTH_KEY = 'sage_auth';
+const ROLE_KEY = 'sage_role'; // 'admin' or 'viewer'
+
 const TEACHER_KEY = 'sage_teacher';
 
 // ── TEACHER SELECT SCREEN ─────────────────────────────────────────────────────
@@ -695,7 +699,12 @@ function LoginScreen({ onLogin }) {
   const handleLogin = () => {
     if (username === ADMIN_USER && password === ADMIN_PASS) {
       localStorage.setItem(AUTH_KEY, 'true');
-      onLogin();
+      localStorage.setItem(ROLE_KEY, 'admin');
+      onLogin('admin');
+    } else if (username === PHGIC_USER && password === PHGIC_PASS) {
+      localStorage.setItem(AUTH_KEY, 'true');
+      localStorage.setItem(ROLE_KEY, 'viewer');
+      onLogin('viewer');
     } else {
       setError('Invalid username or password.');
     }
@@ -816,6 +825,7 @@ function App() {
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
+  const [isViewer, setIsViewer] = useState(() => localStorage.getItem(ROLE_KEY) === 'viewer');
   const [isStudentView, setIsStudentView] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState(() => {
     const s = localStorage.getItem(TEACHER_KEY);
@@ -837,10 +847,15 @@ function App() {
     } else {
       // Normal teacher login flow — only fetch if already logged in + teacher saved
       const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
-      const saved = localStorage.getItem(TEACHER_KEY);
-      const teacher = saved ? JSON.parse(saved) : null;
-      if (isAuth && teacher) {
-        fetchBatches(teacher._id);
+      const role = localStorage.getItem(ROLE_KEY);
+      if (isAuth && role === 'viewer') {
+        fetchBatches(null); // viewer sees all batches
+      } else {
+        const saved = localStorage.getItem(TEACHER_KEY);
+        const teacher = saved ? JSON.parse(saved) : null;
+        if (isAuth && teacher) {
+          fetchBatches(teacher._id);
+        }
       }
       // else: show login or teacher select — no loading needed
     }
@@ -1105,10 +1120,10 @@ function App() {
 
   // Student QR scan — skip login, go directly to exam view
   if (!isStudentView && !isLoggedIn) return (
-    <LoginScreen onLogin={() => setIsLoggedIn(true)} />
+    <LoginScreen onLogin={(role) => { setIsLoggedIn(true); setIsViewer(role === 'viewer'); }} />
   );
 
-  if (!isStudentView && !selectedTeacher) return (
+  if (!isStudentView && !isViewer && !selectedTeacher) return (
     <TeacherSelect onSelect={(t) => {
       localStorage.setItem(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
@@ -1121,14 +1136,25 @@ function App() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <div>
           <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
-          <h1 className="title" style={{ margin: '2px 0 0 0' }}>{selectedTeacher?.emoji} {selectedTeacher?.name}</h1>
+          <h1 className="title" style={{ margin: '2px 0 0 0' }}>
+            {isViewer ? '👁️ PHGIC' : `${selectedTeacher?.emoji} ${selectedTeacher?.name}`}
+          </h1>
         </div>
-        <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }}
-          style={{ background: 'none', border: '1.5px solid #8B0000', borderRadius: 8, color: '#8B0000', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
-          Switch
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {isViewer && <span style={{ background: '#fff3cd', color: '#856404', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6, border: '1px solid #ffc107' }}>VIEW ONLY</span>}
+          {!isViewer && (
+            <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }}
+              style={{ background: 'none', border: '1.5px solid #8B0000', borderRadius: 8, color: '#8B0000', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
+              Switch
+            </button>
+          )}
+          <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); localStorage.removeItem(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }}
+            style={{ background: 'none', border: '1.5px solid #ff3b30', borderRadius: 8, color: '#ff3b30', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
+            Logout
+          </button>
+        </div>
       </div>
-      <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>My Batches</h2>
+      <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>{isViewer ? 'All Batches' : 'My Batches'}</h2>
       {batches.map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
@@ -1136,11 +1162,11 @@ function App() {
               <h2 className="card-title">🎌 {batch.name}</h2>
               <p className="card-subtitle">{batch.students.length} students</p>
             </div>
-            <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>
+            {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>}
           </div>
         </div>
       ))}
-      <button className="add-button" onClick={() => openModal('batch')}>+ Add New Batch</button>
+      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>+ Add New Batch</button>}
     </>
   );
 
@@ -1164,11 +1190,11 @@ function App() {
                 <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
               </div>
             </div>
-            <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}>✕</button>
+            {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}>✕</button>}
           </div>
         </div>
       ))}
-      <button className="add-button" onClick={() => openModal('student')}>+ Add Student</button>
+      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>+ Add Student</button>}
       {selectedBatch.students.length > 0 && (
         <button className="print-qr-button" onClick={generateBatchQRs}>🖨 Print QR Codes</button>
       )}
@@ -1194,12 +1220,12 @@ function App() {
               <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
             </div>
             <div className="exam-right">
-              <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>
+              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>}
             </div>
           </div>
         </div>
       ))}
-      <button className="add-button" onClick={() => openModal('category')}>+ Add Exam Category</button>
+      {!isViewer && <button className="add-button" onClick={() => openModal('category')}>+ Add Exam Category</button>}
     </>
   );
 
@@ -1219,12 +1245,12 @@ function App() {
             </div>
             <div className="exam-right">
               {item.images?.length > 0 && <span className="has-photo-badge">📷</span>}
-              <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
+              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>}
             </div>
           </div>
         </div>
       ))}
-      <button className="add-button" onClick={() => openModal('exam')}>+ Add Exam</button>
+      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>+ Add Exam</button>}
     </>
   );
 
@@ -1246,15 +1272,17 @@ function App() {
 
         <h2 className="section-title">Exam Pages ({allImages.length} pages)</h2>
 
-        {/* Action buttons — always visible */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16, padding: '0 4px' }}>
-          <button className="save-btn" style={{ flex: 1 }} onClick={() => openScanner(selectedExam._id)}>
-            📷 Scan Page
-          </button>
-          <button className="cancel-btn" style={{ flex: 1 }} onClick={() => triggerFileInput(selectedExam._id)}>
-            🖼️ Upload Page
-          </button>
-        </div>
+        {/* Action buttons — hidden for viewer */}
+        {!isViewer && (
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16, padding: '0 4px' }}>
+            <button className="save-btn" style={{ flex: 1 }} onClick={() => openScanner(selectedExam._id)}>
+              📷 Scan Page
+            </button>
+            <button className="cancel-btn" style={{ flex: 1 }} onClick={() => triggerFileInput(selectedExam._id)}>
+              🖼️ Upload Page
+            </button>
+          </div>
+        )}
 
         {/* Document pages — vertical list like Files app */}
         {allImages.length === 0 ? (
@@ -1278,15 +1306,17 @@ function App() {
                   padding: '8px 12px', background: '#f5f5f7', borderBottom: '1px solid #e5e5ea'
                 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>Page {idx + 1}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
-                    style={{
-                      background: 'none', border: 'none', color: '#ff3b30',
-                      fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '2px 6px'
-                    }}
-                  >
-                    🗑 Delete
-                  </button>
+                  {!isViewer && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
+                      style={{
+                        background: 'none', border: 'none', color: '#ff3b30',
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '2px 6px'
+                      }}
+                    >
+                      🗑 Delete
+                    </button>
+                  )}
                 </div>
                 {/* Document image — A4 proportions, full width */}
                 <img
@@ -1315,9 +1345,9 @@ function App() {
           <div></div>
         )}
 
-        <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
+        {!isViewer && <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
           🗑 Delete Exam
-        </button>
+        </button>}
 
         <input
           type="file"
