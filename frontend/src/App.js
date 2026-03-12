@@ -592,20 +592,19 @@ const TEACHER_KEY = 'sage_teacher';
 // ── TEACHER SELECT SCREEN ─────────────────────────────────────────────────────
 function TeacherSelect({ onSelect }) {
   const [teachers, setTeachers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingT, setLoadingT] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('👩‍🏫');
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
-
   const EMOJIS = ['👩‍🏫','👨‍🏫','👩','👨','🧑‍🏫'];
 
   useEffect(() => {
     fetch(`${API}/teachers`)
       .then(r => r.json())
-      .then(data => { setTeachers(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(data => { setTeachers(data); setLoadingT(false); })
+      .catch(() => setLoadingT(false));
   }, []);
 
   const addTeacher = async () => {
@@ -631,16 +630,15 @@ function TeacherSelect({ onSelect }) {
       <img src={LOGO_DATA_URL} alt="Sage Asian" style={{ width: '55%', maxWidth: 240, marginBottom: 28, objectFit: 'contain' }} />
       <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>Select Teacher</h2>
       <p style={{ fontSize: 13, color: '#8e8e93', marginBottom: 24 }}>Tap your name to continue</p>
-
       <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {loading && <p style={{ textAlign: 'center', color: '#8e8e93' }}>Loading...</p>}
+        {loadingT && <p style={{ textAlign: 'center', color: '#8e8e93' }}>Loading...</p>}
         {teachers.map(t => (
           <div key={t._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => onSelect(t)} style={{
-              flex: 1, display: 'flex', alignItems: 'center', gap: 16,
+              flex: 1, display: 'flex', alignItems: 'center', gap: 14,
               background: '#fff', border: 'none', borderRadius: 14,
               padding: '16px 20px', fontSize: 17, fontWeight: 600, color: '#1c1c1e',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.08)', cursor: 'pointer', textAlign: 'left',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.08)', cursor: 'pointer',
             }}>
               <span style={{ fontSize: 30 }}>{t.emoji}</span>
               {t.name}
@@ -652,38 +650,34 @@ function TeacherSelect({ onSelect }) {
                 <button onClick={() => setDeleteId(null)} style={{ background: '#e5e5ea', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Cancel</button>
               </div>
             ) : (
-              <button onClick={() => setDeleteId(t._id)} style={{ background: 'none', border: 'none', color: '#ff3b30', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+              <button onClick={() => setDeleteId(t._id)} style={{ background: 'none', border: 'none', color: '#ff3b30', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>✕</button>
             )}
           </div>
         ))}
-
         {showAdd ? (
-          <div style={{ background: '#fff', borderRadius: 14, padding: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
             <p style={{ fontSize: 13, fontWeight: 600, color: '#6e6e73', marginBottom: 8 }}>Choose emoji</p>
             <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
               {EMOJIS.map(e => (
                 <button key={e} onClick={() => setNewEmoji(e)} style={{ fontSize: 24, background: newEmoji === e ? '#e8f4ff' : 'none', border: newEmoji === e ? '2px solid #007AFF' : '2px solid transparent', borderRadius: 8, padding: '4px 8px', cursor: 'pointer' }}>{e}</button>
               ))}
             </div>
-            <input
-              type="text" value={newName} onChange={e => setNewName(e.target.value)}
+            <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
               placeholder="Teacher name" autoFocus
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, marginBottom: 10, boxSizing: 'border-box' }}
-            />
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, marginBottom: 10, boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={addTeacher} disabled={saving || !newName.trim()} style={{ flex: 1, background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+              <button onClick={addTeacher} disabled={saving || !newName.trim()} style={{ flex: 1, background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
                 {saving ? 'Saving...' : 'Add Teacher'}
               </button>
               <button onClick={() => { setShowAdd(false); setNewName(''); }} style={{ background: '#e5e5ea', border: 'none', borderRadius: 10, padding: '12px 16px', fontSize: 15, cursor: 'pointer' }}>Cancel</button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setShowAdd(true)} style={{ background: '#fff', border: '2px dashed #c7c7cc', borderRadius: 14, padding: '14px', fontSize: 15, fontWeight: 600, color: '#007AFF', cursor: 'pointer' }}>
+          <button onClick={() => setShowAdd(true)} style={{ background: '#fff', border: '2px dashed #c7c7cc', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 600, color: '#007AFF', cursor: 'pointer' }}>
             + Add Teacher
           </button>
         )}
       </div>
-
       <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(TEACHER_KEY); window.location.reload(); }}
         style={{ marginTop: 36, background: 'none', border: 'none', color: '#ff3b30', fontSize: 14, cursor: 'pointer' }}>
         Logout
@@ -839,15 +833,15 @@ function App() {
       setIsStudentView(true);
       setPendingDeepLink({ batchId, studentId });
     }
-    fetchBatches();
   }, []);
 
-  const fetchBatches = async () => {
+  const fetchBatches = async (teacherId) => {
     try {
       setLoading(true);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
-      const res = await fetch(`${API}/batches`, { signal: controller.signal });
+      const url = teacherId ? `${API}/batches?teacherId=${teacherId}` : `${API}/batches`;
+      const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       const data = await res.json();
       setBatches(data);
@@ -905,7 +899,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName })
+        body: JSON.stringify({ name: newName, teacherId: selectedTeacher?._id || null })
       });
       const newBatch = await res.json();
       setBatches(prev => [...prev, newBatch]);
@@ -1064,6 +1058,7 @@ function App() {
     <TeacherSelect onSelect={(t) => {
       localStorage.setItem(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
+      fetchBatches(t._id);
     }} />
   );
 
@@ -1074,7 +1069,7 @@ function App() {
           <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
           <h1 className="title" style={{ margin: '2px 0 0 0' }}>{selectedTeacher?.emoji} {selectedTeacher?.name}</h1>
         </div>
-        <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); }}
+        <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }}
           style={{ background: 'none', border: '1.5px solid #8B0000', borderRadius: 8, color: '#8B0000', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
           Switch
         </button>
