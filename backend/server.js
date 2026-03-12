@@ -95,6 +95,18 @@ app.post('/api/batches/:batchId/students', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.patch('/api/batches/:batchId/students/:studentId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    if (req.body.name !== undefined) student.name = req.body.name;
+    if (req.body.photo !== undefined) student.photo = req.body.photo;
+    if (req.body.status !== undefined) student.status = req.body.status;
+    await batch.save();
+    res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.patch('/api/batches/:batchId/students/:studentId/status', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
