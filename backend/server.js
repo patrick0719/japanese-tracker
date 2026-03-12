@@ -32,6 +32,7 @@ mongoose.connect(process.env.MONGO_URI)
 
   const batchSchema = new mongoose.Schema({
     name: String,
+    teacherId: { type: String, default: null },
     students: [{ 
       name: String, 
       photo: String, 
@@ -39,7 +40,7 @@ mongoose.connect(process.env.MONGO_URI)
         name: String, 
         date: String, 
         score: Number, 
-        images: [String] // Array of images for multiple pages
+        images: [String]
       }] 
     }]
   });
@@ -55,25 +56,26 @@ const Teacher = mongoose.model('Teacher', teacherSchema);
 app.get('/api/teachers', async (req, res) => {
   try { res.json(await Teacher.find()); } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
 app.post('/api/teachers', async (req, res) => {
   try {
     const t = new Teacher({ name: req.body.name, emoji: req.body.emoji || '👩‍🏫' });
     await t.save(); res.json(t);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
 app.delete('/api/teachers/:id', async (req, res) => {
   try { await Teacher.findByIdAndDelete(req.params.id); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── BATCH ROUTES ─────────────────────────────────────────────────────────────
 app.get('/api/batches', async (req, res) => {
-  try { res.json(await Batch.find()); } catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const filter = req.query.teacherId ? { teacherId: req.query.teacherId } : {};
+    res.json(await Batch.find(filter));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/batches', async (req, res) => {
-  try { const b = new Batch({ name: req.body.name, students: [] }); await b.save(); res.json(b); } catch (err) { res.status(500).json({ error: err.message }); }
+  try { const b = new Batch({ name: req.body.name, teacherId: req.body.teacherId || null, students: [] }); await b.save(); res.json(b); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/batches/:batchId', async (req, res) => {
