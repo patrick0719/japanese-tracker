@@ -1120,7 +1120,11 @@ function App() {
 
   // Student QR scan — skip login, go directly to exam view
   if (!isStudentView && !isLoggedIn) return (
-    <LoginScreen onLogin={(role) => { setIsLoggedIn(true); setIsViewer(role === 'viewer'); }} />
+    <LoginScreen onLogin={(role) => {
+      setIsLoggedIn(true);
+      setIsViewer(role === 'viewer');
+      if (role === 'viewer') fetchBatches(null);
+    }} />
   );
 
   if (!isStudentView && !isViewer && !selectedTeacher) return (
