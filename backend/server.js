@@ -36,7 +36,7 @@ mongoose.connect(process.env.MONGO_URI)
     students: [{
       name: String,
       photo: String,
-      status: { type: String, default: 'Regular' }, // 'Regular' or 'Selected'
+      status: { type: String, default: 'Regular' },
       categories: [{
         name: String,
         items: [{
@@ -45,6 +45,12 @@ mongoose.connect(process.env.MONGO_URI)
           score: Number,
           images: [String]
         }]
+      }],
+      evaluations: [{
+        title: String,
+        ordinal: String,
+        date: String,
+        fields: { type: mongoose.Schema.Types.Mixed, default: {} }
       }]
     }]
   });
@@ -185,6 +191,36 @@ app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:it
     const { index } = req.body;
     if (item.images && item.images[index] !== undefined) item.images.splice(index, 1);
     await batch.save(); res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── EVALUATION ROUTES ─────────────────────────────────────────────────────────
+app.get('/api/batches/:batchId/students/:studentId/evaluations', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    res.json(student.evaluations || []);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/batches/:batchId/students/:studentId/evaluations', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    student.evaluations.push({ title: req.body.title, ordinal: req.body.ordinal, date: req.body.date, fields: {} });
+    await batch.save();
+    const newEval = student.evaluations[student.evaluations.length - 1];
+    res.json(newEval);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/batches/:batchId/students/:studentId/evaluations/:evalId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    student.evaluations = student.evaluations.filter(ev => ev._id.toString() !== req.params.evalId);
+    await batch.save();
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -826,6 +826,10 @@ function App() {
   const [scanningExamId, setScanningExamId] = useState(null);
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [evaluations, setEvaluations] = useState([]); // per-student evaluations
+  const [selectedEvaluation, setSelectedEvaluation] = useState(null);
+  const [evalTitle, setEvalTitle] = useState('');
+  const [evalDate, setEvalDate] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => localStorage.getItem(ROLE_KEY) === 'viewer');
   const [isStudentView, setIsStudentView] = useState(false);
@@ -917,10 +921,22 @@ function App() {
   };
   const goToExamItems = (cat) => { setSelectedCategory(cat); setView('examItems'); };
   const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); };
+  const goToEvaluations = () => { fetchEvaluations(); setView('evaluations'); };
+  const goToEvaluationDetail = (ev) => { setSelectedEvaluation(ev); setView('evaluationDetail'); };
+
+  const fetchEvaluations = async () => {
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/evaluations`);
+      const data = await res.json();
+      setEvaluations(data);
+    } catch { setEvaluations([]); }
+  };
 
   const goBack = () => {
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
     else if (view === 'examItems') { setView('categories'); setSelectedCategory(null); }
+    else if (view === 'evaluationDetail') { setView('evaluations'); setSelectedEvaluation(null); }
+    else if (view === 'evaluations') { setView('categories'); }
     else if (view === 'categories') { setView('students'); setSelectedStudent(null); }
     else if (view === 'students') { setView('batches'); setSelectedBatch(null); }
   };
@@ -1089,6 +1105,34 @@ function App() {
   };
 
   const deleteExam = deleteExamItem;
+
+  const createEvaluation = async () => {
+    if (!evalTitle || !evalDate) return;
+    setSaving(true);
+    try {
+      const ordinals = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
+      const num = evaluations.length;
+      const ordinal = ordinals[num] || `${num + 1}th`;
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/evaluations`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: evalTitle, ordinal, date: evalDate })
+      });
+      const newEval = await res.json();
+      setEvaluations(prev => [...prev, newEval]);
+      setEvalTitle(''); setEvalDate('');
+      closeModal();
+    } catch { alert('Error creating evaluation.'); }
+    setSaving(false);
+  };
+
+  const deleteEvaluation = async (evalId, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Delete this evaluation?')) return;
+    try {
+      await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/evaluations/${evalId}`, { method: 'DELETE' });
+      setEvaluations(prev => prev.filter(ev => ev._id !== evalId));
+    } catch { alert('Error deleting evaluation.'); }
+  };
 
   const deleteImagePage = async (examId, index) => {
     if (!window.confirm(`Delete page ${index + 1}?`)) return;
@@ -1290,21 +1334,92 @@ function App() {
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
       </div>
-      <h2 className="section-title">Exam Categories</h2>
-      {(selectedStudent.categories || []).map(cat => (
-        <div key={cat._id} className="card exam-card clickable" onClick={() => goToExamItems(cat)}>
-          <div className="card-content">
-            <div>
-              <h3 className="card-title">📁 {cat.name}</h3>
-              <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
+
+      {/* ── Exam Categories Box ── */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📁 Exam Categories</h2>
+          {!isViewer && (
+            <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
+          )}
+        </div>
+        {(selectedStudent.categories || []).length === 0
+          ? <p style={{ fontSize: 13, color: '#8e8e93', margin: 0, textAlign: 'center', padding: '12px 0' }}>No exam categories yet.</p>
+          : (selectedStudent.categories || []).map(cat => (
+            <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
+              <div className="card-content">
+                <div>
+                  <h3 className="card-title">📁 {cat.name}</h3>
+                  <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="exam-right">
+                  {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>}
+                </div>
+              </div>
             </div>
-            <div className="exam-right">
-              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>}
+          ))
+        }
+      </div>
+
+      {/* ── Evaluations Box ── */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📋 Evaluations</h2>
+          {!isViewer && (
+            <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
+          )}
+        </div>
+        <button onClick={goToEvaluations} style={{ width: '100%', background: '#f2f2f7', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: '#3a3a3c', cursor: 'pointer', fontWeight: 500 }}>
+          View all evaluations →
+        </button>
+      </div>
+    </>
+  );
+
+  const renderEvaluations = () => (
+    <>
+      <button className="back-btn" onClick={goBack}>←</button>
+      <div className="student-profile-header">
+        {selectedStudent.photo
+          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+          : <span className="student-profile-icon">👤</span>
+        }
+        <h1 className="student-profile-name">{selectedStudent.name}</h1>
+      </div>
+      <h2 className="section-title">Evaluations</h2>
+      {evaluations.length === 0
+        ? <p style={{ fontSize: 14, color: '#8e8e93', textAlign: 'center', marginTop: 32 }}>No evaluations yet.</p>
+        : evaluations.map(ev => (
+          <div key={ev._id} className="card exam-card clickable" onClick={() => goToEvaluationDetail(ev)}>
+            <div className="card-content">
+              <div>
+                <h3 className="card-title">📋 {ev.ordinal} Evaluation — {ev.title}</h3>
+                <p className="card-subtitle">📅 {ev.date}</p>
+              </div>
+              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteEvaluation(ev._id, e)}>✕</button>}
             </div>
           </div>
-        </div>
-      ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('category')}>+ Add Exam Category</button>}
+        ))
+      }
+      {!isViewer && (
+        <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>+ Add Evaluation</button>
+      )}
+    </>
+  );
+
+  const renderEvaluationDetail = () => (
+    <>
+      <button className="back-btn" onClick={goBack}>←</button>
+      <div className="header-with-back">
+        <h1 className="title">📋 {selectedEvaluation?.ordinal} Evaluation</h1>
+      </div>
+      <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: 16, marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+        <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600, color: '#3a3a3c' }}>{selectedEvaluation?.title}</p>
+        <p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>📅 {selectedEvaluation?.date}</p>
+      </div>
+      <div style={{ background: '#f2f2f7', borderRadius: 14, padding: 20, textAlign: 'center', color: '#8e8e93', fontSize: 14 }}>
+        Evaluation fields coming soon.
+      </div>
     </>
   );
 
@@ -1442,12 +1557,26 @@ function App() {
 
   const renderModal = () => {
     if (!showModal) return null;
-    const titles = { batch: 'Add New Batch', student: 'Add New Student', editStudent: 'Edit Student', category: 'Add Exam Category', exam: 'Add New Exam' };
+    const titles = { batch: 'Add New Batch', student: 'Add New Student', editStudent: 'Edit Student', category: 'Add Exam Category', exam: 'Add New Exam', evaluation: 'New Evaluation' };
     return (
       <div className="modal-overlay">
         <div className="modal">
           <h2 className="modal-title">{titles[modalType]}</h2>
-          {modalType === 'category' ? (
+          {modalType === 'evaluation' ? (
+            <>
+              <div className="form-group">
+                <label>Evaluation Title:</label>
+                <input type="text" value={evalTitle} onChange={(e) => setEvalTitle(e.target.value)} placeholder="e.g., Mid-term, Final, Progress Check" />
+              </div>
+              <div className="form-group">
+                <label>Date:</label>
+                <input type="date" value={evalDate} onChange={(e) => setEvalDate(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15 }} />
+              </div>
+              <p style={{ fontSize: 12, color: '#8e8e93', margin: '4px 0 0' }}>
+                This will be saved as the <strong>{['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th'][evaluations.length] || `${evaluations.length+1}th`} Evaluation</strong>.
+              </p>
+            </>
+          ) : modalType === 'category' ? (
             <div className="form-group">
               <label>Category Name:</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Kanji, Grammar, Vocabulary" />
@@ -1510,7 +1639,7 @@ function App() {
           <div className="modal-buttons">
             <button className="cancel-btn" onClick={closeModal} disabled={saving}>Cancel</button>
             <button className="save-btn" disabled={saving}
-              onClick={modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
+              onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
               {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
@@ -1612,6 +1741,8 @@ function App() {
       {view === 'batches' && renderBatches()}
       {view === 'students' && renderStudents()}
       {view === 'categories' && renderCategories()}
+      {view === 'evaluations' && renderEvaluations()}
+      {view === 'evaluationDetail' && renderEvaluationDetail()}
       {view === 'examItems' && renderExamItems()}
       {view === 'examDetail' && renderExamDetail()}
       {renderModal()}
