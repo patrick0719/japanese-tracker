@@ -817,6 +817,7 @@ function App() {
   const [newExamName, setNewExamName] = useState('');
   const [newScore, setNewScore] = useState('');
   const [newStudentPhoto, setNewStudentPhoto] = useState(null);
+  const [newStudentStatus, setNewStudentStatus] = useState('Regular');
   const [saving, setSaving] = useState(false);
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
@@ -918,7 +919,7 @@ function App() {
   };
   const closeModal = () => {
     setShowModal(false);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null);
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular');
   };
 
   const saveBatch = async () => {
@@ -942,7 +943,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, photo: newStudentPhoto })
+        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
@@ -1181,7 +1182,7 @@ function App() {
         <h1 className="title">{selectedBatch.name}</h1>
       </div>
       <h2 className="section-title">Students</h2>
-      {selectedBatch.students.map(student => (
+      {(isViewer ? selectedBatch.students.filter(s => s.status === 'Selected') : selectedBatch.students).map(student => (
         <div key={student._id} className="card student-card clickable" onClick={() => goToCategories(student)}>
           <div className="card-content">
             <div className="student-card-left">
@@ -1190,7 +1191,10 @@ function App() {
                 : <span className="student-avatar-icon">👤</span>
               }
               <div>
-                <h3 className="card-title">{student.name}</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
+                  {student.status === 'Selected' && <span style={{ background: '#007AFF', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>SELECTED</span>}
+                </div>
                 <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
               </div>
             </div>
@@ -1393,6 +1397,14 @@ function App() {
               <div className="form-group">
                 <label>Name:</label>
                 <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Juan Cruz" />
+              </div>
+              <div className="form-group">
+                <label>Status:</label>
+                <select value={newStudentStatus} onChange={(e) => setNewStudentStatus(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
+                  <option value="Regular">Regular</option>
+                  <option value="Selected">Selected</option>
+                </select>
               </div>
               <div className="form-group">
                 <label>Photo (optional):</label>
