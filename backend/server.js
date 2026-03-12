@@ -45,6 +45,29 @@ mongoose.connect(process.env.MONGO_URI)
   });
 const Batch = mongoose.model('Batch', batchSchema);
 
+// ── TEACHER MODEL & ROUTES ───────────────────────────────────────────────────
+const teacherSchema = new mongoose.Schema({
+  name: String,
+  emoji: { type: String, default: '👩‍🏫' },
+});
+const Teacher = mongoose.model('Teacher', teacherSchema);
+
+app.get('/api/teachers', async (req, res) => {
+  try { res.json(await Teacher.find()); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/teachers', async (req, res) => {
+  try {
+    const t = new Teacher({ name: req.body.name, emoji: req.body.emoji || '👩‍🏫' });
+    await t.save(); res.json(t);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/teachers/:id', async (req, res) => {
+  try { await Teacher.findByIdAndDelete(req.params.id); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── BATCH ROUTES ─────────────────────────────────────────────────────────────
 app.get('/api/batches', async (req, res) => {
   try { res.json(await Batch.find()); } catch (err) { res.status(500).json({ error: err.message }); }
 });
