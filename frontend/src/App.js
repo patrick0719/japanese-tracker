@@ -587,6 +587,110 @@ function DocumentScanner({ onCapture, onClose }) {
 const ADMIN_USER = 'sagebulacan97';
 const ADMIN_PASS = 'July142018';
 const AUTH_KEY = 'sage_auth';
+const TEACHER_KEY = 'sage_teacher';
+
+// ── TEACHER SELECT SCREEN ─────────────────────────────────────────────────────
+function TeacherSelect({ onSelect }) {
+  const [teachers, setTeachers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmoji, setNewEmoji] = useState('👩‍🏫');
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+
+  const EMOJIS = ['👩‍🏫','👨‍🏫','👩','👨','🧑‍🏫'];
+
+  useEffect(() => {
+    fetch(`${API}/teachers`)
+      .then(r => r.json())
+      .then(data => { setTeachers(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const addTeacher = async () => {
+    if (!newName.trim()) return;
+    setSaving(true);
+    const res = await fetch(`${API}/teachers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName.trim(), emoji: newEmoji })
+    });
+    const t = await res.json();
+    setTeachers(prev => [...prev, t]);
+    setNewName(''); setShowAdd(false); setSaving(false);
+  };
+
+  const deleteTeacher = async (id) => {
+    await fetch(`${API}/teachers/${id}`, { method: 'DELETE' });
+    setTeachers(prev => prev.filter(t => t._id !== id));
+    setDeleteId(null);
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px' }}>
+      <img src={LOGO_DATA_URL} alt="Sage Asian" style={{ width: '55%', maxWidth: 240, marginBottom: 28, objectFit: 'contain' }} />
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>Select Teacher</h2>
+      <p style={{ fontSize: 13, color: '#8e8e93', marginBottom: 24 }}>Tap your name to continue</p>
+
+      <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {loading && <p style={{ textAlign: 'center', color: '#8e8e93' }}>Loading...</p>}
+        {teachers.map(t => (
+          <div key={t._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => onSelect(t)} style={{
+              flex: 1, display: 'flex', alignItems: 'center', gap: 16,
+              background: '#fff', border: 'none', borderRadius: 14,
+              padding: '16px 20px', fontSize: 17, fontWeight: 600, color: '#1c1c1e',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.08)', cursor: 'pointer', textAlign: 'left',
+            }}>
+              <span style={{ fontSize: 30 }}>{t.emoji}</span>
+              {t.name}
+              <span style={{ marginLeft: 'auto', color: '#c7c7cc', fontSize: 20 }}>›</span>
+            </button>
+            {deleteId === t._id ? (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => deleteTeacher(t._id)} style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
+                <button onClick={() => setDeleteId(null)} style={{ background: '#e5e5ea', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setDeleteId(t._id)} style={{ background: 'none', border: 'none', color: '#ff3b30', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+            )}
+          </div>
+        ))}
+
+        {showAdd ? (
+          <div style={{ background: '#fff', borderRadius: 14, padding: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#6e6e73', marginBottom: 8 }}>Choose emoji</p>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+              {EMOJIS.map(e => (
+                <button key={e} onClick={() => setNewEmoji(e)} style={{ fontSize: 24, background: newEmoji === e ? '#e8f4ff' : 'none', border: newEmoji === e ? '2px solid #007AFF' : '2px solid transparent', borderRadius: 8, padding: '4px 8px', cursor: 'pointer' }}>{e}</button>
+              ))}
+            </div>
+            <input
+              type="text" value={newName} onChange={e => setNewName(e.target.value)}
+              placeholder="Teacher name" autoFocus
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, marginBottom: 10, boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={addTeacher} disabled={saving || !newName.trim()} style={{ flex: 1, background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                {saving ? 'Saving...' : 'Add Teacher'}
+              </button>
+              <button onClick={() => { setShowAdd(false); setNewName(''); }} style={{ background: '#e5e5ea', border: 'none', borderRadius: 10, padding: '12px 16px', fontSize: 15, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} style={{ background: '#fff', border: '2px dashed #c7c7cc', borderRadius: 14, padding: '14px', fontSize: 15, fontWeight: 600, color: '#007AFF', cursor: 'pointer' }}>
+            + Add Teacher
+          </button>
+        )}
+      </div>
+
+      <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(TEACHER_KEY); window.location.reload(); }}
+        style={{ marginTop: 36, background: 'none', border: 'none', color: '#ff3b30', fontSize: 14, cursor: 'pointer' }}>
+        Logout
+      </button>
+    </div>
+  );
+}
 
 function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -718,6 +822,10 @@ function App() {
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isStudentView, setIsStudentView] = useState(false);
+  const [selectedTeacher, setSelectedTeacher] = useState(() => {
+    const s = localStorage.getItem(TEACHER_KEY);
+    return s ? JSON.parse(s) : null;
+  });
 
   const fileInputRef = useRef(null);
   const studentPhotoInputRef = useRef(null);
@@ -952,9 +1060,26 @@ function App() {
     <LoginScreen onLogin={() => setIsLoggedIn(true)} />
   );
 
+  if (!isStudentView && !selectedTeacher) return (
+    <TeacherSelect onSelect={(t) => {
+      localStorage.setItem(TEACHER_KEY, JSON.stringify(t));
+      setSelectedTeacher(t);
+    }} />
+  );
+
   const renderBatches = () => (
     <>
-      <h1 className="title">My Batches</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <div>
+          <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
+          <h1 className="title" style={{ margin: '2px 0 0 0' }}>{selectedTeacher?.emoji} {selectedTeacher?.name}</h1>
+        </div>
+        <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); }}
+          style={{ background: 'none', border: '1.5px solid #8B0000', borderRadius: 8, color: '#8B0000', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
+          Switch
+        </button>
+      </div>
+      <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>My Batches</h2>
       {batches.map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
