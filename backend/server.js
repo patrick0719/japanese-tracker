@@ -36,6 +36,7 @@ mongoose.connect(process.env.MONGO_URI)
     students: [{
       name: String,
       photo: String,
+      status: { type: String, default: 'Regular' }, // 'Regular' or 'Selected'
       categories: [{
         name: String,
         items: [{
@@ -88,7 +89,7 @@ app.delete('/api/batches/:batchId', async (req, res) => {
 app.post('/api/batches/:batchId/students', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
-    batch.students.push({ name: req.body.name, photo: req.body.photo || null, exams: [] });
+    batch.students.push({ name: req.body.name, photo: req.body.photo || null, status: req.body.status || 'Regular', categories: [] });
     await batch.save();
     res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
