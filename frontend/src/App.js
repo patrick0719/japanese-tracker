@@ -1036,7 +1036,8 @@ function App() {
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) {
         setSelectedStudent(updatedStudent);
-        const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
+        const updatedCat = updatedStudent.categories.find(c => c._id === selectedCategory._id);
+        const updatedExam = updatedCat?.items.find(ex => ex._id === examId);
         if (updatedExam) setSelectedExam(updatedExam);
       }
     } catch { alert('Error deleting page.'); }
@@ -1053,7 +1054,8 @@ function App() {
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) {
         setSelectedStudent(updatedStudent);
-        const updatedExam = updatedStudent.exams.find(ex => ex._id === examId);
+        const updatedCat = updatedStudent.categories.find(c => c._id === selectedCategory._id);
+        const updatedExam = updatedCat?.items.find(ex => ex._id === examId);
         if (updatedExam) setSelectedExam(updatedExam);
       }
     } catch { alert('Error saving image.'); }
@@ -1159,7 +1161,7 @@ function App() {
               }
               <div>
                 <h3 className="card-title">{student.name}</h3>
-                <p className="card-subtitle">{student.exams.length} exams</p>
+                <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
               </div>
             </div>
             <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}>✕</button>
