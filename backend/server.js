@@ -33,15 +33,18 @@ mongoose.connect(process.env.MONGO_URI)
   const batchSchema = new mongoose.Schema({
     name: String,
     teacherId: { type: String, default: null },
-    students: [{ 
-      name: String, 
-      photo: String, 
-      exams: [{ 
-        name: String, 
-        date: String, 
-        score: Number, 
-        images: [String]
-      }] 
+    students: [{
+      name: String,
+      photo: String,
+      categories: [{
+        name: String,
+        items: [{
+          name: String,
+          date: String,
+          score: Number,
+          images: [String]
+        }]
+      }]
     }]
   });
 const Batch = mongoose.model('Batch', batchSchema);
@@ -99,54 +102,68 @@ app.delete('/api/batches/:batchId/students/:studentId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/batches/:batchId/students/:studentId/exams', async (req, res) => {
+// ── CATEGORY ROUTES ──────────────────────────────────────────────────────────
+app.post('/api/batches/:batchId/students/:studentId/categories', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
-    student.exams.push({ name: req.body.name, date: new Date().toISOString().split('T')[0], score: req.body.score, image: null });
+    student.categories.push({ name: req.body.name, items: [] });
     await batch.save(); res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.patch('/api/batches/:batchId/students/:studentId/exams/:examId/image', async (req, res) => {
+app.delete('/api/batches/:batchId/students/:studentId/categories/:catId', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
-    const exam = student.exams.id(req.params.examId);
-    
-    // Push new image to array instead of replacing
-    if (!exam.images) exam.images = [];
-    exam.images.push(req.body.image);
-    
-    await batch.save(); 
-    res.json(batch);
-  } catch (err) { 
-    res.status(500).json({ error: err.message }); 
-  }
-});
-
-app.delete('/api/batches/:batchId/students/:studentId/exams/:examId', async (req, res) => {
-  try {
-    const batch = await Batch.findById(req.params.batchId);
-    const student = batch.students.id(req.params.studentId);
-    student.exams = student.exams.filter(e => e._id.toString() !== req.params.examId);
+    student.categories = student.categories.filter(c => c._id.toString() !== req.params.catId);
     await batch.save(); res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-app.patch('/api/batches/:batchId/students/:studentId/exams/:examId/remove-image', async (req, res) => {
+
+// ── EXAM ITEM ROUTES ──────────────────────────────────────────────────────────
+app.post('/api/batches/:batchId/students/:studentId/categories/:catId/items', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
-    const exam = student.exams.id(req.params.examId);
+    const cat = student.categories.id(req.params.catId);
+    cat.items.push({ name: req.body.name, date: new Date().toISOString().split('T')[0], score: req.body.score, images: [] });
+    await batch.save(); res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    const cat = student.categories.id(req.params.catId);
+    cat.items = cat.items.filter(i => i._id.toString() !== req.params.itemId);
+    await batch.save(); res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId/image', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    const cat = student.categories.id(req.params.catId);
+    const item = cat.items.id(req.params.itemId);
+    if (!item.images) item.images = [];
+    item.images.push(req.body.image);
+    await batch.save(); res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId/remove-image', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    const cat = student.categories.id(req.params.catId);
+    const item = cat.items.id(req.params.itemId);
     const { index } = req.body;
-    if (exam.images && exam.images[index] !== undefined) {
-      exam.images.splice(index, 1);
-    }
-    await batch.save();
-    res.json(batch);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    if (item.images && item.images[index] !== undefined) item.images.splice(index, 1);
+    await batch.save(); res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 const PORT = process.env.PORT || 5000;
