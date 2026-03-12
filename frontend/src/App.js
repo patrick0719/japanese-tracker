@@ -908,7 +908,12 @@ function App() {
   };
 
   const goToStudents = (batch) => { setSelectedBatch(batch); setView('students'); };
-  const goToCategories = (student) => { setSelectedStudent(student); setView('categories'); };
+  const goToCategories = (student) => {
+    // Always resolve the freshest student from selectedBatch so categories/exams are current
+    const freshStudent = selectedBatch?.students.find(s => s._id === student._id) || student;
+    setSelectedStudent(freshStudent);
+    setView('categories');
+  };
   const goToExamItems = (cat) => { setSelectedCategory(cat); setView('examItems'); };
   const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); };
 
@@ -1179,12 +1184,16 @@ function App() {
         </div>
       </div>
       <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>{isViewer ? 'All Batches' : 'My Batches'}</h2>
-      {batches.map(batch => (
+      {(isViewer ? batches.filter(b => b.students.some(s => s.status === 'Selected')) : batches).map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
             <div>
               <h2 className="card-title">🎌 {batch.name}</h2>
-              <p className="card-subtitle">{batch.students.length} students</p>
+              <p className="card-subtitle">
+                {isViewer
+                  ? `${batch.students.filter(s => s.status === 'Selected').length} selected student${batch.students.filter(s => s.status === 'Selected').length !== 1 ? 's' : ''}`
+                  : `${batch.students.length} student${batch.students.length !== 1 ? 's' : ''}`}
+              </p>
             </div>
             {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>}
           </div>
