@@ -814,6 +814,7 @@ function App() {
   const [showScanner, setShowScanner] = useState(false);
   const [scanningExamId, setScanningExamId] = useState(null);
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isStudentView, setIsStudentView] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState(() => {
@@ -885,12 +886,14 @@ function App() {
   };
 
   const goToStudents = (batch) => { setSelectedBatch(batch); setView('students'); };
-  const goToExams = (student) => { setSelectedStudent(student); setView('exams'); };
+  const goToCategories = (student) => { setSelectedStudent(student); setView('categories'); };
+  const goToExamItems = (cat) => { setSelectedCategory(cat); setView('examItems'); };
   const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); };
 
   const goBack = () => {
-    if (view === 'examDetail') { setView('exams'); setSelectedExam(null); }
-    else if (view === 'exams') { setView('students'); setSelectedStudent(null); }
+    if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
+    else if (view === 'examItems') { setView('categories'); setSelectedCategory(null); }
+    else if (view === 'categories') { setView('students'); setSelectedStudent(null); }
     else if (view === 'students') { setView('batches'); setSelectedBatch(null); }
   };
 
@@ -933,18 +936,39 @@ function App() {
     setSaving(false);
   };
 
-  const saveExam = async () => {
-    if (!newExamName || !newScore || !selectedStudent) return;
+  const saveCategory = async () => {
+    if (!newName || !selectedStudent) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams`, {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
+      if (updatedStudent) setSelectedStudent(updatedStudent);
+      closeModal();
+    } catch { alert('Error saving category.'); }
+    setSaving(false);
+  };
+
+  const saveExamItem = async () => {
+    if (!newExamName || !newScore || !selectedCategory) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newExamName, score: parseInt(newScore) })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
-      if (updatedStudent) setSelectedStudent(updatedStudent);
+      if (updatedStudent) {
+        setSelectedStudent(updatedStudent);
+        const updatedCat = updatedStudent.categories.find(c => c._id === selectedCategory._id);
+        if (updatedCat) setSelectedCategory(updatedCat);
+      }
       closeModal();
     } catch { alert('Error saving exam.'); }
     setSaving(false);
@@ -969,18 +993,36 @@ function App() {
     } catch { alert('Error deleting student.'); }
   };
 
-  const deleteExam = async (examId, e) => {
+  const deleteCategory = async (catId, e) => {
     if (e) e.stopPropagation();
-    if (!window.confirm('Delete this exam?')) return;
+    if (!window.confirm('Delete this category and all its exams?')) return;
     try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}`, { method: 'DELETE' });
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${catId}`, { method: 'DELETE' });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) setSelectedStudent(updatedStudent);
-      if (view === 'examDetail') { setView('exams'); setSelectedExam(null); }
+    } catch { alert('Error deleting category.'); }
+  };
+
+  const deleteExamItem = async (itemId, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm('Delete this exam?')) return;
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${itemId}`, { method: 'DELETE' });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
+      if (updatedStudent) {
+        setSelectedStudent(updatedStudent);
+        const updatedCat = updatedStudent.categories.find(c => c._id === selectedCategory._id);
+        if (updatedCat) setSelectedCategory(updatedCat);
+      }
+      if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
     } catch { alert('Error deleting exam.'); }
   };
+
+  const deleteExam = deleteExamItem;
 
   const deleteImagePage = async (examId, index) => {
     if (!window.confirm(`Delete page ${index + 1}?`)) return;
@@ -1002,7 +1044,7 @@ function App() {
 
   const uploadImage = async (examId, imageData) => {
     try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/image`, {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/image`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageData })
       });
@@ -1108,7 +1150,7 @@ function App() {
       </div>
       <h2 className="section-title">Students</h2>
       {selectedBatch.students.map(student => (
-        <div key={student._id} className="card student-card clickable" onClick={() => goToExams(student)}>
+        <div key={student._id} className="card student-card clickable" onClick={() => goToCategories(student)}>
           <div className="card-content">
             <div className="student-card-left">
               {student.photo
@@ -1131,7 +1173,7 @@ function App() {
     </>
   );
 
-  const renderExams = () => (
+  const renderCategories = () => (
     <>
       <button className="back-btn" onClick={goBack}>←</button>
       <div className="student-profile-header">
@@ -1141,17 +1183,41 @@ function App() {
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
       </div>
-      <h2 className="section-title">Exams</h2>
-      {selectedStudent.exams.map(exam => (
-        <div key={exam._id} className="card exam-card clickable" onClick={() => goToExamDetail(exam)}>
+      <h2 className="section-title">Exam Categories</h2>
+      {(selectedStudent.categories || []).map(cat => (
+        <div key={cat._id} className="card exam-card clickable" onClick={() => goToExamItems(cat)}>
           <div className="card-content">
             <div>
-              <h3 className="card-title">📝 {exam.name}</h3>
-              <p className="card-subtitle">{exam.date} • Score: {exam.score}/100</p>
+              <h3 className="card-title">📁 {cat.name}</h3>
+              <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
             </div>
             <div className="exam-right">
-              {(exam.images?.length > 0 || exam.image) && <span className="has-photo-badge">📷</span>}
-              <button className="delete-btn-icon" onClick={(e) => deleteExam(exam._id, e)}>✕</button>
+              <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>
+            </div>
+          </div>
+        </div>
+      ))}
+      <button className="add-button" onClick={() => openModal('category')}>+ Add Exam Category</button>
+    </>
+  );
+
+  const renderExamItems = () => (
+    <>
+      <button className="back-btn" onClick={goBack}>←</button>
+      <div className="header-with-back">
+        <h1 className="title">📁 {selectedCategory?.name}</h1>
+      </div>
+      <h2 className="section-title">Exams</h2>
+      {(selectedCategory?.items || []).map(item => (
+        <div key={item._id} className="card exam-card clickable" onClick={() => goToExamDetail(item)}>
+          <div className="card-content">
+            <div>
+              <h3 className="card-title">📝 {item.name}</h3>
+              <p className="card-subtitle">{item.date} • Score: {item.score}/100</p>
+            </div>
+            <div className="exam-right">
+              {item.images?.length > 0 && <span className="has-photo-badge">📷</span>}
+              <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
             </div>
           </div>
         </div>
@@ -1265,12 +1331,17 @@ function App() {
 
   const renderModal = () => {
     if (!showModal) return null;
-    const titles = { batch: 'Add New Batch', student: 'Add New Student', exam: 'Add New Exam' };
+    const titles = { batch: 'Add New Batch', student: 'Add New Student', category: 'Add Exam Category', exam: 'Add New Exam' };
     return (
       <div className="modal-overlay">
         <div className="modal">
           <h2 className="modal-title">{titles[modalType]}</h2>
-          {modalType === 'exam' ? (
+          {modalType === 'category' ? (
+            <div className="form-group">
+              <label>Category Name:</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Kanji, Grammar, Vocabulary" />
+            </div>
+          ) : modalType === 'exam' ? (
             <>
               <div className="form-group">
                 <label>Exam Name:</label>
@@ -1320,7 +1391,7 @@ function App() {
           <div className="modal-buttons">
             <button className="cancel-btn" onClick={closeModal} disabled={saving}>Cancel</button>
             <button className="save-btn" disabled={saving}
-              onClick={modalType === 'batch' ? saveBatch : modalType === 'student' ? saveStudent : saveExam}>
+              onClick={modalType === 'batch' ? saveBatch : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
               {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
@@ -1421,7 +1492,8 @@ function App() {
     <div>
       {view === 'batches' && renderBatches()}
       {view === 'students' && renderStudents()}
-      {view === 'exams' && renderExams()}
+      {view === 'categories' && renderCategories()}
+      {view === 'examItems' && renderExamItems()}
       {view === 'examDetail' && renderExamDetail()}
       {renderModal()}
       {renderPrintQRs()}
