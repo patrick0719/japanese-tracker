@@ -214,6 +214,20 @@ app.post('/api/batches/:batchId/students/:studentId/evaluations', async (req, re
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.patch('/api/batches/:batchId/students/:studentId/evaluations/:evalId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    const ev = student.evaluations.id(req.params.evalId);
+    if (req.body.fields !== undefined) ev.fields = req.body.fields;
+    if (req.body.title !== undefined) ev.title = req.body.title;
+    if (req.body.date !== undefined) ev.date = req.body.date;
+    batch.markModified('students');
+    await batch.save();
+    res.json(ev);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/batches/:batchId/students/:studentId/evaluations/:evalId', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);

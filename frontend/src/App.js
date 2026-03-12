@@ -830,6 +830,8 @@ function App() {
   const [selectedEvaluation, setSelectedEvaluation] = useState(null);
   const [evalTitle, setEvalTitle] = useState('');
   const [evalDate, setEvalDate] = useState('');
+  const [evalFields, setEvalFields] = useState({});
+  const [evalSaving, setEvalSaving] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => localStorage.getItem(ROLE_KEY) === 'viewer');
   const [isStudentView, setIsStudentView] = useState(false);
@@ -922,7 +924,11 @@ function App() {
   const goToExamItems = (cat) => { setSelectedCategory(cat); setView('examItems'); };
   const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); };
   const goToEvaluations = () => { fetchEvaluations(); setView('evaluations'); };
-  const goToEvaluationDetail = (ev) => { setSelectedEvaluation(ev); setView('evaluationDetail'); };
+  const goToEvaluationDetail = (ev) => {
+    setSelectedEvaluation(ev);
+    setEvalFields(ev.fields || {});
+    setView('evaluationDetail');
+  };
 
   const fetchEvaluations = async () => {
     try {
@@ -1132,6 +1138,21 @@ function App() {
       await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/evaluations/${evalId}`, { method: 'DELETE' });
       setEvaluations(prev => prev.filter(ev => ev._id !== evalId));
     } catch { alert('Error deleting evaluation.'); }
+  };
+
+  const saveEvaluationFields = async () => {
+    setEvalSaving(true);
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/evaluations/${selectedEvaluation._id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: evalFields })
+      });
+      const updated = await res.json();
+      setSelectedEvaluation(updated);
+      setEvaluations(prev => prev.map(ev => ev._id === updated._id ? updated : ev));
+      alert('Saved!');
+    } catch { alert('Error saving evaluation.'); }
+    setEvalSaving(false);
   };
 
   const deleteImagePage = async (examId, index) => {
@@ -1407,21 +1428,103 @@ function App() {
     </>
   );
 
-  const renderEvaluationDetail = () => (
-    <>
-      <button className="back-btn" onClick={goBack}>←</button>
-      <div className="header-with-back">
-        <h1 className="title">📋 {selectedEvaluation?.ordinal} Evaluation</h1>
+  const renderEvaluationDetail = () => {
+    const ratingField = (key, label, sublabel) => (
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{label}</span>
+          {sublabel && <span style={{ fontSize: 12, color: '#8e8e93', marginLeft: 6 }}>{sublabel}</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1 }}>
+            {[...Array(11)].map((_, i) => (
+              <button key={i} onClick={() => !isViewer && setEvalFields(f => ({ ...f, [key]: i }))}
+                style={{
+                  width: 36, height: 36, borderRadius: 8, border: 'none', cursor: isViewer ? 'default' : 'pointer',
+                  fontWeight: 700, fontSize: 13,
+                  background: evalFields[key] === i ? '#007AFF' : '#f2f2f7',
+                  color: evalFields[key] === i ? '#fff' : '#3a3a3c',
+                  transition: 'all 0.15s'
+                }}>
+                {i}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: 20, fontWeight: 800, color: '#007AFF', minWidth: 32, textAlign: 'right' }}>
+            {evalFields[key] ?? '—'}
+          </span>
+        </div>
       </div>
-      <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: 16, marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-        <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600, color: '#3a3a3c' }}>{selectedEvaluation?.title}</p>
-        <p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>📅 {selectedEvaluation?.date}</p>
+    );
+
+    const textField = (key, label, sublabel, placeholder) => (
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{label}</span>
+          {sublabel && <span style={{ fontSize: 12, color: '#8e8e93', marginLeft: 6 }}>{sublabel}</span>}
+        </div>
+        <input
+          type="text"
+          value={evalFields[key] || ''}
+          onChange={(e) => !isViewer && setEvalFields(f => ({ ...f, [key]: e.target.value }))}
+          readOnly={isViewer}
+          placeholder={placeholder}
+          lang="ja"
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 10,
+            border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box',
+            background: isViewer ? '#f9f9f9' : '#fff', color: '#3a3a3c',
+            fontFamily: 'inherit'
+          }}
+        />
       </div>
-      <div style={{ background: '#f2f2f7', borderRadius: 14, padding: 20, textAlign: 'center', color: '#8e8e93', fontSize: 14 }}>
-        Evaluation fields coming soon.
-      </div>
-    </>
-  );
+    );
+
+    return (
+      <>
+        <button className="back-btn" onClick={goBack}>←</button>
+        <div className="header-with-back">
+          <h1 className="title">📋 {selectedEvaluation?.ordinal} Evaluation</h1>
+        </div>
+
+        {/* Header info */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#3a3a3c' }}>{selectedEvaluation?.title}</p>
+            <p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>📅 {selectedEvaluation?.date}</p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ margin: 0, fontSize: 12, color: '#8e8e93' }}>Student</p>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>{selectedStudent?.name}</p>
+          </div>
+        </div>
+
+        {/* Ratings Section */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 16px' }}>Skills Rating (0–10)</h3>
+          {ratingField('reading', 'READING', '読むこと')}
+          {ratingField('listening', 'LISTENING', '聞くこと')}
+          {ratingField('speaking', 'SPEAKING', '話すこと')}
+        </div>
+
+        {/* Text Fields Section */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 16px' }}>Details</h3>
+          {textField('from', 'FROM', null, 'e.g., Lesson 1')}
+          {textField('to', 'TO', null, 'e.g., Lesson 10')}
+          {textField('currentLesson', 'CURRENT LESSON', null, 'e.g., Chapter 3 - Greetings')}
+          {textField('remarks', 'REMARKS', '備考', 'コメントを入力してください...')}
+        </div>
+
+        {!isViewer && (
+          <button onClick={saveEvaluationFields} disabled={evalSaving}
+            style={{ width: '100%', background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: evalSaving ? 'not-allowed' : 'pointer', marginBottom: 24, opacity: evalSaving ? 0.7 : 1 }}>
+            {evalSaving ? 'Saving...' : '💾 Save Evaluation'}
+          </button>
+        )}
+      </>
+    );
+  };
 
   const renderExamItems = () => (
     <>
