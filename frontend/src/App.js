@@ -856,7 +856,7 @@ function App() {
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const pullStartY = useRef(null);
-  const PULL_THRESHOLD = 70;
+  const PULL_THRESHOLD = 110;
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => localStorage.getItem(ROLE_KEY) === 'viewer');
   const [isStudentView, setIsStudentView] = useState(false);
@@ -2081,13 +2081,20 @@ function App() {
   };
 
   const onTouchStart = (e) => {
-    const el = e.currentTarget;
-    if (el.scrollTop === 0) pullStartY.current = e.touches[0].clientY;
+    // Only arm pull-to-refresh if page is truly at the top
+    if (window.scrollY === 0) {
+      pullStartY.current = e.touches[0].clientY;
+    } else {
+      pullStartY.current = null;
+    }
   };
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
-    const dist = Math.max(0, e.touches[0].clientY - pullStartY.current);
-    if (dist > 0) setPullDistance(Math.min(dist, 110));
+    // Cancel if user scrolled away from top during the move
+    if (window.scrollY > 5) { pullStartY.current = null; setPullDistance(0); return; }
+    const dist = e.touches[0].clientY - pullStartY.current;
+    if (dist > 0) setPullDistance(Math.min(dist, 120));
+    else { pullStartY.current = null; setPullDistance(0); }
   };
   const onTouchEnd = async () => {
     if (pullDistance >= PULL_THRESHOLD && !pullRefreshing) {
@@ -2095,9 +2102,8 @@ function App() {
       setPullDistance(0);
       pullStartY.current = null;
       try {
-        const teacher = selectedTeacher;
         if (isViewer) await fetchBatches(null);
-        else if (teacher) await fetchBatches(teacher._id);
+        else if (selectedTeacher) await fetchBatches(selectedTeacher._id);
       } finally {
         setPullRefreshing(false);
       }
