@@ -168,8 +168,10 @@ app.post('/api/batches/:batchId/students/:studentId/categories/:catId/items', as
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     const cat = student.categories.id(req.params.catId);
-    cat.items.push({ name: req.body.name, date: new Date().toISOString().split('T')[0], score: req.body.score, totalScore: req.body.totalScore || 100, images: [] });
-    await batch.save(); res.json(batch);
+    const newItem = { name: req.body.name, date: new Date().toISOString().split('T')[0], score: req.body.score, totalScore: req.body.totalScore || 100, images: [] };
+    cat.items.push(newItem);
+    await batch.save();
+    res.json(cat.items[cat.items.length - 1]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -179,7 +181,7 @@ app.delete('/api/batches/:batchId/students/:studentId/categories/:catId/items/:i
     const student = batch.students.id(req.params.studentId);
     const cat = student.categories.id(req.params.catId);
     cat.items = cat.items.filter(i => i._id.toString() !== req.params.itemId);
-    await batch.save(); res.json(batch);
+    await batch.save(); res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

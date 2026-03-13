@@ -1064,14 +1064,21 @@ function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newExamName, score: parseInt(newScore), totalScore: parseInt(newTotalScore) })
       });
-      const updatedBatch = await res.json();
-      updateBatchInState(updatedBatch);
-      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
-      if (updatedStudent) {
-        setSelectedStudent(updatedStudent);
-        const updatedCat = updatedStudent.categories.find(c => c._id === selectedCategory._id);
-        if (updatedCat) setSelectedCategory(updatedCat);
-      }
+      const newItem = await res.json();
+      // Update state locally — no need to reload the whole batch
+      const updatedCat = { ...selectedCategory, items: [...(selectedCategory.items || []), newItem] };
+      const updatedStudent = {
+        ...selectedStudent,
+        categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c)
+      };
+      const updatedBatch = {
+        ...selectedBatch,
+        students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s)
+      };
+      setSelectedCategory(updatedCat);
+      setSelectedStudent(updatedStudent);
+      setSelectedBatch(updatedBatch);
+      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
       closeModal();
     } catch { alert('Error saving exam.'); }
     setSaving(false);
@@ -1125,15 +1132,20 @@ function App() {
     if (e) e.stopPropagation();
     if (!window.confirm('Delete this exam?')) return;
     try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${itemId}`, { method: 'DELETE' });
-      const updatedBatch = await res.json();
-      updateBatchInState(updatedBatch);
-      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
-      if (updatedStudent) {
-        setSelectedStudent(updatedStudent);
-        const updatedCat = updatedStudent.categories.find(c => c._id === selectedCategory._id);
-        if (updatedCat) setSelectedCategory(updatedCat);
-      }
+      await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${itemId}`, { method: 'DELETE' });
+      const updatedCat = { ...selectedCategory, items: selectedCategory.items.filter(i => i._id !== itemId) };
+      const updatedStudent = {
+        ...selectedStudent,
+        categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c)
+      };
+      const updatedBatch = {
+        ...selectedBatch,
+        students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s)
+      };
+      setSelectedCategory(updatedCat);
+      setSelectedStudent(updatedStudent);
+      setSelectedBatch(updatedBatch);
+      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
       if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
     } catch { alert('Error deleting exam.'); }
   };
