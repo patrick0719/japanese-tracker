@@ -819,6 +819,7 @@ function App() {
   const [newScore, setNewScore] = useState('');
   const [newStudentPhoto, setNewStudentPhoto] = useState(null);
   const [newStudentStatus, setNewStudentStatus] = useState('Regular');
+  const [newCompanyName, setNewCompanyName] = useState('');
   const [saving, setSaving] = useState(false);
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
@@ -949,7 +950,7 @@ function App() {
 
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null);
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null); setNewCompanyName('');
   };
   const openEditStudent = (student, e) => {
     e.stopPropagation();
@@ -957,13 +958,14 @@ function App() {
     setNewName(student.name);
     setNewStudentStatus(student.status || 'Regular');
     setNewStudentPhoto(student.photo || null);
+    setNewCompanyName(student.companyName || '');
     setModalType('editStudent');
     setShowModal(true);
   };
   const closeModal = () => {
     setShowModal(false);
     setEditingStudent(null);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular');
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName('');
   };
 
   const updateStudent = async () => {
@@ -972,7 +974,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${editingStudent._id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus })
+        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
@@ -1002,7 +1004,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus })
+        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
@@ -1499,6 +1501,17 @@ function App() {
           </div>
         </div>
 
+        {/* Company Name */}
+        {selectedStudent?.companyName && (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 20 }}>🏢</span>
+            <div>
+              <p style={{ margin: 0, fontSize: 11, color: '#8e8e93', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Company</p>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#3a3a3c' }}>{selectedStudent.companyName}</p>
+            </div>
+          </div>
+        )}
+
         {/* Ratings Section */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 16px' }}>Skills Rating (0–10)</h3>
@@ -1709,6 +1722,12 @@ function App() {
                   <option value="Selected">Selected</option>
                 </select>
               </div>
+              {newStudentStatus === 'Selected' && (
+                <div className="form-group">
+                  <label>Company Name:</label>
+                  <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)} placeholder="e.g., Toyota, Nissan..." />
+                </div>
+              )}
               <div className="form-group">
                 <label>Photo (optional):</label>
                 <div className="student-photo-upload" onClick={() => studentPhotoInputRef.current.click()}>
