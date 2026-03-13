@@ -1890,7 +1890,6 @@ function App() {
                   ref={studentPhotoInputRef}
                   style={{ display: 'none' }}
                   accept="image/*"
-                  capture="user"
                   onChange={async (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
