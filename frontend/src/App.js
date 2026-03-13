@@ -1826,8 +1826,7 @@ function App() {
   };
 
   const handlePrint = () => {
-    // Open a fresh window with only the QR cards — guaranteed to print correctly
-    const win = window.open('', '_blank', 'width=800,height=600');
+    const win = window.open('', '_blank', 'width=900,height=700');
     const cardsHtml = printQRs.map(item => `
       <div class="qr-card">
         ${item.photo ? `<img src="${item.photo}" class="avatar" />` : '<div class="avatar-placeholder">👤</div>'}
@@ -1844,31 +1843,95 @@ function App() {
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: sans-serif; background: #fff; }
-          .sheet {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            padding: 20px;
-            justify-content: flex-start;
+
+          /* ── PORTRAIT: 2 columns × 3 rows = 6 per page ── */
+          @media print and (orientation: portrait) {
+            @page { size: A4 portrait; margin: 10mm; }
+            .sheet {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 6mm;
+              width: 100%;
+            }
+            .qr-card {
+              break-inside: avoid;
+              page-break-inside: avoid;
+              height: calc((297mm - 20mm - 5 * 6mm) / 3);
+            }
+            .avatar { width: 18mm; height: 18mm; }
+            .avatar-placeholder { width: 18mm; height: 18mm; font-size: 10mm; }
+            .qr { width: 32mm; height: 32mm; }
+            .name { font-size: 8pt; }
+            .batch { font-size: 7pt; }
           }
+
+          /* ── LANDSCAPE: 5 columns × 2 rows = 10 per page ── */
+          @media print and (orientation: landscape) {
+            @page { size: A4 landscape; margin: 8mm; }
+            .sheet {
+              display: grid;
+              grid-template-columns: repeat(5, 1fr);
+              gap: 5mm;
+              width: 100%;
+            }
+            .qr-card {
+              break-inside: avoid;
+              page-break-inside: avoid;
+              height: calc((210mm - 16mm - 1 * 5mm) / 2);
+            }
+            .avatar { width: 14mm; height: 14mm; }
+            .avatar-placeholder { width: 14mm; height: 14mm; font-size: 8mm; }
+            .qr { width: 26mm; height: 26mm; }
+            .name { font-size: 7pt; }
+            .batch { font-size: 6pt; }
+          }
+
+          /* ── SCREEN PREVIEW (before print dialog) ── */
+          @media screen {
+            body { background: #f0f0f0; padding: 20px; }
+            .sheet {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 12px;
+              max-width: 800px;
+              margin: 0 auto;
+            }
+            .qr-card { padding: 12px 8px; }
+            .avatar { width: 56px; height: 56px; }
+            .avatar-placeholder { width: 56px; height: 56px; font-size: 28px; }
+            .qr { width: 110px; height: 110px; }
+            .name { font-size: 13px; }
+            .batch { font-size: 11px; }
+          }
+
+          /* ── SHARED CARD STYLES ── */
+          .sheet { box-sizing: border-box; }
           .qr-card {
-            width: 160px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
-            padding: 12px 8px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            page-break-inside: avoid;
+            justify-content: center;
+            gap: 3px;
+            padding: 4mm 2mm;
+            border: 0.5pt solid #ccc;
+            border-radius: 4mm;
+            background: #fff;
           }
-          .avatar { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
-          .avatar-placeholder { width: 60px; height: 60px; border-radius: 50%; background: #eee; display: flex; align-items: center; justify-content: center; font-size: 28px; }
-          .qr { width: 120px; height: 120px; }
-          .name { font-size: 13px; font-weight: 700; text-align: center; color: #111; }
-          .batch { font-size: 11px; color: #666; text-align: center; }
+          .avatar { border-radius: 50%; object-fit: cover; }
+          .avatar-placeholder {
+            border-radius: 50%;
+            background: #eee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .name { font-weight: 700; text-align: center; color: #111; margin-top: 2px; }
+          .batch { color: #666; text-align: center; }
+
           @media print {
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body { background: #fff !important; padding: 0 !important; }
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
         </style>
       </head>
@@ -1876,7 +1939,7 @@ function App() {
         <div class="sheet">${cardsHtml}</div>
         <script>
           window.onload = function() {
-            setTimeout(function() { window.print(); }, 300);
+            setTimeout(function() { window.print(); }, 400);
           };
         </script>
       </body>
