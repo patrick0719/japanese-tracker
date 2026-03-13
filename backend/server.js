@@ -44,6 +44,7 @@ mongoose.connect(process.env.MONGO_URI)
           name: String,
           date: String,
           score: Number,
+          totalScore: { type: Number, default: 100 },
           images: [String]
         }]
       }],
@@ -157,7 +158,7 @@ app.post('/api/batches/:batchId/students/:studentId/categories/:catId/items', as
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     const cat = student.categories.id(req.params.catId);
-    cat.items.push({ name: req.body.name, date: new Date().toISOString().split('T')[0], score: req.body.score, images: [] });
+    cat.items.push({ name: req.body.name, date: new Date().toISOString().split('T')[0], score: req.body.score, totalScore: req.body.totalScore || 100, images: [] });
     await batch.save(); res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

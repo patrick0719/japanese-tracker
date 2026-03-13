@@ -817,6 +817,7 @@ function App() {
   const [newName, setNewName] = useState('');
   const [newExamName, setNewExamName] = useState('');
   const [newScore, setNewScore] = useState('');
+  const [newTotalScore, setNewTotalScore] = useState('');
   const [newStudentPhoto, setNewStudentPhoto] = useState(null);
   const [newStudentStatus, setNewStudentStatus] = useState('Regular');
   const [newCompanyName, setNewCompanyName] = useState('');
@@ -950,7 +951,7 @@ function App() {
 
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null); setNewCompanyName('');
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewCompanyName('');
   };
   const openEditStudent = (student, e) => {
     e.stopPropagation();
@@ -965,7 +966,7 @@ function App() {
   const closeModal = () => {
     setShowModal(false);
     setEditingStudent(null);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName('');
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName('');
   };
 
   const updateStudent = async () => {
@@ -1031,12 +1032,12 @@ function App() {
   };
 
   const saveExamItem = async () => {
-    if (!newExamName || !newScore || !selectedCategory) return;
+    if (!newExamName || !newScore || !newTotalScore || !selectedCategory) return;
     setSaving(true);
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newExamName, score: parseInt(newScore) })
+        body: JSON.stringify({ name: newExamName, score: parseInt(newScore), totalScore: parseInt(newTotalScore) })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
@@ -1551,7 +1552,7 @@ function App() {
           <div className="card-content">
             <div>
               <h3 className="card-title">📝 {item.name}</h3>
-              <p className="card-subtitle">{item.date} • Score: {item.score}/100</p>
+              <p className="card-subtitle">{item.date} • Score: {item.score}/{item.totalScore ?? 100}</p>
             </div>
             <div className="exam-right">
               {item.images?.length > 0 && <span className="has-photo-badge">📷</span>}
@@ -1577,7 +1578,7 @@ function App() {
         </div>
         <div className="exam-detail-info">
           <span className="detail-badge">📅 {selectedExam.date}</span>
-          <span className="detail-badge">🎯 Score: {selectedExam.score}/100</span>
+          <span className="detail-badge">🎯 Score: {selectedExam.score}/{selectedExam.totalScore ?? 100}</span>
         </div>
 
         <h2 className="section-title">Exam Pages ({allImages.length} pages)</h2>
@@ -1703,9 +1704,15 @@ function App() {
                 <label>Exam Name:</label>
                 <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder="e.g., Quiz 1, Midterm, Finals" />
               </div>
-              <div className="form-group">
-                <label>Score:</label>
-                <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder="Score (0-100)" min="0" max="100" />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label>Score:</label>
+                  <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder="e.g., 85" min="0" />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label>Total Score:</label>
+                  <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder="e.g., 100" min="1" />
+                </div>
               </div>
             </>
           ) : modalType === 'student' || modalType === 'editStudent' ? (
