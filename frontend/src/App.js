@@ -856,6 +856,9 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => localStorage.getItem(ROLE_KEY) === 'viewer');
   const [isStudentView, setIsStudentView] = useState(false);
+  const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
+  const [qrPassInput, setQrPassInput] = useState('');
+  const [qrPassError, setQrPassError] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState(() => {
     const s = localStorage.getItem(TEACHER_KEY);
     return s ? JSON.parse(s) : null;
@@ -871,16 +874,37 @@ function App() {
     const isPhgicScan = params.get('phgic') === '1';
     if (batchId && studentId) {
       if (isPhgicScan) {
-        // PHGIC QR scan — auto set as viewer, no login needed
-        localStorage.setItem(AUTH_KEY, 'true');
-        localStorage.setItem(ROLE_KEY, 'viewer');
-        setIsLoggedIn(true);
-        setIsViewer(true);
+        // QR scan — require password before granting access
+        const alreadyAuthed = localStorage.getItem(AUTH_KEY) === 'true' && localStorage.getItem(ROLE_KEY) === 'viewer';
+        if (alreadyAuthed) {
+          // Already verified this session, let them in
+          setIsLoggedIn(true);
+          setIsViewer(true);
+          setPendingDeepLink({ batchId, studentId });
+          fetchBatches(null);
+        } else {
+          // Show password prompt, store pending link
+          setQrPasswordPrompt({ batchId, studentId });
+        }
       } else {
-        setIsStudentView(true);
+        // Admin QR — require login first, then deeplink navigates after auth
+        const alreadyLoggedIn = localStorage.getItem(AUTH_KEY) === 'true';
+        setPendingDeepLink({ batchId, studentId });
+        if (alreadyLoggedIn) {
+          setIsLoggedIn(true);
+          const role = localStorage.getItem(ROLE_KEY);
+          const teacher = localStorage.getItem(TEACHER_KEY);
+          setIsViewer(role === 'viewer');
+          if (role === 'viewer') {
+            fetchBatches(null);
+          } else if (teacher) {
+            fetchBatches(JSON.parse(teacher)._id);
+          } else {
+            fetchBatches(null);
+          }
+        }
+        // If not logged in, LoginScreen will show — after login pendingDeepLink will auto-navigate
       }
-      setPendingDeepLink({ batchId, studentId });
-      fetchBatches(null);
     } else {
       const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
       const role = localStorage.getItem(ROLE_KEY);
@@ -1277,16 +1301,74 @@ function App() {
     <SplashScreen />
   );
 
-  // Student QR scan — skip login, go directly to exam view
-  if (!isStudentView && !isLoggedIn) return (
+  // QR scan password prompt — show before anything else if pending
+  if (qrPasswordPrompt) return (
+    <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>🔒</div>
+      <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1c1c1e', marginBottom: 6, textAlign: 'center' }}>Access Required</h2>
+      <p style={{ fontSize: 14, color: '#8e8e93', marginBottom: 28, textAlign: 'center' }}>Enter the password to view this student's record.</p>
+      <div style={{ width: '100%', maxWidth: 340, background: '#fff', borderRadius: 16, padding: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
+        <input
+          type="password"
+          value={qrPassInput}
+          onChange={e => { setQrPassInput(e.target.value); setQrPassError(''); }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              if (qrPassInput === PHGIC_PASS) {
+                localStorage.setItem(AUTH_KEY, 'true');
+                localStorage.setItem(ROLE_KEY, 'viewer');
+                setIsLoggedIn(true);
+                setIsViewer(true);
+                setPendingDeepLink(qrPasswordPrompt);
+                setQrPasswordPrompt(null);
+                setQrPassInput('');
+                fetchBatches(null);
+              } else {
+                setQrPassError('Incorrect password. Please try again.');
+              }
+            }
+          }}
+          placeholder="Enter password"
+          autoFocus
+          style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${qrPassError ? '#ff3b30' : '#e5e5ea'}`, fontSize: 16, boxSizing: 'border-box', marginBottom: 10, outline: 'none' }}
+        />
+        {qrPassError && <p style={{ color: '#ff3b30', fontSize: 13, margin: '0 0 10px', textAlign: 'center' }}>{qrPassError}</p>}
+        <button
+          onClick={() => {
+            if (qrPassInput === PHGIC_PASS) {
+              localStorage.setItem(AUTH_KEY, 'true');
+              localStorage.setItem(ROLE_KEY, 'viewer');
+              setIsLoggedIn(true);
+              setIsViewer(true);
+              setPendingDeepLink(qrPasswordPrompt);
+              setQrPasswordPrompt(null);
+              setQrPassInput('');
+              fetchBatches(null);
+            } else {
+              setQrPassError('Incorrect password. Please try again.');
+            }
+          }}
+          style={{ width: '100%', background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+          View Record
+        </button>
+      </div>
+    </div>
+  );
+
+  // Always require login — no QR scan bypasses auth
+  if (!isLoggedIn) return (
     <LoginScreen onLogin={(role) => {
       setIsLoggedIn(true);
       setIsViewer(role === 'viewer');
       if (role === 'viewer') fetchBatches(null);
+      else {
+        const teacher = localStorage.getItem(TEACHER_KEY);
+        if (teacher) fetchBatches(JSON.parse(teacher)._id);
+      }
     }} />
   );
 
-  if (!isStudentView && !isViewer && !selectedTeacher) return (
+  if (!isViewer && !selectedTeacher) return (
     <TeacherSelect onSelect={(t) => {
       localStorage.setItem(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
