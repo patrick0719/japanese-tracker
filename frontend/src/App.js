@@ -853,6 +853,10 @@ function App() {
   const [evalFields, setEvalFields] = useState({});
   const [evalSaving, setEvalSaving] = useState(false);
   const [allTeachers, setAllTeachers] = useState([]);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const pullStartY = useRef(null);
+  const PULL_THRESHOLD = 70;
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => localStorage.getItem(ROLE_KEY) === 'viewer');
   const [isStudentView, setIsStudentView] = useState(false);
@@ -932,7 +936,7 @@ function App() {
       setBatches(data);
       // Fetch all teachers to resolve signatures
       try {
-        const tRes = await fetch(`${API}/teachers`);
+        const tRes = await fetch(`${API}/teachers/with-signatures`);
         const tData = await tRes.json();
         setAllTeachers(tData);
       } catch {}
@@ -2076,8 +2080,66 @@ function App() {
     );
   };
 
+  const onTouchStart = (e) => {
+    const el = e.currentTarget;
+    if (el.scrollTop === 0) pullStartY.current = e.touches[0].clientY;
+  };
+  const onTouchMove = (e) => {
+    if (pullStartY.current === null) return;
+    const dist = Math.max(0, e.touches[0].clientY - pullStartY.current);
+    if (dist > 0) setPullDistance(Math.min(dist, 110));
+  };
+  const onTouchEnd = async () => {
+    if (pullDistance >= PULL_THRESHOLD && !pullRefreshing) {
+      setPullRefreshing(true);
+      setPullDistance(0);
+      pullStartY.current = null;
+      try {
+        const teacher = selectedTeacher;
+        if (isViewer) await fetchBatches(null);
+        else if (teacher) await fetchBatches(teacher._id);
+      } finally {
+        setPullRefreshing(false);
+      }
+    } else {
+      setPullDistance(0);
+      pullStartY.current = null;
+    }
+  };
+
   return (
-    <div>
+    <div
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      style={{ overflowY: 'auto', minHeight: '100vh', position: 'relative' }}
+    >
+      {/* Pull-to-refresh indicator */}
+      {(pullDistance > 0 || pullRefreshing) && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          height: pullRefreshing ? 56 : Math.min(pullDistance * 0.6, 56),
+          background: 'transparent',
+          transition: pullRefreshing ? 'height 0.2s' : 'none',
+          overflow: 'hidden',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '50%',
+            width: 36, height: 36,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+            transform: pullRefreshing ? 'none' : `rotate(${pullDistance * 2}deg)`,
+            transition: pullRefreshing ? 'transform 0.6s linear' : 'none',
+            animation: pullRefreshing ? 'spin 0.7s linear infinite' : 'none',
+          }}>
+            {pullRefreshing ? '🔄' : '↓'}
+          </div>
+        </div>
+      )}
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       {view === 'batches' && renderBatches()}
       {view === 'students' && renderStudents()}
       {view === 'categories' && renderCategories()}

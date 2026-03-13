@@ -67,6 +67,9 @@ const teacherSchema = new mongoose.Schema({
 const Teacher = mongoose.model('Teacher', teacherSchema);
 
 app.get('/api/teachers', async (req, res) => {
+  try { res.json(await Teacher.find().select('-signature')); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/teachers/with-signatures', async (req, res) => {
   try { res.json(await Teacher.find()); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/teachers', async (req, res) => {
