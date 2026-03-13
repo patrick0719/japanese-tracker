@@ -1825,16 +1825,37 @@ function App() {
     );
   };
 
-  const handlePrint = () => {
+  const handlePrint = (mode) => {
+    // mode: 'portrait' = 6/page (2col x 3row), 'landscape' = 10/page (5col x 2row)
+    const isLandscape = mode === 'landscape';
+    const perPage = isLandscape ? 10 : 6;
+    const cols = isLandscape ? 5 : 2;
+
+    // Group cards into pages
+    const pages = [];
+    for (let i = 0; i < printQRs.length; i += perPage) {
+      pages.push(printQRs.slice(i, i + perPage));
+    }
+
+    const cardSize   = isLandscape ? { avatar: '13mm', qr: '25mm', name: '6.5pt', batch: '5.5pt', pad: '3mm 2mm', gap: '3mm' }
+                                   : { avatar: '18mm', qr: '34mm', name: '8pt',   batch: '7pt',   pad: '5mm 3mm', gap: '5mm' };
+
+    const pagesHtml = pages.map((page, pi) => {
+      const cards = page.map(item => `
+        <div class="qr-card">
+          ${item.photo
+            ? `<img src="${item.photo}" class="avatar" />`
+            : `<div class="avatar-placeholder">👤</div>`}
+          <img src="${item.dataUrl}" class="qr" />
+          <p class="name">${item.name}</p>
+          <p class="batch">${selectedBatch.name}</p>
+        </div>
+      `).join('');
+      const isLast = pi === pages.length - 1;
+      return `<div class="page${isLast ? '' : ' page-break'}">${cards}</div>`;
+    }).join('');
+
     const win = window.open('', '_blank', 'width=900,height=700');
-    const cardsHtml = printQRs.map(item => `
-      <div class="qr-card">
-        ${item.photo ? `<img src="${item.photo}" class="avatar" />` : '<div class="avatar-placeholder">👤</div>'}
-        <img src="${item.dataUrl}" class="qr" />
-        <p class="name">${item.name}</p>
-        <p class="batch">${selectedBatch.name}</p>
-      </div>
-    `).join('');
     win.document.write(`
       <!DOCTYPE html>
       <html>
@@ -1844,103 +1865,88 @@ function App() {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: sans-serif; background: #fff; }
 
-          /* ── PORTRAIT: 2 columns × 3 rows = 6 per page ── */
-          @media print and (orientation: portrait) {
-            @page { size: A4 portrait; margin: 10mm; }
-            .sheet {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 6mm;
-              width: 100%;
-            }
-            .qr-card {
-              break-inside: avoid;
-              page-break-inside: avoid;
-              height: calc((297mm - 20mm - 5 * 6mm) / 3);
-            }
-            .avatar { width: 18mm; height: 18mm; }
-            .avatar-placeholder { width: 18mm; height: 18mm; font-size: 10mm; }
-            .qr { width: 32mm; height: 32mm; }
-            .name { font-size: 8pt; }
-            .batch { font-size: 7pt; }
+          @page {
+            size: A4 ${isLandscape ? 'landscape' : 'portrait'};
+            margin: 10mm;
           }
 
-          /* ── LANDSCAPE: 5 columns × 2 rows = 10 per page ── */
-          @media print and (orientation: landscape) {
-            @page { size: A4 landscape; margin: 8mm; }
-            .sheet {
-              display: grid;
-              grid-template-columns: repeat(5, 1fr);
-              gap: 5mm;
-              width: 100%;
-            }
-            .qr-card {
-              break-inside: avoid;
-              page-break-inside: avoid;
-              height: calc((210mm - 16mm - 1 * 5mm) / 2);
-            }
-            .avatar { width: 14mm; height: 14mm; }
-            .avatar-placeholder { width: 14mm; height: 14mm; font-size: 8mm; }
-            .qr { width: 26mm; height: 26mm; }
-            .name { font-size: 7pt; }
-            .batch { font-size: 6pt; }
+          .page {
+            display: grid;
+            grid-template-columns: repeat(${cols}, 1fr);
+            gap: ${cardSize.gap};
+            width: 100%;
+            /* Force exactly perPage cards — no overflow to next page */
+          }
+          .page-break {
+            page-break-after: always;
+            break-after: page;
           }
 
-          /* ── SCREEN PREVIEW (before print dialog) ── */
-          @media screen {
-            body { background: #f0f0f0; padding: 20px; }
-            .sheet {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 12px;
-              max-width: 800px;
-              margin: 0 auto;
-            }
-            .qr-card { padding: 12px 8px; }
-            .avatar { width: 56px; height: 56px; }
-            .avatar-placeholder { width: 56px; height: 56px; font-size: 28px; }
-            .qr { width: 110px; height: 110px; }
-            .name { font-size: 13px; }
-            .batch { font-size: 11px; }
-          }
-
-          /* ── SHARED CARD STYLES ── */
-          .sheet { box-sizing: border-box; }
           .qr-card {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 3px;
-            padding: 4mm 2mm;
-            border: 0.5pt solid #ccc;
-            border-radius: 4mm;
+            gap: 2px;
+            padding: ${cardSize.pad};
+            border: 0.4pt solid #bbb;
+            border-radius: 3mm;
             background: #fff;
+            overflow: hidden;
           }
-          .avatar { border-radius: 50%; object-fit: cover; }
+
+          .avatar {
+            width: ${cardSize.avatar};
+            height: ${cardSize.avatar};
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+          }
           .avatar-placeholder {
+            width: ${cardSize.avatar};
+            height: ${cardSize.avatar};
             border-radius: 50%;
             background: #eee;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: calc(${cardSize.avatar} * 0.5);
+            flex-shrink: 0;
           }
-          .name { font-weight: 700; text-align: center; color: #111; margin-top: 2px; }
-          .batch { color: #666; text-align: center; }
+          .qr {
+            width: ${cardSize.qr};
+            height: ${cardSize.qr};
+            flex-shrink: 0;
+          }
+          .name {
+            font-size: ${cardSize.name};
+            font-weight: 700;
+            text-align: center;
+            color: #111;
+            word-break: break-word;
+            line-height: 1.2;
+          }
+          .batch {
+            font-size: ${cardSize.batch};
+            color: #666;
+            text-align: center;
+          }
 
           @media print {
-            body { background: #fff !important; padding: 0 !important; }
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+
+          /* Screen preview */
+          @media screen {
+            body { background: #e8e8e8; padding: 16px; }
+            .page { background: #fff; padding: 10mm; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
           }
         </style>
       </head>
       <body>
-        <div class="sheet">${cardsHtml}</div>
+        ${pagesHtml}
         <script>
-          window.onload = function() {
-            setTimeout(function() { window.print(); }, 400);
-          };
+          window.onload = function() { setTimeout(function() { window.print(); }, 400); };
         </script>
       </body>
       </html>
@@ -1955,7 +1961,8 @@ function App() {
         <div className="print-toolbar no-print">
           <span className="print-toolbar-title">QR Codes — {selectedBatch.name}</span>
           <div className="print-toolbar-actions">
-            <button className="print-go-btn" onClick={handlePrint}>🖨 Print</button>
+            <button className="print-go-btn" onClick={() => handlePrint('portrait')} style={{ marginRight: 6 }}>🖨 Portrait (6/page)</button>
+            <button className="print-go-btn" onClick={() => handlePrint('landscape')}>🖨 Landscape (10/page)</button>
             <button className="print-close-btn" onClick={() => setPrintQRs(null)}>✕ Close</button>
           </div>
         </div>
