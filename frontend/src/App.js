@@ -719,7 +719,7 @@ function LoginScreen({ onLogin }) {
     }}>
       <img src={LOGO_DATA_URL} alt="Sage Asian" style={{ width: '65%', maxWidth: 280, marginBottom: 32, objectFit: 'contain' }} />
       <div style={{ width: '100%', maxWidth: 360, background: '#fff', borderRadius: 16, padding: '28px 24px', boxShadow: '0 4px 24px rgba(0,0,0,0.10)' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: 20, fontSize: 20, fontWeight: 700, color: '#1c1c1e' }}>Teacher Login</h2>
+        <h2 style={{ textAlign: 'center', marginBottom: 20, fontSize: 20, fontWeight: 700, color: '#1c1c1e' }}>Login</h2>
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontSize: 13, color: '#6e6e73', fontWeight: 600 }}>Username</label>
           <input
@@ -1262,7 +1262,7 @@ function App() {
         <div>
           <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
           <h1 className="title" style={{ margin: '2px 0 0 0' }}>
-            {isViewer ? '👁️ PHGIC' : `${selectedTeacher?.emoji} ${selectedTeacher?.name}`}
+            {isViewer ? 'PHGIC' : `${selectedTeacher?.emoji} ${selectedTeacher?.name}`}
           </h1>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
