@@ -503,50 +503,109 @@ function DocumentScanner({ onCapture, onClose }) {
     img.onload = () => {
       const [tl, tr, br, bl] = corners;
 
-      // Output size — use the longer of the two pairs of sides
-      const wTop  = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-      const wBot  = Math.hypot(br.x - bl.x, br.y - bl.y);
-      const hLeft = Math.hypot(bl.x - tl.x, bl.y - tl.y);
-      const hRight= Math.hypot(br.x - tr.x, br.y - tr.y);
-      const outW  = Math.round(Math.max(wTop, wBot));
-      const outH  = Math.round(Math.max(hLeft, hRight));
+      // Output dimensions based on actual edge lengths
+      const wTop   = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+      const wBot   = Math.hypot(br.x-bl.x, br.y-bl.y);
+      const hLeft  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
+      const hRight = Math.hypot(br.x-tr.x, br.y-tr.y);
+      const outW   = Math.round(Math.max(wTop, wBot));
+      const outH   = Math.round(Math.max(hLeft, hRight));
+
+      // ── Compute inverse homography (dest → src) ──────────────────
+      // Source quad: tl, tr, br, bl
+      // Dest quad:   (0,0), (W,0), (W,H), (0,H)
+      // Solve 8 unknowns h00..h22 (h22=1) using 8 equations.
+      // Using the direct linear transform (DLT).
+
+      const sx0=tl.x, sy0=tl.y;
+      const sx1=tr.x, sy1=tr.y;
+      const sx2=br.x, sy2=br.y;
+      const sx3=bl.x, sy3=bl.y;
+      const dx0=0,    dy0=0;
+      const dx1=outW, dy1=0;
+      const dx2=outW, dy2=outH;
+      const dx3=0,    dy3=outH;
+
+      // Build 8x8 matrix A and vector b for Ah=b
+      // For each correspondence (dxi,dyi) -> (sxi,syi):
+      //   sxi = (h0*dxi + h1*dyi + h2) / (h6*dxi + h7*dyi + 1)
+      //   syi = (h3*dxi + h4*dyi + h5) / (h6*dxi + h7*dyi + 1)
+      const pts = [
+        [dx0,dy0,sx0,sy0],[dx1,dy1,sx1,sy1],
+        [dx2,dy2,sx2,sy2],[dx3,dy3,sx3,sy3],
+      ];
+      const A = [], b = [];
+      for (const [dx,dy,sx,sy] of pts) {
+        A.push([dx, dy, 1,  0,  0,  0, -sx*dx, -sx*dy]);
+        A.push([ 0,  0, 0, dx, dy,  1, -sy*dx, -sy*dy]);
+        b.push(sx); b.push(sy);
+      }
+
+      // Gaussian elimination to solve Ah=b
+      const n = 8;
+      const M = A.map((row, i) => [...row, b[i]]);
+      for (let col = 0; col < n; col++) {
+        // Pivot
+        let maxRow = col;
+        for (let r = col+1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[maxRow][col])) maxRow = r;
+        [M[col], M[maxRow]] = [M[maxRow], M[col]];
+        const pivot = M[col][col];
+        if (Math.abs(pivot) < 1e-10) continue;
+        for (let r = col+1; r < n; r++) {
+          const f = M[r][col] / pivot;
+          for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+        }
+      }
+      const h = new Array(n).fill(0);
+      for (let r = n-1; r >= 0; r--) {
+        h[r] = M[r][n];
+        for (let c = r+1; c < n; c++) h[r] -= M[r][c] * h[c];
+        h[r] /= M[r][r];
+      }
+      // h = [h0,h1,h2,h3,h4,h5,h6,h7], h8=1
+      const [h0,h1,h2,h3,h4,h5,h6,h7] = h;
+
+      // ── Rasterize ─────────────────────────────────────────────────
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width  = img.naturalWidth  || imgSize.w;
+      srcCanvas.height = img.naturalHeight || imgSize.h;
+      srcCanvas.getContext('2d').drawImage(img, 0, 0);
+      const srcData = srcCanvas.getContext('2d').getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+      const sw = srcData.width, sh = srcData.height;
 
       const dst = document.createElement('canvas');
       dst.width = outW; dst.height = outH;
-      const ctx = dst.getContext('2d');
-
-      // Perspective transform via scanline sampling
-      // For each destination pixel (dx, dy), find the corresponding
-      // source pixel using bilinear interpolation of the quad corners.
-      const srcData = (() => {
-        const tmp = document.createElement('canvas');
-        tmp.width = img.naturalWidth || imgSize.w;
-        tmp.height = img.naturalHeight || imgSize.h;
-        tmp.getContext('2d').drawImage(img, 0, 0);
-        return tmp.getContext('2d').getImageData(0, 0, tmp.width, tmp.height);
-      })();
-      const outData = ctx.createImageData(outW, outH);
-      const sw = srcData.width;
-      const sh = srcData.height;
+      const outData = dst.getContext('2d').createImageData(outW, outH);
 
       for (let dy = 0; dy < outH; dy++) {
-        const v = dy / (outH - 1);
         for (let dx = 0; dx < outW; dx++) {
-          const u = dx / (outW - 1);
-          // Bilinear interpolation of the 4 corners
-          const sx = (1-u)*(1-v)*tl.x + u*(1-v)*tr.x + u*v*br.x + (1-u)*v*bl.x;
-          const sy = (1-u)*(1-v)*tl.y + u*(1-v)*tr.y + u*v*br.y + (1-u)*v*bl.y;
-          const xi = Math.round(sx), yi = Math.round(sy);
-          if (xi < 0 || xi >= sw || yi < 0 || yi >= sh) continue;
-          const si = (yi * sw + xi) * 4;
-          const di = (dy * outW + dx) * 4;
-          outData.data[di]   = srcData.data[si];
-          outData.data[di+1] = srcData.data[si+1];
-          outData.data[di+2] = srcData.data[si+2];
-          outData.data[di+3] = srcData.data[si+3];
+          const w_  = h6*dx + h7*dy + 1;
+          const sx  = (h0*dx + h1*dy + h2) / w_;
+          const sy  = (h3*dx + h4*dy + h5) / w_;
+
+          // Bilinear sample from source
+          const x0 = Math.floor(sx), y0 = Math.floor(sy);
+          const x1 = x0+1,           y1 = y0+1;
+          const fx = sx-x0,           fy = sy-y0;
+          const di = (dy*outW + dx)*4;
+
+          if (x0<0||y0<0||x1>=sw||y1>=sh) {
+            outData.data[di+3]=0; continue;
+          }
+          const i00=(y0*sw+x0)*4, i10=(y0*sw+x1)*4;
+          const i01=(y1*sw+x0)*4, i11=(y1*sw+x1)*4;
+          for (let c=0;c<3;c++) {
+            outData.data[di+c] = Math.round(
+              srcData.data[i00+c]*(1-fx)*(1-fy) +
+              srcData.data[i10+c]*fx*(1-fy) +
+              srcData.data[i01+c]*(1-fx)*fy +
+              srcData.data[i11+c]*fx*fy
+            );
+          }
+          outData.data[di+3] = 255;
         }
       }
-      ctx.putImageData(outData, 0, 0);
+      dst.getContext('2d').putImageData(outData, 0, 0);
       onCapture(dst.toDataURL('image/jpeg', 0.92));
     };
     img.src = capturedDataUrl;
