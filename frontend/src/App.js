@@ -1710,29 +1710,13 @@ function App() {
     translateTimerRef.current = setTimeout(async () => {
       setTranslating(true);
       try {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
+        const res = await fetch(`${API}/translate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            system: `You are a Japanese language teacher at Sage Asian Language and Education Center writing evaluation remarks for a student's progress report. Your translations must sound natural, warm, and professional — the way a real Japanese teacher would write in an official student evaluation. 
-
-Guidelines:
-- Use polite but natural Japanese (丁寧語), not overly stiff or formal
-- Preserve the meaning and tone of the original (encouraging, constructive, or honest)
-- Use appropriate school/education vocabulary where relevant
-- If the text contains Tagalog, English, or Taglish slang, translate the meaning — not the words literally
-- Return ONLY the Japanese translation. No romanization, no explanation, no quotes.`,
-            messages: [{
-              role: 'user',
-              content: `Translate this student evaluation remark to Japanese:\n\n${text}`
-            }]
-          })
+          body: JSON.stringify({ text })
         });
         const data = await res.json();
-        const translated = data.content?.[0]?.text?.trim() || '';
-        setRemarksTranslation(translated);
+        setRemarksTranslation(data.translation || '');
       } catch { setRemarksTranslation(''); }
       finally { setTranslating(false); }
     }, 900);
