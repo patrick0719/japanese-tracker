@@ -1730,28 +1730,69 @@ function App() {
       </div>
     );
 
-    const textField = (key, label, sublabel, placeholder) => (
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 6 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{label}</span>
-          {sublabel && <span style={{ fontSize: 12, color: '#8e8e93', marginLeft: 6 }}>{sublabel}</span>}
+    const textField = (key, label, sublabel, placeholder) => {
+      const isRemarks = key === 'remarks';
+      const value = evalFields[key] || '';
+      return (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 6 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{label}</span>
+            {sublabel && <span style={{ fontSize: 12, color: '#8e8e93', marginLeft: 6 }}>{sublabel}</span>}
+          </div>
+          {isRemarks ? (
+            isViewer ? (
+              <div style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10,
+                border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box',
+                background: '#f9f9f9', color: '#3a3a3c', fontFamily: 'inherit',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: 44,
+                lineHeight: 1.5,
+              }}>
+                {value || <span style={{ color: '#c7c7cc' }}>{placeholder}</span>}
+              </div>
+            ) : (
+              <textarea
+                value={value}
+                onChange={(e) => {
+                  setEvalFields(f => ({ ...f, [key]: e.target.value }));
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+                }}
+                onInput={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+                }}
+                placeholder={placeholder}
+                lang="ja"
+                rows={3}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 10,
+                  border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box',
+                  background: '#fff', color: '#3a3a3c', fontFamily: 'inherit',
+                  resize: 'none', overflow: 'hidden', lineHeight: 1.5,
+                  minHeight: 80,
+                }}
+              />
+            )
+          ) : (
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => !isViewer && setEvalFields(f => ({ ...f, [key]: e.target.value }))}
+              readOnly={isViewer}
+              placeholder={placeholder}
+              lang="ja"
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10,
+                border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box',
+                background: isViewer ? '#f9f9f9' : '#fff', color: '#3a3a3c',
+                fontFamily: 'inherit'
+              }}
+            />
+          )}
         </div>
-        <input
-          type="text"
-          value={evalFields[key] || ''}
-          onChange={(e) => !isViewer && setEvalFields(f => ({ ...f, [key]: e.target.value }))}
-          readOnly={isViewer}
-          placeholder={placeholder}
-          lang="ja"
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 10,
-            border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box',
-            background: isViewer ? '#f9f9f9' : '#fff', color: '#3a3a3c',
-            fontFamily: 'inherit'
-          }}
-        />
-      </div>
-    );
+      );
+    };
 
     return (
       <>
