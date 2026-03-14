@@ -502,13 +502,51 @@ function DocumentScanner({ onCapture, onClose }) {
     const img = new Image();
     img.onload = () => {
       const [tl, tr, br, bl] = corners;
-      const x = Math.max(0, Math.min(tl.x, bl.x) - 6);
-      const y = Math.max(0, Math.min(tl.y, tr.y) - 6);
-      const w = Math.min(imgSize.w - x, Math.max(tr.x, br.x) - x + 6);
-      const h = Math.min(imgSize.h - y, Math.max(bl.y, br.y) - y + 6);
+
+      // Output size — use the longer of the two pairs of sides
+      const wTop  = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+      const wBot  = Math.hypot(br.x - bl.x, br.y - bl.y);
+      const hLeft = Math.hypot(bl.x - tl.x, bl.y - tl.y);
+      const hRight= Math.hypot(br.x - tr.x, br.y - tr.y);
+      const outW  = Math.round(Math.max(wTop, wBot));
+      const outH  = Math.round(Math.max(hLeft, hRight));
+
       const dst = document.createElement('canvas');
-      dst.width = Math.round(w); dst.height = Math.round(h);
-      dst.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h);
+      dst.width = outW; dst.height = outH;
+      const ctx = dst.getContext('2d');
+
+      // Perspective transform via scanline sampling
+      // For each destination pixel (dx, dy), find the corresponding
+      // source pixel using bilinear interpolation of the quad corners.
+      const srcData = (() => {
+        const tmp = document.createElement('canvas');
+        tmp.width = img.naturalWidth || imgSize.w;
+        tmp.height = img.naturalHeight || imgSize.h;
+        tmp.getContext('2d').drawImage(img, 0, 0);
+        return tmp.getContext('2d').getImageData(0, 0, tmp.width, tmp.height);
+      })();
+      const outData = ctx.createImageData(outW, outH);
+      const sw = srcData.width;
+      const sh = srcData.height;
+
+      for (let dy = 0; dy < outH; dy++) {
+        const v = dy / (outH - 1);
+        for (let dx = 0; dx < outW; dx++) {
+          const u = dx / (outW - 1);
+          // Bilinear interpolation of the 4 corners
+          const sx = (1-u)*(1-v)*tl.x + u*(1-v)*tr.x + u*v*br.x + (1-u)*v*bl.x;
+          const sy = (1-u)*(1-v)*tl.y + u*(1-v)*tr.y + u*v*br.y + (1-u)*v*bl.y;
+          const xi = Math.round(sx), yi = Math.round(sy);
+          if (xi < 0 || xi >= sw || yi < 0 || yi >= sh) continue;
+          const si = (yi * sw + xi) * 4;
+          const di = (dy * outW + dx) * 4;
+          outData.data[di]   = srcData.data[si];
+          outData.data[di+1] = srcData.data[si+1];
+          outData.data[di+2] = srcData.data[si+2];
+          outData.data[di+3] = srcData.data[si+3];
+        }
+      }
+      ctx.putImageData(outData, 0, 0);
       onCapture(dst.toDataURL('image/jpeg', 0.92));
     };
     img.src = capturedDataUrl;
