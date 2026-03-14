@@ -987,6 +987,9 @@ function App() {
   const [evalDate, setEvalDate] = useState('');
   const [evalFields, setEvalFields] = useState({});
   const [evalSaving, setEvalSaving] = useState(false);
+  const [remarksTranslation, setRemarksTranslation] = useState('');
+  const [translating, setTranslating] = useState(false);
+  const translateTimerRef = useRef(null);
   const [allTeachers, setAllTeachers] = useState([]);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -1701,6 +1704,40 @@ function App() {
     </>
   );
 
+  const translateRemarks = (text) => {
+    if (translateTimerRef.current) clearTimeout(translateTimerRef.current);
+    if (!text.trim()) { setRemarksTranslation(''); return; }
+    translateTimerRef.current = setTimeout(async () => {
+      setTranslating(true);
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1000,
+            system: `You are a Japanese language teacher at Sage Asian Language and Education Center writing evaluation remarks for a student's progress report. Your translations must sound natural, warm, and professional — the way a real Japanese teacher would write in an official student evaluation. 
+
+Guidelines:
+- Use polite but natural Japanese (丁寧語), not overly stiff or formal
+- Preserve the meaning and tone of the original (encouraging, constructive, or honest)
+- Use appropriate school/education vocabulary where relevant
+- If the text contains Tagalog, English, or Taglish slang, translate the meaning — not the words literally
+- Return ONLY the Japanese translation. No romanization, no explanation, no quotes.`,
+            messages: [{
+              role: 'user',
+              content: `Translate this student evaluation remark to Japanese:\n\n${text}`
+            }]
+          })
+        });
+        const data = await res.json();
+        const translated = data.content?.[0]?.text?.trim() || '';
+        setRemarksTranslation(translated);
+      } catch { setRemarksTranslation(''); }
+      finally { setTranslating(false); }
+    }, 900);
+  };
+
   const renderEvaluationDetail = () => {
     const ratingField = (key, label, sublabel) => (
       <div style={{ marginBottom: 20 }}>
@@ -1751,28 +1788,63 @@ function App() {
                 {value || <span style={{ color: '#c7c7cc' }}>{placeholder}</span>}
               </div>
             ) : (
-              <textarea
-                value={value}
-                onChange={(e) => {
-                  setEvalFields(f => ({ ...f, [key]: e.target.value }));
-                  e.target.style.height = 'auto';
-                  e.target.style.height = e.target.scrollHeight + 'px';
-                }}
-                onInput={(e) => {
-                  e.target.style.height = 'auto';
-                  e.target.style.height = e.target.scrollHeight + 'px';
-                }}
-                placeholder={placeholder}
-                lang="ja"
-                rows={3}
-                style={{
-                  width: '100%', padding: '10px 12px', borderRadius: 10,
-                  border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box',
-                  background: '#fff', color: '#3a3a3c', fontFamily: 'inherit',
-                  resize: 'none', overflow: 'hidden', lineHeight: 1.5,
-                  minHeight: 80,
-                }}
-              />
+              <div>
+                <textarea
+                  value={value}
+                  onChange={(e) => {
+                    setEvalFields(f => ({ ...f, [key]: e.target.value }));
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                    translateRemarks(e.target.value);
+                  }}
+                  onInput={(e) => {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
+                  placeholder={placeholder}
+                  lang="ja"
+                  rows={3}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 10,
+                    border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box',
+                    background: '#fff', color: '#3a3a3c', fontFamily: 'inherit',
+                    resize: 'none', overflow: 'hidden', lineHeight: 1.5,
+                    minHeight: 80,
+                  }}
+                />
+                {/* Translation preview */}
+                {(translating || remarksTranslation) && (
+                  <div style={{
+                    marginTop: 8, padding: '10px 12px', borderRadius: 10,
+                    background: '#f0f7ff', border: '1.5px solid #cce4ff',
+                    fontSize: 14, lineHeight: 1.6, color: '#1a1a2e',
+                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#007AFF', display: 'block', marginBottom: 4, letterSpacing: 0.5 }}>
+                      🇯🇵 日本語訳 {translating && '…'}
+                    </span>
+                    {translating
+                      ? <span style={{ color: '#8e8e93', fontStyle: 'italic' }}>Translating...</span>
+                      : <span>{remarksTranslation}</span>
+                    }
+                    {!translating && remarksTranslation && (
+                      <button
+                        onClick={() => {
+                          setEvalFields(f => ({ ...f, [key]: remarksTranslation }));
+                          setRemarksTranslation('');
+                        }}
+                        style={{
+                          display: 'block', marginTop: 8, background: '#007AFF',
+                          color: '#fff', border: 'none', borderRadius: 8,
+                          padding: '6px 14px', fontSize: 13, fontWeight: 700,
+                          cursor: 'pointer',
+                        }}>
+                        ✓ Use Japanese
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )
           ) : (
             <input
