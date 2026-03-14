@@ -501,7 +501,20 @@ function DocumentScanner({ onCapture, onClose }) {
     if (!corners || !capturedDataUrl) return;
     const img = new Image();
     img.onload = () => {
-      const [tl, tr, br, bl] = corners;
+      // Sort corners robustly into TL, TR, BR, BL regardless of drag order
+      const pts = [...corners];
+      const cx = pts.reduce((s,p) => s+p.x, 0) / 4;
+      const cy = pts.reduce((s,p) => s+p.y, 0) / 4;
+      // Classify by angle from centroid
+      pts.sort((a, b) => Math.atan2(a.y-cy, a.x-cx) - Math.atan2(b.y-cy, b.x-cx));
+      // After angle sort: left-top, left-bottom, right-bottom, right-top (CCW from -π)
+      // Re-sort: top-left has min(x+y), top-right has min(y-x), etc.
+      const sumSort  = [...pts].sort((a,b) => (a.x+a.y)-(b.x+b.y));
+      const diffSort = [...pts].sort((a,b) => (a.x-a.y)-(b.x-b.y));
+      const tl = sumSort[0];
+      const br = sumSort[3];
+      const tr = diffSort[3];
+      const bl = diffSort[0];
 
       // Output dimensions based on actual edge lengths
       const wTop   = Math.hypot(tr.x-tl.x, tr.y-tl.y);
@@ -530,12 +543,12 @@ function DocumentScanner({ onCapture, onClose }) {
       // For each correspondence (dxi,dyi) -> (sxi,syi):
       //   sxi = (h0*dxi + h1*dyi + h2) / (h6*dxi + h7*dyi + 1)
       //   syi = (h3*dxi + h4*dyi + h5) / (h6*dxi + h7*dyi + 1)
-      const pts = [
+      const corrPts = [
         [dx0,dy0,sx0,sy0],[dx1,dy1,sx1,sy1],
         [dx2,dy2,sx2,sy2],[dx3,dy3,sx3,sy3],
       ];
       const A = [], b = [];
-      for (const [dx,dy,sx,sy] of pts) {
+      for (const [dx,dy,sx,sy] of corrPts) {
         A.push([dx, dy, 1,  0,  0,  0, -sx*dx, -sx*dy]);
         A.push([ 0,  0, 0, dx, dy,  1, -sy*dx, -sy*dy]);
         b.push(sx); b.push(sy);
@@ -1348,19 +1361,20 @@ function App() {
   const deleteImagePage = async (examId, index) => {
     if (!window.confirm(`Delete page ${index + 1}?`)) return;
     try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/exams/${examId}/remove-image`, {
+      await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/remove-image`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ index })
       });
-      const updatedBatch = await res.json();
-      updateBatchInState(updatedBatch);
-      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
-      if (updatedStudent) {
-        setSelectedStudent(updatedStudent);
-        const updatedCat = updatedStudent.categories.find(c => c._id === selectedCategory._id);
-        const updatedExam = updatedCat?.items.find(ex => ex._id === examId);
-        if (updatedExam) setSelectedExam(updatedExam);
-      }
+      // Update state locally
+      const updatedExam = { ...selectedExam, images: selectedExam.images.filter((_, i) => i !== index) };
+      const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
+      const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
+      const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
+      setSelectedExam(updatedExam);
+      setSelectedCategory(updatedCat);
+      setSelectedStudent(updatedStudent);
+      setSelectedBatch(updatedBatch);
+      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
     } catch { alert('Error deleting page.'); }
   };
 
