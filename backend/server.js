@@ -292,9 +292,15 @@ ${text}`;
     });
 
     const data = await response.json();
+    // Log full response for debugging
+    if (!data.candidates) {
+      console.error('[translate] Gemini error:', JSON.stringify(data));
+      return res.json({ translation: '', error: JSON.stringify(data) });
+    }
     const translation = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     res.json({ translation });
   } catch (err) {
+    console.error('[translate] Exception:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

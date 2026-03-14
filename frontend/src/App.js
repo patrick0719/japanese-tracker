@@ -1716,8 +1716,17 @@ function App() {
           body: JSON.stringify({ text })
         });
         const data = await res.json();
-        setRemarksTranslation(data.translation || '');
-      } catch { setRemarksTranslation(''); }
+        console.log('[translate] response:', data);
+        if (data.translation) {
+          setRemarksTranslation(data.translation);
+        } else {
+          console.warn('[translate] empty translation, error:', data.error);
+          setRemarksTranslation('');
+        }
+      } catch (err) {
+        console.error('[translate] fetch error:', err);
+        setRemarksTranslation('');
+      }
       finally { setTranslating(false); }
     }, 900);
   };
