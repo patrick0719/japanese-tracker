@@ -266,7 +266,7 @@ app.post('/api/translate', async (req, res) => {
     if (!text || !text.trim()) return res.json({ translation: '' });
 
     const apiKey = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
     const prompt = `You are a Japanese language teacher at Sage Asian Language and Education Center writing evaluation remarks for a student's progress report.
 
