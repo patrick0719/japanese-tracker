@@ -196,7 +196,8 @@ app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:it
     const item = cat.items.id(req.params.itemId);
     if (!item.images) item.images = [];
     item.images.push(req.body.image);
-    await batch.save(); res.json(batch);
+    await batch.save();
+    res.json({ success: true, image: req.body.image });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

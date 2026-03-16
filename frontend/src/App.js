@@ -1387,15 +1387,18 @@ function App() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageData })
       });
-      const updatedBatch = await res.json();
-      updateBatchInState(updatedBatch);
-      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
-      if (updatedStudent) {
-        setSelectedStudent(updatedStudent);
-        const updatedCat = updatedStudent.categories.find(c => c._id === selectedCategory._id);
-        const updatedExam = updatedCat?.items.find(ex => ex._id === examId);
-        if (updatedExam) setSelectedExam(updatedExam);
-      }
+      const data = await res.json();
+      if (!data.success) throw new Error('Upload failed');
+      // Update state locally — no need to reload whole batch
+      const updatedExam = { ...selectedExam, images: [...(selectedExam?.images || []), imageData] };
+      const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
+      const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
+      const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
+      setSelectedExam(updatedExam);
+      setSelectedCategory(updatedCat);
+      setSelectedStudent(updatedStudent);
+      setSelectedBatch(updatedBatch);
+      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
     } catch { alert('Error saving image.'); }
   };
 
