@@ -58,6 +58,39 @@ mongoose.connect(process.env.MONGO_URI)
   });
 const Batch = mongoose.model('Batch', batchSchema);
 
+// ── IMAGE COLLECTION (separate from batch for scalability) ───────────────────
+const imageSchema = new mongoose.Schema({
+  data: String, // base64
+  createdAt: { type: Date, default: Date.now }
+});
+const Image = mongoose.model('Image', imageSchema);
+
+// GET single image by ID
+app.get('/api/images/:id', async (req, res) => {
+  try {
+    const img = await Image.findById(req.params.id);
+    if (!img) return res.status(404).json({ error: 'Not found' });
+    res.json({ _id: img._id, data: img.data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST upload new image — returns just the ID
+app.post('/api/images', async (req, res) => {
+  try {
+    const img = new Image({ data: req.body.data });
+    await img.save();
+    res.json({ _id: img._id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE image by ID
+app.delete('/api/images/:id', async (req, res) => {
+  try {
+    await Image.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── TEACHER MODEL & ROUTES ───────────────────────────────────────────────────
 const teacherSchema = new mongoose.Schema({
   name: String,
@@ -200,14 +233,17 @@ app.delete('/api/batches/:batchId/students/:studentId/categories/:catId/items/:i
 
 app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId/image', async (req, res) => {
   try {
+    // Save image to separate collection, store only the ID in batch
+    const img = new Image({ data: req.body.image });
+    await img.save();
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     const cat = student.categories.id(req.params.catId);
     const item = cat.items.id(req.params.itemId);
     if (!item.images) item.images = [];
-    item.images.push(req.body.image);
+    item.images.push(img._id.toString());
     await batch.save();
-    res.json({ success: true, image: req.body.image });
+    res.json({ success: true, imageId: img._id.toString() });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -218,8 +254,15 @@ app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:it
     const cat = student.categories.id(req.params.catId);
     const item = cat.items.id(req.params.itemId);
     const { index } = req.body;
-    if (item.images && item.images[index] !== undefined) item.images.splice(index, 1);
-    await batch.save(); res.json(batch);
+    if (item.images && item.images[index] !== undefined) {
+      const imageId = item.images[index];
+      // Delete from Image collection if it's an ID (not legacy base64)
+      if (imageId && !imageId.startsWith('data:')) {
+        await Image.findByIdAndDelete(imageId).catch(() => {});
+      }
+      item.images.splice(index, 1);
+    }
+    await batch.save(); res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

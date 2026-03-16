@@ -999,6 +999,8 @@ function App() {
   const [showScanner, setShowScanner] = useState(false);
   const [scanningExamId, setScanningExamId] = useState(null);
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
+  const [resolvedImages, setResolvedImages] = useState({}); // imageId -> base64
+  const imageCache = useRef({}); // in-memory cache
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [evaluations, setEvaluations] = useState([]); // per-student evaluations
   const [selectedEvaluation, setSelectedEvaluation] = useState(null);
@@ -1134,7 +1136,7 @@ function App() {
     setView('categories');
   };
   const goToExamItems = (cat) => { setSelectedCategory(cat); setView('examItems'); };
-  const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); };
+  const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); resolveExamImages(exam); };
   const goToEvaluations = () => { fetchEvaluations(); setView('evaluations'); };
   const goToEvaluationDetail = (ev) => {
     setSelectedEvaluation(ev);
@@ -1402,14 +1404,27 @@ function App() {
 
   const uploadImage = async (examId, imageData) => {
     try {
+      // Step 1: Upload image to separate collection, get ID back
+      const imgRes = await fetch(`${API}/images`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: imageData })
+      });
+      const { _id: imageId } = await imgRes.json();
+
+      // Step 2: Store imageId reference in batch item
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/image`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData })
+        body: JSON.stringify({ image: imageId })
       });
       const data = await res.json();
       if (!data.success) throw new Error('Upload failed');
-      // Update state locally — no need to reload whole batch
-      const updatedExam = { ...selectedExam, images: [...(selectedExam?.images || []), imageData] };
+
+      // Cache the image data locally
+      imageCache.current[imageId] = imageData;
+      setResolvedImages(prev => ({ ...prev, [imageId]: imageData }));
+
+      // Update state locally
+      const updatedExam = { ...selectedExam, images: [...(selectedExam?.images || []), imageId] };
       const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
       const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
       const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
@@ -1419,6 +1434,32 @@ function App() {
       setSelectedBatch(updatedBatch);
       setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
     } catch { alert('Error saving image.'); }
+  };
+
+  // Resolve image IDs to base64 — checks cache first, then fetches
+  const resolveImage = async (idOrData) => {
+    if (!idOrData) return null;
+    // Legacy: already base64
+    if (idOrData.startsWith('data:')) return idOrData;
+    // Check cache
+    if (imageCache.current[idOrData]) return imageCache.current[idOrData];
+    try {
+      const res = await fetch(`${API}/images/${idOrData}`);
+      const data = await res.json();
+      imageCache.current[idOrData] = data.data;
+      setResolvedImages(prev => ({ ...prev, [idOrData]: data.data }));
+      return data.data;
+    } catch { return null; }
+  };
+
+  // Resolve all images for current exam when exam detail is shown
+  const resolveExamImages = async (exam) => {
+    if (!exam?.images?.length) return;
+    for (const idOrData of exam.images) {
+      if (!idOrData.startsWith('data:') && !imageCache.current[idOrData]) {
+        await resolveImage(idOrData);
+      }
+    }
   };
 
   const triggerFileInput = (examId) => {
@@ -1987,9 +2028,13 @@ function App() {
   );
 
   const renderExamDetail = () => {
-    const allImages = selectedExam.images?.length > 0
+    const rawImages = selectedExam.images?.length > 0
       ? selectedExam.images
       : selectedExam.image ? [selectedExam.image] : [];
+    // Resolve IDs to base64 — use cache, legacy base64 passes through
+    const allImages = rawImages.map(idOrData =>
+      idOrData.startsWith('data:') ? idOrData : (resolvedImages[idOrData] || null)
+    );
 
     return (
       <>
@@ -2017,14 +2062,16 @@ function App() {
         )}
 
         {/* Document pages — vertical list like Files app */}
-        {allImages.length === 0 ? (
+        {rawImages.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>📄</div>
             <p style={{ color: '#8E8E93' }}>No pages yet. Scan or upload to add.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px' }}>
-            {allImages.map((img, idx) => (
+            {rawImages.map((idOrData, idx) => {
+              const src = idOrData.startsWith('data:') ? idOrData : resolvedImages[idOrData];
+              return (
               <div key={idx} style={{
                 background: '#fff',
                 borderRadius: 12,
@@ -2050,11 +2097,12 @@ function App() {
                     </button>
                   )}
                 </div>
-                {/* Document image — A4 proportions, full width */}
+                {/* Document image or loading placeholder */}
+                {src ? (
                 <img
-                  src={img}
+                  src={src}
                   alt={`Page ${idx + 1}`}
-                  onClick={() => setImageViewer({ images: allImages, index: idx })}
+                  onClick={() => setImageViewer({ images: allImages.filter(Boolean), index: allImages.filter(Boolean).indexOf(src) })}
                   style={{
                     width: '100%',
                     aspectRatio: '210 / 297',
@@ -2064,8 +2112,14 @@ function App() {
                     cursor: 'zoom-in'
                   }}
                 />
+                ) : (
+                  <div style={{ width: '100%', aspectRatio: '210/297', background: '#f5f5f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ color: '#8e8e93', fontSize: 13 }}>⏳ Loading...</span>
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
