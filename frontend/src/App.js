@@ -750,6 +750,16 @@ function TeacherSelect({ onSelect }) {
     setTeachers(prev => prev.map(t => t._id === teacherId ? updated : t));
   };
 
+  const uploadTeacherPhoto = async (teacherId, file) => {
+    const compressed = await compressImage(file, 400, 0.8);
+    const res = await fetch(`${API}/teachers/${teacherId}/photo`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo: compressed })
+    });
+    const updated = await res.json();
+    setTeachers(prev => prev.map(t => t._id === teacherId ? { ...t, photo: updated.photo } : t));
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px' }}>
       <img src={LOGO_DATA_URL} alt="Sage Asian" style={{ width: '55%', maxWidth: 240, marginBottom: 28, objectFit: 'contain' }} />
@@ -762,10 +772,19 @@ function TeacherSelect({ onSelect }) {
             <button onClick={() => onSelect(t)} style={{
               flex: 1, display: 'flex', alignItems: 'center', gap: 14,
               background: '#fff', border: 'none', borderRadius: 14,
-              padding: '16px 20px', fontSize: 17, fontWeight: 600, color: '#1c1c1e',
+              padding: '12px 20px', fontSize: 17, fontWeight: 600, color: '#1c1c1e',
               boxShadow: '0 2px 10px rgba(0,0,0,0.08)', cursor: 'pointer',
             }}>
-              <span style={{ fontSize: 30 }}>{t.emoji}</span>
+              {/* Photo or emoji — tap to change */}
+              <label onClick={e => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }} title="Tap to change photo">
+                {t.photo
+                  ? <img src={t.photo} alt={t.name} style={{ width: 46, height: 46, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e5e5ea' }} />
+                  : <span style={{ fontSize: 36, lineHeight: 1 }}>{t.emoji}</span>
+                }
+                <span style={{ position: 'absolute', bottom: -2, right: -4, background: '#007AFF', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>✎</span>
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => e.target.files[0] && uploadTeacherPhoto(t._id, e.target.files[0])} />
+              </label>
               {t.name}
               <span style={{ marginLeft: 'auto', color: '#c7c7cc', fontSize: 20 }}>›</span>
             </button>

@@ -62,6 +62,7 @@ const Batch = mongoose.model('Batch', batchSchema);
 const teacherSchema = new mongoose.Schema({
   name: String,
   emoji: { type: String, default: '👩‍🏫' },
+  photo: { type: String, default: null }, // base64 profile photo
   signature: { type: String, default: null }, // base64 image
 });
 const Teacher = mongoose.model('Teacher', teacherSchema);
@@ -85,6 +86,15 @@ app.patch('/api/teachers/:id/signature', async (req, res) => {
     t.signature = req.body.signature;
     await t.save();
     res.json(t);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.patch('/api/teachers/:id/photo', async (req, res) => {
+  try {
+    const t = await Teacher.findById(req.params.id);
+    if (!t) return res.status(404).json({ error: 'Teacher not found' });
+    t.photo = req.body.photo;
+    await t.save();
+    res.json({ _id: t._id, name: t.name, emoji: t.emoji, photo: t.photo });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.delete('/api/teachers/:id', async (req, res) => {
