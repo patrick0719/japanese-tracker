@@ -122,6 +122,11 @@ const imageSchema = new mongoose.Schema({
 const Image = mongoose.model('Image', imageSchema);
 
 // GET image by ID — returns Cloudinary URL
+// Expose cloud name for direct browser uploads
+app.get('/api/config', (req, res) => {
+  res.json({ cloudName: process.env.CLOUDINARY_CLOUD_NAME });
+});
+
 app.get('/api/images/:id', async (req, res) => {
   try {
     const img = await Image.findById(req.params.id);
@@ -130,10 +135,12 @@ app.get('/api/images/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST upload — base64 → Cloudinary → store URL in MongoDB
+// POST save image reference — browser uploads directly to Cloudinary,
+// then sends us just the URL + publicId to store
 app.post('/api/images', async (req, res) => {
   try {
-    const { url, publicId } = await cloudinaryUpload(req.body.data);
+    const { url, publicId } = req.body;
+    if (!url) return res.status(400).json({ error: 'url required' });
     const img = new Image({ url, publicId });
     await img.save();
     res.json({ _id: img._id, url });
