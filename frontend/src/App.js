@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 
 const API = 'https://japanese-tracker-production.up.railway.app/api';
+const CLOUDINARY_CLOUD = 'daofbq9wz';
+const CLOUDINARY_PRESET = 'cnbztuzc';
 
 
 // Compress image before sending to backend
@@ -979,6 +981,7 @@ function App() {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const [cloudName, setCloudName] = useState('');
   const [view, setView] = useState('batches');
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -1086,6 +1089,10 @@ function App() {
   const fetchBatches = async (teacherId) => {
     try {
       setLoading(true);
+      // Fetch cloud name for direct Cloudinary uploads
+      if (!cloudName) {
+        fetch(`${API}/config`).then(r => r.json()).then(d => { if (d.cloudName) setCloudName(d.cloudName); }).catch(() => {});
+      }
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       const url = teacherId ? `${API}/batches?teacherId=${teacherId}` : `${API}/batches`;
@@ -1384,34 +1391,55 @@ function App() {
 
   const deleteImagePage = async (examId, index) => {
     if (!window.confirm(`Delete page ${index + 1}?`)) return;
-    try {
-      await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/remove-image`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index })
-      });
-      // Update state locally
-      const updatedExam = { ...selectedExam, images: selectedExam.images.filter((_, i) => i !== index) };
-      const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
-      const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
-      const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
-      setSelectedExam(updatedExam);
-      setSelectedCategory(updatedCat);
-      setSelectedStudent(updatedStudent);
-      setSelectedBatch(updatedBatch);
-      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
-    } catch { alert('Error deleting page.'); }
+    // Optimistic update — remove from UI immediately
+    const updatedExam = { ...selectedExam, images: selectedExam.images.filter((_, i) => i !== index) };
+    const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
+    const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
+    const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
+    setSelectedExam(updatedExam);
+    setSelectedCategory(updatedCat);
+    setSelectedStudent(updatedStudent);
+    setSelectedBatch(updatedBatch);
+    setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
+    // Delete from server in background
+    fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/remove-image`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ index })
+    }).catch(() => alert('Error deleting page from server.'));
   };
 
   const uploadImage = async (examId, imageData) => {
     try {
-      // Step 1: Upload image to Cloudinary via server, get ID + URL back
+      // Step 1: Direct upload to Cloudinary from browser (fast — no server relay)
+      const formData = new FormData();
+      // Convert base64 to blob
+      const byteStr = atob(imageData.split(',')[1]);
+      const ab = new ArrayBuffer(byteStr.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+      const blob = new Blob([ab], { type: 'image/jpeg' });
+      formData.append('file', blob);
+      formData.append('upload_preset', CLOUDINARY_PRESET);
+      formData.append('folder', 'sage-bulacan');
+
+      const cName = CLOUDINARY_CLOUD;
+      const cdnRes = await fetch(`https://api.cloudinary.com/v1_1/${cName}/image/upload`, {
+        method: 'POST', body: formData
+      });
+      const cdnData = await cdnRes.json();
+      if (!cdnData.secure_url) throw new Error('Cloudinary upload failed');
+
+      const imageUrl = cdnData.secure_url;
+      const publicId = cdnData.public_id;
+
+      // Step 2: Save URL reference to MongoDB via server (lightweight)
       const imgRes = await fetch(`${API}/images`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: imageData })
+        body: JSON.stringify({ url: imageUrl, publicId })
       });
-      const { _id: imageId, url: imageUrl } = await imgRes.json();
+      const { _id: imageId } = await imgRes.json();
 
-      // Step 2: Store imageId reference in batch item
+      // Step 3: Store imageId in batch item
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/image`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageId })
@@ -1419,10 +1447,9 @@ function App() {
       const data = await res.json();
       if (!data.success) throw new Error('Upload failed');
 
-      // Cache the Cloudinary URL locally so display is instant
-      const imgSrc = imageUrl || imageData;
-      imageCache.current[imageId] = imgSrc;
-      setResolvedImages(prev => ({ ...prev, [imageId]: imgSrc }));
+      // Cache URL immediately — display is instant
+      imageCache.current[imageId] = imageUrl;
+      setResolvedImages(prev => ({ ...prev, [imageId]: imageUrl }));
 
       // Update state locally
       const updatedExam = { ...selectedExam, images: [...(selectedExam?.images || []), imageId] };
