@@ -1404,12 +1404,12 @@ function App() {
 
   const uploadImage = async (examId, imageData) => {
     try {
-      // Step 1: Upload image to separate collection, get ID back
+      // Step 1: Upload image to Cloudinary via server, get ID + URL back
       const imgRes = await fetch(`${API}/images`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: imageData })
       });
-      const { _id: imageId } = await imgRes.json();
+      const { _id: imageId, url: imageUrl } = await imgRes.json();
 
       // Step 2: Store imageId reference in batch item
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/image`, {
@@ -1419,9 +1419,10 @@ function App() {
       const data = await res.json();
       if (!data.success) throw new Error('Upload failed');
 
-      // Cache the image data locally
-      imageCache.current[imageId] = imageData;
-      setResolvedImages(prev => ({ ...prev, [imageId]: imageData }));
+      // Cache the Cloudinary URL locally so display is instant
+      const imgSrc = imageUrl || imageData;
+      imageCache.current[imageId] = imgSrc;
+      setResolvedImages(prev => ({ ...prev, [imageId]: imgSrc }));
 
       // Update state locally
       const updatedExam = { ...selectedExam, images: [...(selectedExam?.images || []), imageId] };
@@ -1436,19 +1437,25 @@ function App() {
     } catch { alert('Error saving image.'); }
   };
 
-  // Resolve image IDs to base64 — checks cache first, then fetches
+  // Resolve image IDs to displayable src — Cloudinary URL or legacy base64
   const resolveImage = async (idOrData) => {
     if (!idOrData) return null;
     // Legacy: already base64
     if (idOrData.startsWith('data:')) return idOrData;
+    // Already a Cloudinary URL
+    if (idOrData.startsWith('http')) return idOrData;
     // Check cache
     if (imageCache.current[idOrData]) return imageCache.current[idOrData];
     try {
       const res = await fetch(`${API}/images/${idOrData}`);
       const data = await res.json();
-      imageCache.current[idOrData] = data.data;
-      setResolvedImages(prev => ({ ...prev, [idOrData]: data.data }));
-      return data.data;
+      // data.url is Cloudinary URL
+      const src = data.url || data.data || null;
+      if (src) {
+        imageCache.current[idOrData] = src;
+        setResolvedImages(prev => ({ ...prev, [idOrData]: src }));
+      }
+      return src;
     } catch { return null; }
   };
 
@@ -1456,7 +1463,7 @@ function App() {
   const resolveExamImages = async (exam) => {
     if (!exam?.images?.length) return;
     for (const idOrData of exam.images) {
-      if (!idOrData.startsWith('data:') && !imageCache.current[idOrData]) {
+      if (!idOrData.startsWith('data:') && !idOrData.startsWith('http') && !imageCache.current[idOrData]) {
         await resolveImage(idOrData);
       }
     }
@@ -2031,9 +2038,9 @@ function App() {
     const rawImages = selectedExam.images?.length > 0
       ? selectedExam.images
       : selectedExam.image ? [selectedExam.image] : [];
-    // Resolve IDs to base64 — use cache, legacy base64 passes through
+    // Resolve IDs to URLs — legacy base64 and Cloudinary URLs pass through
     const allImages = rawImages.map(idOrData =>
-      idOrData.startsWith('data:') ? idOrData : (resolvedImages[idOrData] || null)
+      (idOrData.startsWith('data:') || idOrData.startsWith('http')) ? idOrData : (resolvedImages[idOrData] || null)
     );
 
     return (
@@ -2070,7 +2077,7 @@ function App() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px' }}>
             {rawImages.map((idOrData, idx) => {
-              const src = idOrData.startsWith('data:') ? idOrData : resolvedImages[idOrData];
+              const src = (idOrData.startsWith('data:') || idOrData.startsWith('http')) ? idOrData : resolvedImages[idOrData];
               return (
               <div key={idx} style={{
                 background: '#fff',

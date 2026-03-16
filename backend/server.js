@@ -3,7 +3,61 @@ console.log('PORT:', process.env.PORT);
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const crypto = require('crypto');
 require('dotenv').config();
+
+// ── CLOUDINARY UPLOAD (via REST API — no npm package needed) ─────────────────
+const cloudinaryUpload = async (base64Data) => {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  // Strip data URL prefix if present
+  const base64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+
+  // Generate signature
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = 'sage-bulacan';
+  const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+  const signature = crypto.createHash('sha1').update(toSign).digest('hex');
+
+  // Build form data
+  const boundary = '----FormBoundary' + Math.random().toString(36).slice(2);
+  const CRLF = '\r\n';
+
+  const parts = [
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="file"${CRLF}${CRLF}data:image/jpeg;base64,${base64}`,
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="api_key"${CRLF}${CRLF}${apiKey}`,
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="timestamp"${CRLF}${CRLF}${timestamp}`,
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="signature"${CRLF}${CRLF}${signature}`,
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="folder"${CRLF}${CRLF}${folder}`,
+    `--${boundary}--`,
+  ];
+  const body = parts.join(CRLF);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+    body,
+  });
+  const data = await res.json();
+  if (!data.secure_url) throw new Error(data.error?.message || 'Cloudinary upload failed');
+  return { url: data.secure_url, publicId: data.public_id };
+};
+
+const cloudinaryDelete = async (publicId) => {
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const toSign = `public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
+  const signature = crypto.createHash('sha1').update(toSign).digest('hex');
+  await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/destroy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ public_id: publicId, api_key: apiKey, timestamp, signature }),
+  });
+};
 
 const app = express();
 app.use((req, res, next) => {
@@ -58,34 +112,39 @@ mongoose.connect(process.env.MONGO_URI)
   });
 const Batch = mongoose.model('Batch', batchSchema);
 
-// ── IMAGE COLLECTION (separate from batch for scalability) ───────────────────
+// ── IMAGE ROUTES (Cloudinary storage) ────────────────────────────────────────
+// POST upload — sends base64 to Cloudinary, stores URL+publicId in MongoDB
 const imageSchema = new mongoose.Schema({
-  data: String, // base64
+  url: String,       // Cloudinary URL
+  publicId: String,  // Cloudinary public_id for deletion
   createdAt: { type: Date, default: Date.now }
 });
 const Image = mongoose.model('Image', imageSchema);
 
-// GET single image by ID
+// GET image by ID — returns Cloudinary URL
 app.get('/api/images/:id', async (req, res) => {
   try {
     const img = await Image.findById(req.params.id);
     if (!img) return res.status(404).json({ error: 'Not found' });
-    res.json({ _id: img._id, data: img.data });
+    res.json({ _id: img._id, url: img.url });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST upload new image — returns just the ID
+// POST upload — base64 → Cloudinary → store URL in MongoDB
 app.post('/api/images', async (req, res) => {
   try {
-    const img = new Image({ data: req.body.data });
+    const { url, publicId } = await cloudinaryUpload(req.body.data);
+    const img = new Image({ url, publicId });
     await img.save();
-    res.json({ _id: img._id });
+    res.json({ _id: img._id, url });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE image by ID
+// DELETE image — remove from Cloudinary + MongoDB
 app.delete('/api/images/:id', async (req, res) => {
   try {
+    const img = await Image.findById(req.params.id);
+    if (img?.publicId) await cloudinaryDelete(img.publicId).catch(() => {});
     await Image.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
