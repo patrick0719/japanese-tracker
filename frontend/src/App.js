@@ -2287,16 +2287,35 @@ function App() {
 
           @media print {
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
           }
 
           /* Screen preview */
           @media screen {
-            body { background: #e8e8e8; padding: 16px; }
+            body { background: #e8e8e8; padding: 16px; padding-top: 70px; }
             .page { background: #fff; padding: 10mm; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
           }
+
+          .top-bar {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: #fff; padding: 12px 16px;
+            display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            z-index: 999;
+          }
+          .back-btn {
+            background: #f2f2f7; border: none; border-radius: 8px;
+            padding: 8px 16px; font-size: 15px; font-weight: 600;
+            cursor: pointer; color: #1c1c1e;
+          }
+          .back-btn:hover { background: #e5e5ea; }
         </style>
       </head>
       <body>
+        <div class="top-bar no-print">
+          <button class="back-btn" onclick="window.close()">← Back</button>
+          <span style="font-size:14px;color:#666;">QR Codes Preview — click Back or close this tab to return</span>
+        </div>
         ${pagesHtml}
         <script>
           window.onload = function() { setTimeout(function() { window.print(); }, 400); };
