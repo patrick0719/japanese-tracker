@@ -1412,13 +1412,9 @@ function App() {
     try {
       // Step 1: Direct upload to Cloudinary from browser (fast — no server relay)
       const formData = new FormData();
-      // Convert base64 to blob
-      const byteStr = atob(imageData.split(',')[1]);
-      const ab = new ArrayBuffer(byteStr.length);
-      const ia = new Uint8Array(ab);
-      for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
-      const blob = new Blob([ab], { type: 'image/jpeg' });
-      formData.append('file', blob);
+      // Convert base64 to blob (fast method using fetch)
+      const blob = await fetch(imageData).then(r => r.blob());
+      formData.append('file', blob, 'image.jpg');
       formData.append('upload_preset', CLOUDINARY_PRESET);
       formData.append('folder', 'sage-bulacan');
 
@@ -1505,7 +1501,7 @@ function App() {
     const examId = fileInputRef.current.getAttribute('data-exam-id');
     const files = Array.from(e.target.files);
     for (const file of files) {
-      const compressed = await compressImage(file, 1200, 0.75);
+      const compressed = await compressImage(file, 800, 0.55);
       await uploadImage(examId, compressed);
     }
     e.target.value = '';
