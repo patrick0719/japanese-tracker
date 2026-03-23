@@ -1028,7 +1028,7 @@ function App() {
   const [translating, setTranslating] = useState(false);
   const translateTimerRef = useRef(null);
   const [allTeachers, setAllTeachers] = useState([]);
-  const [expandedCompanies, setExpandedCompanies] = useState({});
+  const [selectedCompany, setSelectedCompany] = useState(null); // { name, students[] }
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const pullStartY = useRef(null);
@@ -1174,11 +1174,18 @@ function App() {
   };
 
   const goBack = () => {
+    const role = localStorage.getItem(ROLE_KEY);
+    const isKumiai = role === 'setouchi' || role === 'wbc';
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
     else if (view === 'examItems') { setView('categories'); setSelectedCategory(null); }
     else if (view === 'evaluationDetail') { setView('evaluations'); setSelectedEvaluation(null); }
     else if (view === 'evaluations') { setView('categories'); }
-    else if (view === 'categories') { setView('students'); setSelectedStudent(null); }
+    else if (view === 'categories') {
+      if (isKumiai) {
+        if (selectedCompany) { setView('batches'); setSelectedStudent(null); setSelectedBatch(null); }
+        else { setView('batches'); setSelectedStudent(null); setSelectedBatch(null); }
+      } else { setView('students'); setSelectedStudent(null); }
+    }
     else if (view === 'students') { setView('batches'); setSelectedBatch(null); }
   };
 
@@ -1642,7 +1649,6 @@ function App() {
     const role = localStorage.getItem(ROLE_KEY);
     const kumiai = role === 'setouchi' ? 'Setouchi' : 'WBC';
 
-    // Gather all matching students across all batches, filtered by kumiai field
     const allStudents = [];
     batches.forEach(batch => {
       batch.students
@@ -1650,10 +1656,8 @@ function App() {
         .forEach(s => allStudents.push({ ...s, batchName: batch.name, batchId: batch._id, batch }));
     });
 
-    // Group by actual companyName (e.g. Sunrise, Toyota)
     const groups = {};
     allStudents.forEach(s => {
-      // For legacy students, companyName was the kumiai — treat as no company
       const rawCompany = s.companyName;
       const isLegacyKumiai = rawCompany === 'Setouchi' || rawCompany === 'WBC';
       const key = (!rawCompany || isLegacyKumiai) ? '(No Company Assigned)' : rawCompany;
@@ -1663,6 +1667,39 @@ function App() {
 
     const groupKeys = Object.keys(groups).sort();
 
+    // ── Company detail view (students inside a company) ───────────────
+    if (selectedCompany) {
+      const students = selectedCompany.students.slice().sort((a, b) => a.name.localeCompare(b.name));
+      return (
+        <>
+          <button className="back-btn" onClick={() => setSelectedCompany(null)}>←</button>
+          <div className="header-with-back">
+            <h1 className="title">🏢 {selectedCompany.name}</h1>
+          </div>
+          <h2 className="section-title">{students.length} Student{students.length !== 1 ? 's' : ''}</h2>
+          {students.map(student => (
+            <div key={student._id} className="card student-card clickable"
+              onClick={() => { setSelectedBatch(student.batch); goToCategories(student); }}>
+              <div className="card-content">
+                <div className="student-card-left">
+                  {student.photo
+                    ? <img src={student.photo} alt={student.name} className="student-avatar" />
+                    : <span className="student-avatar-icon">👤</span>
+                  }
+                  <div>
+                    <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
+                    <p className="card-subtitle">{student.batchName}</p>
+                  </div>
+                </div>
+                <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
+              </div>
+            </div>
+          ))}
+        </>
+      );
+    }
+
+    // ── Company list view ─────────────────────────────────────────────
     return (
       <>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -1680,7 +1717,7 @@ function App() {
         </div>
 
         <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>
-          {kumiai} Students ({allStudents.length})
+          Companies ({groupKeys.length})
         </h2>
 
         {groupKeys.length === 0 && (
@@ -1691,61 +1728,27 @@ function App() {
         )}
 
         {groupKeys.map(groupKey => {
-          const students = groups[groupKey].slice().sort((a, b) => a.name.localeCompare(b.name));
-          const isExpanded = expandedCompanies[groupKey] !== false; // default expanded
+          const students = groups[groupKey];
           return (
-            <div key={groupKey} style={{ marginBottom: 12 }}>
-              {/* Company/Batch header — tap to expand/collapse */}
-              <div
-                onClick={() => setExpandedCompanies(prev => ({ ...prev, [groupKey]: !isExpanded }))}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  background: '#8B0000', color: '#fff', borderRadius: isExpanded ? '12px 12px 0 0' : 12,
-                  padding: '12px 16px', cursor: 'pointer', userSelect: 'none',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 20 }}>🏢</span>
+            <div key={groupKey} className="card clickable"
+              onClick={() => setSelectedCompany({ name: groupKey, students })}>
+              <div className="card-content">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span style={{ fontSize: 32 }}>🏢</span>
                   <div>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{groupKey}</p>
-                    <p style={{ margin: 0, fontSize: 11, opacity: 0.8 }}>{students.length} student{students.length !== 1 ? 's' : ''}</p>
+                    <h2 className="card-title">{groupKey}</h2>
+                    <p className="card-subtitle">{students.length} student{students.length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
-                <span style={{ fontSize: 18, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>›</span>
+                <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
               </div>
-
-              {/* Students list */}
-              {isExpanded && (
-                <div style={{ background: '#fff', borderRadius: '0 0 12px 12px', border: '1.5px solid #e5e5ea', borderTop: 'none', overflow: 'hidden' }}>
-                  {students.map((student, idx) => (
-                    <div
-                      key={student._id}
-                      onClick={() => { setSelectedBatch(student.batch); goToCategories(student); }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                        borderBottom: idx < students.length - 1 ? '1px solid #f2f2f7' : 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {student.photo
-                        ? <img src={student.photo} alt={student.name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                        : <span style={{ width: 40, height: 40, borderRadius: '50%', background: '#f2f2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>👤</span>
-                      }
-                      <div style={{ flex: 1 }}>
-                        <p style={{ margin: 0, fontWeight: 600, fontSize: 15, color: '#1c1c1e' }}>{student.name}</p>
-                        <p style={{ margin: 0, fontSize: 12, color: '#8e8e93' }}>{student.batchName}</p>
-                      </div>
-                      <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}
       </>
     );
   };
+
 
   const renderBatches = () => (
     <>
