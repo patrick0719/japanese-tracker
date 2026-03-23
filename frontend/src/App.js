@@ -1694,6 +1694,14 @@ function App() {
                     }}>
                     {student.status === 'Selected' ? 'SELECTED' : 'REGULAR'}
                   </span>
+                  {student.status === 'Selected' && student.companyName && (
+                    <span style={{
+                      background: '#fff3cd', color: '#856404',
+                      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                    }}>
+                      {student.companyName}
+                    </span>
+                  )}
                 </div>
                 <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
               </div>
@@ -2236,8 +2244,13 @@ function App() {
               </div>
               {newStudentStatus === 'Selected' && (
                 <div className="form-group">
-                  <label>Company Name:</label>
-                  <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)} placeholder="e.g., Toyota, Nissan..." />
+                  <label>KUMIAI:</label>
+                  <select value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
+                    <option value="">— Select KUMIAI —</option>
+                    <option value="Setouchi">Setouchi</option>
+                    <option value="WBC">WBC</option>
+                  </select>
                 </div>
               )}
               <div className="form-group">
