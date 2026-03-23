@@ -701,6 +701,10 @@ const ADMIN_USER = 'sagebulacan97';
 const ADMIN_PASS = 'July142018';
 const PHGIC_USER = 'PHGIC';
 const PHGIC_PASS = 'phgic';
+const SETOUCHI_USER = 'SETOUCHI';
+const SETOUCHI_PASS = 'setouchi';
+const WBC_USER = 'WBC';
+const WBC_PASS = 'wbc';
 const AUTH_KEY = 'sage_auth';
 const ROLE_KEY = 'sage_role'; // 'admin' or 'viewer'
 
@@ -854,6 +858,14 @@ function LoginScreen({ onLogin }) {
       localStorage.setItem(AUTH_KEY, 'true');
       localStorage.setItem(ROLE_KEY, 'viewer');
       onLogin('viewer');
+    } else if (username === SETOUCHI_USER && password === SETOUCHI_PASS) {
+      localStorage.setItem(AUTH_KEY, 'true');
+      localStorage.setItem(ROLE_KEY, 'setouchi');
+      onLogin('setouchi');
+    } else if (username === WBC_USER && password === WBC_PASS) {
+      localStorage.setItem(AUTH_KEY, 'true');
+      localStorage.setItem(ROLE_KEY, 'wbc');
+      onLogin('wbc');
     } else {
       setError('Invalid username or password.');
     }
@@ -1020,7 +1032,7 @@ function App() {
   const pullStartY = useRef(null);
   const PULL_THRESHOLD = 110;
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
-  const [isViewer, setIsViewer] = useState(() => localStorage.getItem(ROLE_KEY) === 'viewer');
+  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc'].includes(localStorage.getItem(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
   const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
   const [qrPassInput, setQrPassInput] = useState('');
@@ -1060,8 +1072,8 @@ function App() {
           setIsLoggedIn(true);
           const role = localStorage.getItem(ROLE_KEY);
           const teacher = localStorage.getItem(TEACHER_KEY);
-          setIsViewer(role === 'viewer');
-          if (role === 'viewer') {
+          setIsViewer(['viewer','setouchi','wbc'].includes(role));
+          if (['viewer','setouchi','wbc'].includes(role)) {
             fetchBatches(null);
           } else if (teacher) {
             fetchBatches(JSON.parse(teacher)._id);
@@ -1074,7 +1086,7 @@ function App() {
     } else {
       const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
       const role = localStorage.getItem(ROLE_KEY);
-      if (isAuth && role === 'viewer') {
+      if (isAuth && ['viewer','setouchi','wbc'].includes(role)) {
         fetchBatches(null);
       } else {
         const saved = localStorage.getItem(TEACHER_KEY);
@@ -1606,8 +1618,8 @@ function App() {
   if (!isLoggedIn) return (
     <LoginScreen onLogin={(role) => {
       setIsLoggedIn(true);
-      setIsViewer(role === 'viewer');
-      if (role === 'viewer') fetchBatches(null);
+      setIsViewer(['viewer','setouchi','wbc'].includes(role));
+      if (['viewer','setouchi','wbc'].includes(role)) fetchBatches(null);
       else {
         const teacher = localStorage.getItem(TEACHER_KEY);
         if (teacher) fetchBatches(JSON.parse(teacher)._id);
@@ -1629,7 +1641,11 @@ function App() {
         <div>
           <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
           <h1 className="title" style={{ margin: '2px 0 0 0' }}>
-            {isViewer ? 'PHGIC' : `${selectedTeacher?.emoji} ${selectedTeacher?.name}`}
+            {isViewer
+              ? (localStorage.getItem(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
+                : localStorage.getItem(ROLE_KEY) === 'wbc' ? 'WBC'
+                : 'PHGIC')
+              : `${selectedTeacher?.emoji} ${selectedTeacher?.name}`}
           </h1>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1666,14 +1682,21 @@ function App() {
     </>
   );
 
-  const renderStudents = () => (
+  const renderStudents = () => {
+    const role = localStorage.getItem(ROLE_KEY);
+    let visibleStudents = selectedBatch.students;
+    if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.companyName === 'Setouchi');
+    else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.companyName === 'WBC');
+    else if (isViewer) visibleStudents = visibleStudents.filter(s => s.status === 'Selected');
+    visibleStudents = visibleStudents.slice().sort((a, b) => a.name.localeCompare(b.name));
+    return (
     <>
       <button className="back-btn" onClick={goBack}>←</button>
       <div className="header-with-back">
         <h1 className="title">{selectedBatch.name}</h1>
       </div>
       <h2 className="section-title">Students</h2>
-      {(isViewer ? selectedBatch.students.filter(s => s.status === 'Selected') : selectedBatch.students).map(student => (
+      {visibleStudents.map(student => (
         <div key={student._id} className="card student-card clickable" onClick={() => goToCategories(student)}>
           <div className="card-content">
             <div className="student-card-left">
@@ -1720,7 +1743,8 @@ function App() {
         <button className="print-qr-button" onClick={generateBatchQRs}>🖨 Print QR Codes</button>
       )}
     </>
-  );
+    );
+  };
 
   const renderCategories = () => (
     <>
