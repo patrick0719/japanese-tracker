@@ -92,6 +92,7 @@ mongoose.connect(process.env.MONGO_URI)
       photo: String,
       status: { type: String, default: 'Regular' },
       companyName: { type: String, default: '' },
+      kumiai: { type: String, default: '' },
       categories: [{
         name: String,
         items: [{
@@ -219,7 +220,7 @@ app.delete('/api/batches/:batchId', async (req, res) => {
 app.post('/api/batches/:batchId/students', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
-    batch.students.push({ name: req.body.name, photo: req.body.photo || null, status: req.body.status || 'Regular', companyName: req.body.companyName || '', categories: [], evaluations: [] });
+    batch.students.push({ name: req.body.name, photo: req.body.photo || null, status: req.body.status || 'Regular', companyName: req.body.companyName || '', kumiai: req.body.kumiai || '', categories: [], evaluations: [] });
     await batch.save();
     res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -233,6 +234,7 @@ app.patch('/api/batches/:batchId/students/:studentId', async (req, res) => {
     if (req.body.photo !== undefined) student.photo = req.body.photo;
     if (req.body.status !== undefined) student.status = req.body.status;
     if (req.body.companyName !== undefined) student.companyName = req.body.companyName;
+    if (req.body.kumiai !== undefined) student.kumiai = req.body.kumiai;
     await batch.save();
     res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }

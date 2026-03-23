@@ -1008,6 +1008,7 @@ function App() {
   const [newStudentPhoto, setNewStudentPhoto] = useState(null);
   const [newStudentStatus, setNewStudentStatus] = useState('Regular');
   const [newCompanyName, setNewCompanyName] = useState('');
+  const [newKumiai, setNewKumiai] = useState('');
   const [saving, setSaving] = useState(false);
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
@@ -1027,6 +1028,7 @@ function App() {
   const [translating, setTranslating] = useState(false);
   const translateTimerRef = useRef(null);
   const [allTeachers, setAllTeachers] = useState([]);
+  const [expandedCompanies, setExpandedCompanies] = useState({});
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const pullStartY = useRef(null);
@@ -1191,13 +1193,14 @@ function App() {
     setNewStudentStatus(student.status || 'Regular');
     setNewStudentPhoto(student.photo || null);
     setNewCompanyName(student.companyName || '');
+    setNewKumiai(student.kumiai || '');
     setModalType('editStudent');
     setShowModal(true);
   };
   const closeModal = () => {
     setShowModal(false);
     setEditingStudent(null);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName('');
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai('');
   };
 
   const updateStudent = async () => {
@@ -1206,7 +1209,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${editingStudent._id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName })
+        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
@@ -1236,7 +1239,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName })
+        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
@@ -1635,6 +1638,112 @@ function App() {
     }} />
   );
 
+  const renderCompanyGroups = () => {
+    const role = localStorage.getItem(ROLE_KEY);
+    const kumiai = role === 'setouchi' ? 'Setouchi' : 'WBC';
+
+    // Gather all matching students across all batches, filtered by kumiai field
+    const allStudents = [];
+    batches.forEach(batch => {
+      batch.students
+        .filter(s => s.status === 'Selected' && s.kumiai === kumiai)
+        .forEach(s => allStudents.push({ ...s, batchName: batch.name, batchId: batch._id, batch }));
+    });
+
+    // Group by actual companyName (e.g. Sunrise, Toyota)
+    const groups = {};
+    allStudents.forEach(s => {
+      const key = s.companyName || '(No Company)';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(s);
+    });
+
+    const groupKeys = Object.keys(groups).sort();
+
+    return (
+      <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div>
+            <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
+            <h1 className="title" style={{ margin: '2px 0 0 0' }}>{kumiai}</h1>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ background: '#fff3cd', color: '#856404', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6, border: '1px solid #ffc107' }}>VIEW ONLY</span>
+            <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }}
+              style={{ background: 'none', border: '1.5px solid #ff3b30', borderRadius: 8, color: '#ff3b30', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>
+          {kumiai} Students ({allStudents.length})
+        </h2>
+
+        {groupKeys.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>👥</div>
+            <p>No students found.</p>
+          </div>
+        )}
+
+        {groupKeys.map(groupKey => {
+          const students = groups[groupKey].slice().sort((a, b) => a.name.localeCompare(b.name));
+          const isExpanded = expandedCompanies[groupKey] !== false; // default expanded
+          return (
+            <div key={groupKey} style={{ marginBottom: 12 }}>
+              {/* Company/Batch header — tap to expand/collapse */}
+              <div
+                onClick={() => setExpandedCompanies(prev => ({ ...prev, [groupKey]: !isExpanded }))}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: '#8B0000', color: '#fff', borderRadius: isExpanded ? '12px 12px 0 0' : 12,
+                  padding: '12px 16px', cursor: 'pointer', userSelect: 'none',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>🏢</span>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{groupKey}</p>
+                    <p style={{ margin: 0, fontSize: 11, opacity: 0.8 }}>{students.length} student{students.length !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+                <span style={{ fontSize: 18, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>›</span>
+              </div>
+
+              {/* Students list */}
+              {isExpanded && (
+                <div style={{ background: '#fff', borderRadius: '0 0 12px 12px', border: '1.5px solid #e5e5ea', borderTop: 'none', overflow: 'hidden' }}>
+                  {students.map((student, idx) => (
+                    <div
+                      key={student._id}
+                      onClick={() => { setSelectedBatch(student.batch); goToCategories(student); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                        borderBottom: idx < students.length - 1 ? '1px solid #f2f2f7' : 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {student.photo
+                        ? <img src={student.photo} alt={student.name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                        : <span style={{ width: 40, height: 40, borderRadius: '50%', background: '#f2f2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>👤</span>
+                      }
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 15, color: '#1c1c1e' }}>{student.name}</p>
+                        <p style={{ margin: 0, fontSize: 12, color: '#8e8e93' }}>{student.batchName}</p>
+                      </div>
+                      <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
+  };
+
   const renderBatches = () => (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -1717,9 +1826,17 @@ function App() {
                     }}>
                     {student.status === 'Selected' ? 'SELECTED' : 'REGULAR'}
                   </span>
-                  {student.status === 'Selected' && student.companyName && (
+                  {student.status === 'Selected' && student.kumiai && (
                     <span style={{
                       background: '#fff3cd', color: '#856404',
+                      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                    }}>
+                      {student.kumiai}
+                    </span>
+                  )}
+                  {student.status === 'Selected' && student.companyName && (
+                    <span style={{
+                      background: '#e8f5e9', color: '#2e7d32',
                       fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
                     }}>
                       {student.companyName}
@@ -2267,15 +2384,22 @@ function App() {
                 </select>
               </div>
               {newStudentStatus === 'Selected' && (
-                <div className="form-group">
-                  <label>KUMIAI:</label>
-                  <select value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
-                    <option value="">— Select KUMIAI —</option>
-                    <option value="Setouchi">Setouchi</option>
-                    <option value="WBC">WBC</option>
-                  </select>
-                </div>
+                <>
+                  <div className="form-group">
+                    <label>KUMIAI:</label>
+                    <select value={newKumiai} onChange={(e) => setNewKumiai(e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
+                      <option value="">— Select KUMIAI —</option>
+                      <option value="Setouchi">Setouchi</option>
+                      <option value="WBC">WBC</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Company Name:</label>
+                    <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
+                      placeholder="e.g., Sunrise, Toyota..." />
+                  </div>
+                </>
               )}
               <div className="form-group">
                 <label>Photo (optional):</label>
@@ -2561,7 +2685,7 @@ function App() {
         </div>
       )}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      {view === 'batches' && renderBatches()}
+      {view === 'batches' && (['setouchi','wbc'].includes(localStorage.getItem(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
       {view === 'students' && renderStudents()}
       {view === 'categories' && renderCategories()}
       {view === 'evaluations' && renderEvaluations()}
