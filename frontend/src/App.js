@@ -1646,14 +1646,17 @@ function App() {
     const allStudents = [];
     batches.forEach(batch => {
       batch.students
-        .filter(s => s.status === 'Selected' && s.kumiai === kumiai)
+        .filter(s => s.status === 'Selected' && (s.kumiai === kumiai || (!s.kumiai && s.companyName === kumiai)))
         .forEach(s => allStudents.push({ ...s, batchName: batch.name, batchId: batch._id, batch }));
     });
 
     // Group by actual companyName (e.g. Sunrise, Toyota)
     const groups = {};
     allStudents.forEach(s => {
-      const key = s.companyName || '(No Company)';
+      // For legacy students, companyName was the kumiai — treat as no company
+      const rawCompany = s.companyName;
+      const isLegacyKumiai = rawCompany === 'Setouchi' || rawCompany === 'WBC';
+      const key = (!rawCompany || isLegacyKumiai) ? '(No Company Assigned)' : rawCompany;
       if (!groups[key]) groups[key] = [];
       groups[key].push(s);
     });
@@ -1794,8 +1797,8 @@ function App() {
   const renderStudents = () => {
     const role = localStorage.getItem(ROLE_KEY);
     let visibleStudents = selectedBatch.students;
-    if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.companyName === 'Setouchi');
-    else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.companyName === 'WBC');
+    if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'Setouchi' || (!s.kumiai && s.companyName === 'Setouchi')));
+    else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
     else if (isViewer) visibleStudents = visibleStudents.filter(s => s.status === 'Selected');
     visibleStudents = visibleStudents.slice().sort((a, b) => a.name.localeCompare(b.name));
     return (
