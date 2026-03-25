@@ -705,6 +705,10 @@ const SETOUCHI_USER = 'SETOUCHI';
 const SETOUCHI_PASS = 'setouchi';
 const WBC_USER = 'WBC';
 const WBC_PASS = 'wbc';
+const GYOUMUSUISHIN_USER = 'GYOUMUSUISHIN';
+const GYOUMUSUISHIN_PASS = 'gyoumusuishin';
+const GREENSERVICES_USER = 'GREEN SERVICES';
+const GREENSERVICES_PASS = 'greenservices';
 const AUTH_KEY = 'sage_auth';
 const ROLE_KEY = 'sage_role'; // 'admin' or 'viewer'
 
@@ -866,6 +870,14 @@ function LoginScreen({ onLogin }) {
       localStorage.setItem(AUTH_KEY, 'true');
       localStorage.setItem(ROLE_KEY, 'wbc');
       onLogin('wbc');
+    } else if (username === GYOUMUSUISHIN_USER && password === GYOUMUSUISHIN_PASS) {
+      localStorage.setItem(AUTH_KEY, 'true');
+      localStorage.setItem(ROLE_KEY, 'gyoumusuishin');
+      onLogin('gyoumusuishin');
+    } else if (username === GREENSERVICES_USER && password === GREENSERVICES_PASS) {
+      localStorage.setItem(AUTH_KEY, 'true');
+      localStorage.setItem(ROLE_KEY, 'greenservices');
+      onLogin('greenservices');
     } else {
       setError('Invalid username or password.');
     }
@@ -1034,7 +1046,7 @@ function App() {
   const pullStartY = useRef(null);
   const PULL_THRESHOLD = 110;
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
-  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc'].includes(localStorage.getItem(ROLE_KEY)));
+  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
   const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
   const [qrPassInput, setQrPassInput] = useState('');
@@ -1074,8 +1086,8 @@ function App() {
           setIsLoggedIn(true);
           const role = localStorage.getItem(ROLE_KEY);
           const teacher = localStorage.getItem(TEACHER_KEY);
-          setIsViewer(['viewer','setouchi','wbc'].includes(role));
-          if (['viewer','setouchi','wbc'].includes(role)) {
+          setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role));
+          if (['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) {
             fetchBatches(null);
           } else if (teacher) {
             fetchBatches(JSON.parse(teacher)._id);
@@ -1088,7 +1100,7 @@ function App() {
     } else {
       const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
       const role = localStorage.getItem(ROLE_KEY);
-      if (isAuth && ['viewer','setouchi','wbc'].includes(role)) {
+      if (isAuth && ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) {
         fetchBatches(null);
       } else {
         const saved = localStorage.getItem(TEACHER_KEY);
@@ -1175,7 +1187,7 @@ function App() {
 
   const goBack = () => {
     const role = localStorage.getItem(ROLE_KEY);
-    const isKumiai = role === 'setouchi' || role === 'wbc';
+    const isKumiai = ['setouchi','wbc','gyoumusuishin','greenservices'].includes(role);
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
     else if (view === 'examItems') { setView('categories'); setSelectedCategory(null); }
     else if (view === 'evaluationDetail') { setView('evaluations'); setSelectedEvaluation(null); }
@@ -1628,8 +1640,8 @@ function App() {
   if (!isLoggedIn) return (
     <LoginScreen onLogin={(role) => {
       setIsLoggedIn(true);
-      setIsViewer(['viewer','setouchi','wbc'].includes(role));
-      if (['viewer','setouchi','wbc'].includes(role)) fetchBatches(null);
+      setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role));
+      if (['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) fetchBatches(null);
       else {
         const teacher = localStorage.getItem(TEACHER_KEY);
         if (teacher) fetchBatches(JSON.parse(teacher)._id);
@@ -1647,7 +1659,10 @@ function App() {
 
   const renderCompanyGroups = () => {
     const role = localStorage.getItem(ROLE_KEY);
-    const kumiai = role === 'setouchi' ? 'Setouchi' : 'WBC';
+    const kumiai = role === 'setouchi' ? 'Setouchi'
+      : role === 'wbc' ? 'WBC'
+      : role === 'gyoumusuishin' ? 'Gyoumusuishin'
+      : 'Green Services';
 
     const allStudents = [];
     batches.forEach(batch => {
@@ -1759,6 +1774,8 @@ function App() {
             {isViewer
               ? (localStorage.getItem(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
                 : localStorage.getItem(ROLE_KEY) === 'wbc' ? 'WBC'
+                : localStorage.getItem(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMUSUISHIN'
+                : localStorage.getItem(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
                 : 'PHGIC')
               : `${selectedTeacher?.emoji} ${selectedTeacher?.name}`}
           </h1>
@@ -1802,6 +1819,8 @@ function App() {
     let visibleStudents = selectedBatch.students;
     if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'Setouchi' || (!s.kumiai && s.companyName === 'Setouchi')));
     else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
+    else if (role === 'gyoumusuishin') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.kumiai === 'Gyoumusuishin');
+    else if (role === 'greenservices') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.kumiai === 'Green Services');
     else if (isViewer) visibleStudents = visibleStudents.filter(s => s.status === 'Selected');
     visibleStudents = visibleStudents.slice().sort((a, b) => a.name.localeCompare(b.name));
     return (
@@ -2398,6 +2417,8 @@ function App() {
                       <option value="">— Select KUMIAI —</option>
                       <option value="Setouchi">Setouchi</option>
                       <option value="WBC">WBC</option>
+                      <option value="Gyoumusuishin">Gyoumusuishin</option>
+                      <option value="Green Services">Green Services</option>
                     </select>
                   </div>
                   <div className="form-group">
@@ -2691,7 +2712,7 @@ function App() {
         </div>
       )}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      {view === 'batches' && (['setouchi','wbc'].includes(localStorage.getItem(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
+      {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
       {view === 'students' && renderStudents()}
       {view === 'categories' && renderCategories()}
       {view === 'evaluations' && renderEvaluations()}
