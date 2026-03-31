@@ -377,7 +377,72 @@ app.delete('/api/batches/:batchId/students/:studentId/evaluations/:evalId', asyn
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+// ── ARCHIVE: migrate base64 images to Cloudinary ─────────────────────────────
+app.post('/api/archive/migrate-base64', async (req, res) => {
+  try {
+    const batches = await Batch.find();
+    let migrated = 0, skipped = 0, failed = 0;
+    const errors = [];
 
+    for (const batch of batches) {
+      let batchChanged = false;
+
+      for (const student of batch.students) {
+        for (const cat of student.categories) {
+          for (const item of cat.items) {
+            for (let i = 0; i < (item.images || []).length; i++) {
+              const imgRef = item.images[i];
+
+              // Check if this is an ObjectId (Image collection reference)
+              if (/^[a-f\d]{24}$/i.test(imgRef)) {
+                const imgDoc = await Image.findById(imgRef);
+                if (!imgDoc) { skipped++; continue; }
+
+                // Already a Cloudinary URL — skip
+                if (imgDoc.url && imgDoc.url.startsWith('http')) { skipped++; continue; }
+
+                // It's base64 — upload to Cloudinary
+                try {
+                  const { url, publicId } = await cloudinaryUpload(imgDoc.url || imgDoc.data);
+                  imgDoc.url = url;
+                  imgDoc.publicId = publicId;
+                  await imgDoc.save();
+                  migrated++;
+                  batchChanged = true;
+                } catch (e) {
+                  failed++;
+                  errors.push({ student: student.name, item: item.name, error: e.message });
+                }
+
+              } else if (imgRef && imgRef.startsWith('data:')) {
+                // Inline base64 directly in item.images — upload and replace
+                try {
+                  const { url, publicId } = await cloudinaryUpload(imgRef);
+                  const newImg = new Image({ url, publicId });
+                  await newImg.save();
+                  item.images[i] = newImg._id.toString();
+                  migrated++;
+                  batchChanged = true;
+                } catch (e) {
+                  failed++;
+                  errors.push({ student: student.name, item: item.name, error: e.message });
+                }
+              } else {
+                skipped++;
+              }
+            }
+          }
+        }
+      }
+
+      if (batchChanged) await batch.save();
+    }
+
+    res.json({ success: true, migrated, skipped, failed, errors });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));
 
