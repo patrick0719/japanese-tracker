@@ -541,6 +541,99 @@ app.get('/api/diagnostic/env-names', (req, res) => {
   const keys = Object.keys(process.env).filter(k => k.startsWith('CLOUDINARY'));
   res.json(keys);
 });
+// ── CLOUDINARY ARCHIVE UPLOAD (bagong account) ───────────────────────────────
+const cloudinaryArchiveUpload = async (base64Data) => {
+  const cloudName = process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_ARCHIVE_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_ARCHIVE_API_SECRET;
+
+  const base64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = 'sage-archive';
+  const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+  const signature = crypto.createHash('sha1').update(toSign).digest('hex');
+
+  const boundary = '----FormBoundary' + Math.random().toString(36).slice(2);
+  const CRLF = '\r\n';
+  const parts = [
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="file"${CRLF}${CRLF}data:image/jpeg;base64,${base64}`,
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="api_key"${CRLF}${CRLF}${apiKey}`,
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="timestamp"${CRLF}${CRLF}${timestamp}`,
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="signature"${CRLF}${CRLF}${signature}`,
+    `--${boundary}${CRLF}Content-Disposition: form-data; name="folder"${CRLF}${CRLF}${folder}`,
+    `--${boundary}--`,
+  ];
+  const body = parts.join(CRLF);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+    body,
+  });
+  const data = await res.json();
+  if (!data.secure_url) throw new Error(data.error?.message || 'Archive upload failed');
+  return { url: data.secure_url, publicId: data.public_id };
+};
+
+// ── ARCHIVE BATCH: move all images to archive Cloudinary ─────────────────────
+app.post('/api/archive/batch/:batchId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+
+    let migrated = 0, skipped = 0, failed = 0;
+    const errors = [];
+
+    for (const student of batch.students) {
+      for (const cat of student.categories) {
+        for (const item of cat.items) {
+          for (let i = 0; i < (item.images || []).length; i++) {
+            const imgRef = item.images[i];
+            if (!/^[a-f\d]{24}$/i.test(imgRef)) { skipped++; continue; }
+
+            const imgDoc = await Image.findById(imgRef);
+            if (!imgDoc?.url) { skipped++; continue; }
+
+            // Already in archive account — skip
+            if (imgDoc.url.includes(process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME)) {
+              skipped++; continue;
+            }
+
+            try {
+              // Fetch from old Cloudinary, re-upload to archive
+              const fetchRes = await fetch(imgDoc.url);
+              const arrayBuffer = await fetchRes.arrayBuffer();
+              const base64 = Buffer.from(arrayBuffer).toString('base64');
+              const mimeType = fetchRes.headers.get('content-type') || 'image/jpeg';
+              const dataUrl = `data:${mimeType};base64,${base64}`;
+
+              const { url, publicId } = await cloudinaryArchiveUpload(dataUrl);
+              imgDoc.url = url;
+              imgDoc.publicId = publicId;
+              await imgDoc.save();
+              migrated++;
+            } catch (e) {
+              failed++;
+              errors.push({ student: student.name, item: item.name, error: e.message });
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, batch: batch.name, migrated, skipped, failed, errors });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── CLEANUP: delete empty Image documents ────────────────────────────────────
+app.delete('/api/diagnostic/cleanup-empty', async (req, res) => {
+  try {
+    const result = await Image.deleteMany({ url: { $exists: false } });
+    res.json({ deleted: result.deletedCount });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));
 
