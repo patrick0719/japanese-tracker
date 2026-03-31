@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
-import './index.css';import './index.css';
+import './index.css';
 
 const API = 'https://japanese-tracker-production.up.railway.app/api';
 const CLOUDINARY_CLOUD = 'daofbq9wz';
