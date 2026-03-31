@@ -1,529 +1,1324 @@
+/* ═══════════════════════════════════════════════════════════════
+   SAGE ASIAN - REDESIGNED STYLES
+   Modern, warm, and professional design
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── CSS Variables (Design Tokens) ── */
+:root {
+  /* Primary Colors */
+  --primary: #2D6A4F;           /* Forest green - professional, calming */
+  --primary-hover: #1B4332;     /* Darker green for hover */
+  --primary-light: #D8F3DC;     /* Light green tint */
+  
+  /* Accent Colors */
+  --accent: #E07A3D;            /* Warm orange - friendly, energetic */
+  --accent-hover: #C56A2D;
+  --accent-light: #FFF0E6;
+  
+  /* Neutral Colors */
+  --background: #FAF8F5;        /* Warm off-white */
+  --surface: #FFFFFF;           /* Pure white for cards */
+  --surface-hover: #F7F5F2;
+  --border: #E8E4DF;            /* Warm gray border */
+  --border-light: #F0EDE8;
+  
+  /* Text Colors */
+  --text-primary: #2C2825;      /* Dark warm gray */
+  --text-secondary: #6B6560;    /* Medium gray */
+  --text-muted: #9B9590;        /* Light gray */
+  --text-inverse: #FFFFFF;
+  
+  /* Status Colors */
+  --success: #2D6A4F;
+  --success-light: #D8F3DC;
+  --danger: #DC3545;
+  --danger-light: #FFE5E5;
+  --warning: #E07A3D;
+  --warning-light: #FFF0E6;
+  --info: #3B82F6;
+  --info-light: #EBF4FF;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(44, 40, 37, 0.04);
+  --shadow-md: 0 4px 12px rgba(44, 40, 37, 0.08);
+  --shadow-lg: 0 8px 24px rgba(44, 40, 37, 0.12);
+  --shadow-hover: 0 8px 30px rgba(44, 40, 37, 0.15);
+  
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+}
+
+/* ── Base Styles ── */
+* {
+  box-sizing: border-box;
+}
+
 body {
-  background-color: #F2F2F7;
-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-margin: 0;
-padding: 20px;
+  background-color: var(--background);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin: 0;
+  padding: 20px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── Card Styles ── */
 .card {
-background: white;
-border-radius: 16px;
-padding: 16px;
-margin-bottom: 12px;
-box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-light);
+  transition: all var(--transition-normal);
 }
+
+.card:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+/* ── Typography ── */
 .title {
-font-size: 24px;
-font-weight: bold;
-margin-bottom: 16px;
-justify-content: center;
-display: flex;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  justify-content: center;
+  display: flex;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
 }
+
+.subtitle {
+  font-size: 15px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: 24px;
+}
+
 .card-title {
-font-size: 18px;
-font-weight: 600;
-margin: 0 0 4px 0;
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: var(--text-primary);
 }
+
 .card-subtitle {
-color: #8E8E93;
-margin: 0;
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 14px;
 }
-.add-button {
-width: 100%;
-padding: 16px;
-background: #007AFF;
-color: white;
-border: none;
-border-radius: 12px;
-font-size: 16px;
-font-weight: 600;
-cursor: pointer;
-margin-top: 8px;
-margin-bottom: 20px;
-}
-.add-button:hover {
-background: #0056CC;
-}
-/* Modal Styles */
-.modal-overlay {
-position: fixed;
-top: 0;
-left: 0;
-right: 0;
-bottom: 0;
-background: rgba(0, 0, 0, 0.5);
-display: flex;
-align-items: center;
-justify-content: center;
-z-index: 1000;
-}
-.modal {
-background: white;
-border-radius: 20px;
-padding: 24px;
-width: 90%;
-max-width: 400px;
-box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-}
-.modal-title {
-font-size: 20px;
-font-weight: bold;
-margin-bottom: 20px;
-text-align: center;
-}
-.form-group {
-margin-bottom: 16px;
-}
-.form-group label {
-display: block;
-font-size: 14px;
-font-weight: 600;
-margin-bottom: 6px;
-color: #333;
-}
-.form-group input {
-width: 100%;
-padding: 12px;
-border: 1px solid #ddd;
-border-radius: 10px;
-font-size: 16px;
-box-sizing: border-box;
-}
-.modal-buttons {
-display: flex;
-gap: 12px;
-margin-top: 24px;
-}
-.cancel-btn, .save-btn {
-flex: 1;
-padding: 14px;
-border: none;
-border-radius: 12px;
-font-size: 16px;
-font-weight: 600;
-cursor: pointer;
-}
-.cancel-btn {
-background: #F2F2F7;
-color: #333;
-}
-.save-btn {
-background: #007AFF;
-color: white;
-}
-/* Card with delete button */
-.card-content {
-display: flex;
-justify-content: space-between;
-align-items: center;
-}
-.delete-btn-icon {
-background: transparent;
-color: #FF3B30;
-border: 2px solid #FF3B30;
-border-radius: 50%;
-width: 32px;
-height: 32px;
-font-size: 16px;
-font-weight: bold;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: center;
-line-height: 1;
-}
-.delete-btn-icon:hover {
-background: #FF3B30;
-color: white;
-}
-/* Clickable card */
-.clickable {
-cursor: pointer;
-transition: transform 0.1s;
-}
-.clickable:hover {
-transform: scale(1.02);
-}
-.clickable:active {
-transform: scale(0.98);
-}
-/* Header with back button */
-.header-with-back {
-display: flex;
-align-items: center;
-gap: 12px;
-margin-bottom: 16px;
-justify-content: center;
-}
-.back-btn {
-  width: 32px;
-  height: 32px;
-  background: transparent;
-  color: #000;
-  border: 2px solid #000;
-  border-radius: 50%;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  transition: all 0.2s;
-}
+
 .section-title {
-font-size: 18px;
-font-weight: 600;
-color: #8E8E93;
-margin-bottom: 12px;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-}
-.student-card {
-border-left: 4px solid #007AFF;
-}
-/* Exam card styles */
-.exam-card {
-border-left: 4px solid #34C759;
-padding: 16px;
-}
-.exam-header {
-display: flex;
-justify-content: space-between;
-align-items: flex-start;
-margin-bottom: 12px;
-}
-/* Upload area */
-.upload-area {
-border: 2px dashed #C7C7CC;
-border-radius: 12px;
-padding: 24px;
-margin-bottom: 20px;
-text-align: center;
-color: #8E8E93;
-cursor: pointer;
-transition: all 0.2s;
-}
-.upload-area:hover {
-border-color: #007AFF;
-background: #F2F2F7;
-}
-.upload-icon {
-font-size: 32px;
-margin-bottom: 8px;
-}
-/* Image container */
-.image-container {
-position: relative;
-cursor: pointer;
-}
-.exam-image {
-width: 100%;
-max-height: 300px;
-object-fit: cover;
-border-radius: 12px;
-}
-.image-hint {
-position: absolute;
-bottom: 8px;
-left: 50%;
-transform: translateX(-50%);
-background: rgba(0,0,0,0.6);
-color: white;
-padding: 4px 12px;
-border-radius: 16px;
-font-size: 12px;
-margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-/* ── NEW CLASSES ── */
-
-/* Right side of exam list card (badge + delete) */
-.exam-right {
-display: flex;
-align-items: center;
-gap: 8px;
-}
-
-/* Small photo indicator badge on exam list */
-.has-photo-badge {
-font-size: 16px;
-line-height: 1;
-}
-
-/* Date + score row on exam detail view */
-.exam-detail-info {
-display: flex;
-gap: 8px;
-flex-wrap: wrap;
-margin-bottom: 20px;
-}
-
-/* Individual info pill */
-.detail-badge {
-background: #F2F2F7;
-color: #3A3A3C;
-font-size: 13px;
-font-weight: 600;
-padding: 6px 14px;
-border-radius: 20px;
-}
-
-/* Full-width delete button at bottom of exam detail */
-.delete-button-full {
-  width: 32px;
-  height: 32px;
-  padding: 14px;
-  background: transparent;
-  color: #FF3B30;
-  border: 2px solid #FF3B30;
-  border-radius: 50%;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  margin-top: 20px;
-  margin: auto;
-  transition: all 0.2s;
-  }
-
-.delete-button-full:hover {
-background: #FF3B30;
-color: white;
-}
-
-/* Student profile header in exams view */
-.student-profile-header {
-display: flex;
-flex-direction: column;
-align-items: center;
-margin-bottom: 24px;
-}
-
-.student-profile-avatar {
-width: 90px;
-height: 90px;
-border-radius: 50%;
-object-fit: cover;
-border: 3px solid #007AFF;
-box-shadow: 0 4px 12px rgba(0, 122, 255, 0.25);
-margin-bottom: 10px;
-}
-
-.student-profile-icon {
-width: 90px;
-height: 90px;
-border-radius: 50%;
-background: #F2F2F7;
-border: 3px solid #C7C7CC;
-display: flex;
-align-items: center;
-justify-content: center;
-font-size: 42px;
-margin-bottom: 10px;
-}
-
-.student-profile-name {
-font-size: 22px;
-font-weight: 700;
-margin: 0;
-text-align: center;
-}
-.student-card-left {
-display: flex;
-align-items: center;
-gap: 12px;
-}
-
-/* Student photo avatar (uploaded image) */
-.student-avatar {
-width: 44px;
-height: 44px;
-border-radius: 50%;
-object-fit: cover;
-border: 2px solid #007AFF;
-flex-shrink: 0;
-}
-
-/* Default icon avatar (no photo) */
-.student-avatar-icon {
-width: 44px;
-height: 44px;
-border-radius: 50%;
-background: #F2F2F7;
-display: flex;
-align-items: center;
-justify-content: center;
-font-size: 22px;
-flex-shrink: 0;
-border: 2px solid #C7C7CC;
-}
-
-/* Photo upload tap area inside modal */
-.student-photo-upload {
-border: 2px dashed #C7C7CC;
-border-radius: 12px;
-padding: 20px;
-text-align: center;
-cursor: pointer;
-transition: all 0.2s;
-display: flex;
-flex-direction: column;
-align-items: center;
-gap: 6px;
-}
-.student-photo-upload:hover {
-border-color: #007AFF;
-background: #F2F2F7;
-}
-
-/* Preview image inside modal upload area */
-.student-photo-preview {
-width: 80px;
-height: 80px;
-border-radius: 50%;
-object-fit: cover;
-border: 3px solid #007AFF;
-}
-/* ── QR PRINT STYLES ── */
-
-/* Green secondary button for Print QR Codes */
-.print-qr-button {
-  width: 25%;
-  padding: 14px;
-  background: transparent;
-  color: #34C759;
-  border: 2px solid #34C759;
-  border-radius: 12px;
+/* ── Buttons ── */
+.add-button {
+  width: 100%;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-md);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
+  margin-top: 8px;
+  margin-bottom: 20px;
+  transition: all var(--transition-normal);
+  box-shadow: 0 4px 14px rgba(45, 106, 79, 0.3);
+}
+
+.add-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(45, 106, 79, 0.4);
+}
+
+.add-button:active {
+  transform: translateY(0);
+}
+
+/* Secondary/Outline Button */
+.btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  padding: 14px 24px;
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.btn-outline:hover {
+  background: var(--primary);
+  color: var(--text-inverse);
+}
+
+/* ── Delete Button ── */
+.delete-btn-icon {
+  background: var(--danger-light);
+  color: var(--danger);
+  border: none;
+  border-radius: var(--radius-full);
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
   display: flex;
-  justify-content: center;
   align-items: center;
-  margin: auto;
-  transition: all 0.2s;
-  }
-  .print-qr-button:hover {
-  background: #34C759;
-  color: white;
-  }
-  
-  /* Full-screen overlay for print sheet */
-  .print-overlay {
+  justify-content: center;
+  transition: all var(--transition-normal);
+}
+
+.delete-btn-icon:hover {
+  background: var(--danger);
+  color: var(--text-inverse);
+  transform: scale(1.1);
+}
+
+/* ── Edit Button ── */
+.edit-btn-icon {
+  background: var(--warning-light);
+  color: var(--accent);
+  border: none;
+  border-radius: var(--radius-full);
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-normal);
+}
+
+.edit-btn-icon:hover {
+  background: var(--accent);
+  color: var(--text-inverse);
+  transform: scale(1.1);
+}
+
+/* ── Clickable Cards ── */
+.clickable {
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.clickable:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+}
+
+.clickable:active {
+  transform: translateY(-2px);
+}
+
+/* ── Modal Styles ── */
+.modal-overlay {
   position: fixed;
-  inset: 0;
-  background: white;
-  z-index: 2000;
-  overflow-y: auto;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(44, 40, 37, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn var(--transition-fast);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal {
+  background: var(--surface);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: var(--shadow-lg);
+  animation: slideUp var(--transition-normal);
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(20px);
   }
-  
-  /* Toolbar (hidden when printing) */
-  .print-toolbar {
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 24px;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+/* ── Form Styles ── */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  box-sizing: border-box;
+  transition: all var(--transition-fast);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-light);
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.cancel-btn, .save-btn {
+  flex: 1;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.cancel-btn {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  border: 2px solid var(--border);
+}
+
+.cancel-btn:hover {
+  background: var(--border);
+}
+
+.save-btn {
+  background: var(--primary);
+  color: var(--text-inverse);
+  box-shadow: 0 4px 14px rgba(45, 106, 79, 0.3);
+}
+
+.save-btn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-2px);
+}
+
+/* ── Card Content Layout ── */
+.card-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 20px;
-  background: #1C1C1E;
-  color: white;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  }
-  .print-toolbar-title {
-  font-size: 15px;
-  font-weight: 600;
-  }
-  .print-toolbar-actions {
+}
+
+/* ── Header with Back Button ── */
+.header-with-back {
   display: flex;
-  gap: 10px;
-  }
-  .print-go-btn {
-  background: #34C759;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  }
-  .print-close-btn {
-  background: #FF3B30;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  }
-  
-  /* Grid of QR cards */
-  .print-sheet {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  padding: 20px;
-  justify-content: flex-start;
-  }
-  
-  /* Individual cut-out card */
-  .qr-card-print {
-  width: 160px;
-  border: 1px dashed #AAAAAA;
-  border-radius: 8px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin: 6px;
-  box-sizing: border-box;
-  page-break-inside: avoid;
-  }
-  
-  .qr-print-avatar {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid #007AFF;
-  }
-  .qr-print-icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: #F2F2F7;
-  border: 2px solid #C7C7CC;
+  gap: 16px;
+  margin-bottom: 24px;
+  justify-content: center;
+}
+
+.back-btn {
+  width: 40px;
+  height: 40px;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  }
-  .qr-print-code {
-  width: 120px;
-  height: 120px;
-  }
-  .qr-print-name {
+  transition: all var(--transition-normal);
+  box-shadow: var(--shadow-sm);
+}
+
+.back-btn:hover {
+  background: var(--primary);
+  color: var(--text-inverse);
+  border-color: var(--primary);
+}
+
+/* ── Student Card ── */
+.student-card {
+  border-left: 4px solid var(--primary);
+  position: relative;
+  overflow: hidden;
+}
+
+.student-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, var(--primary-light) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+  pointer-events: none;
+}
+
+.student-card:hover::before {
+  opacity: 1;
+}
+
+.student-card-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.student-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  border: 3px solid var(--primary);
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(45, 106, 79, 0.2);
+}
+
+.student-avatar-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--primary-light) 0%, var(--border-light) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  border: 3px solid var(--border);
+}
+
+/* ── Status Badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-success {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.badge-warning {
+  background: var(--warning-light);
+  color: var(--warning);
+}
+
+.badge-info {
+  background: var(--info-light);
+  color: var(--info);
+}
+
+.badge-danger {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+/* Company Tags */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  margin-right: 6px;
+  margin-top: 6px;
+}
+
+.tag-primary {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.tag-accent {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Exam Card Styles ── */
+.exam-card {
+  border-left: 4px solid var(--success);
+  padding: 20px;
+}
+
+.exam-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.exam-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.has-photo-badge {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.exam-detail-info {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.detail-badge {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+}
+
+.detail-badge.score {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* ── Upload Area ── */
+.upload-area {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  margin-bottom: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  background: var(--surface-hover);
+}
+
+.upload-area:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.upload-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+/* ── Image Container ── */
+.image-container {
+  position: relative;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.exam-image {
+  width: 100%;
+  max-height: 350px;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  transition: transform var(--transition-slow);
+}
+
+.image-container:hover .exam-image {
+  transform: scale(1.02);
+}
+
+.image-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(44, 40, 37, 0.8);
+  color: var(--text-inverse);
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
   font-size: 13px;
+  font-weight: 500;
+  margin: 0;
+  backdrop-filter: blur(4px);
+}
+
+/* ── Delete Button Full ── */
+.delete-button-full {
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+  transition: all var(--transition-normal);
+}
+
+.delete-button-full:hover {
+  background: var(--danger);
+  color: var(--text-inverse);
+}
+
+/* ── Student Profile Header ── */
+.student-profile-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 24px;
+  background: linear-gradient(180deg, var(--primary-light) 0%, transparent 100%);
+  border-radius: var(--radius-xl);
+}
+
+.student-profile-avatar {
+  width: 100px;
+  height: 100px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  border: 4px solid var(--primary);
+  box-shadow: 0 8px 24px rgba(45, 106, 79, 0.25);
+  margin-bottom: 16px;
+}
+
+.student-profile-icon {
+  width: 100px;
+  height: 100px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-hover) 100%);
+  border: 4px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.student-profile-name {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+/* ── Photo Upload ── */
+.student-photo-upload {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-hover);
+}
+
+.student-photo-upload:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.student-photo-preview {
+  width: 90px;
+  height: 90px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  border: 4px solid var(--primary);
+  box-shadow: 0 4px 16px rgba(45, 106, 79, 0.2);
+}
+
+/* ── QR Print Styles ── */
+.print-qr-button {
+  padding: 14px 24px;
+  background: transparent;
+  color: var(--success);
+  border: 2px solid var(--success);
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--transition-normal);
+}
+
+.print-qr-button:hover {
+  background: var(--success);
+  color: var(--text-inverse);
+}
+
+.print-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--surface);
+  z-index: 2000;
+  overflow-y: auto;
+}
+
+.print-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: var(--text-primary);
+  color: var(--text-inverse);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.print-toolbar-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.print-toolbar-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.print-go-btn {
+  background: var(--success);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.print-go-btn:hover {
+  background: var(--primary-hover);
+}
+
+.print-close-btn {
+  background: var(--danger);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.print-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 24px;
+  justify-content: flex-start;
+}
+
+.qr-card-print {
+  width: 170px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 8px;
+  box-sizing: border-box;
+  page-break-inside: avoid;
+  background: var(--surface);
+}
+
+.qr-print-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  border: 3px solid var(--primary);
+}
+
+.qr-print-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  border: 3px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.qr-print-code {
+  width: 130px;
+  height: 130px;
+}
+
+.qr-print-name {
+  font-size: 14px;
   font-weight: 700;
   text-align: center;
   margin: 0;
-  }
-  .qr-print-batch {
-  font-size: 10px;
-  color: #8E8E93;
+  color: var(--text-primary);
+}
+
+.qr-print-batch {
+  font-size: 11px;
+  color: var(--text-muted);
   text-align: center;
   margin: 0;
+}
+
+/* ── Photo Gallery ── */
+.photo-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.photo-thumbnail {
+  position: relative;
+  aspect-ratio: 3/4;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  transition: all var(--transition-normal);
+}
+
+.photo-thumbnail:hover {
+  border-color: var(--primary);
+  transform: scale(1.03);
+  box-shadow: var(--shadow-lg);
+}
+
+.photo-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.page-number {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(44, 40, 37, 0.8);
+  color: var(--text-inverse);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.add-photo-btn {
+  aspect-ratio: 3/4;
+  border-radius: var(--radius-lg);
+  border: 2px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  background: var(--surface-hover);
+}
+
+.add-photo-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.add-icon {
+  font-size: 36px;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+
+.add-photo-btn span {
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* ── Camera Overlay ── */
+.camera-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: black;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-video {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: rgba(0,0,0,0.9);
+  gap: 24px;
+}
+
+.capture-btn {
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-full);
+  border: 5px solid var(--text-inverse);
+  background: var(--text-inverse);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.capture-btn:hover {
+  transform: scale(1.1);
+}
+
+.close-camera-btn {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  background: rgba(255,255,255,0.15);
+  color: var(--text-inverse);
+  border: none;
+  font-size: 22px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all var(--transition-fast);
+}
+
+.close-camera-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+/* ── Cropper Modal ── */
+.cropper-overlay {
+  z-index: 2000;
+}
+
+.cropper-modal {
+  max-width: 90%;
+  width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.cropper-hint {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.cropper-container {
+  background: var(--surface-hover);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.cropper-image {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.cropper-controls {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.cropper-tip {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+/* ── Teacher Card (for teacher selection screen) ── */
+.teacher-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  border: 2px solid transparent;
+  box-shadow: var(--shadow-sm);
+}
+
+.teacher-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+  transform: translateX(4px);
+}
+
+.teacher-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  border: 3px solid var(--primary-light);
+  position: relative;
+}
+
+.teacher-avatar-wrapper {
+  position: relative;
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--success);
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-full);
+}
+
+.teacher-info {
+  flex: 1;
+}
+
+.teacher-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 2px 0;
+}
+
+.teacher-chevron {
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
+.teacher-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Batch Card ── */
+.batch-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-shadow: var(--shadow-sm);
+  border: 2px solid transparent;
+}
+
+.batch-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
+
+.batch-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.batch-icon {
+  width: 48px;
+  height: 48px;
+  background: var(--primary-light);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.batch-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 2px 0;
+}
+
+.batch-count {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ── Skills Rating ── */
+.skills-section {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.skills-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 20px;
+}
+
+.skill-row {
+  margin-bottom: 20px;
+}
+
+.skill-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.skill-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.skill-name-jp {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.skill-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skill-btn {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.skill-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.skill-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-inverse);
+}
+
+.skill-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-left: auto;
+}
+
+/* ── Logged In Header ── */
+.logged-in-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logged-in-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logged-in-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  border: 2px solid var(--primary);
+}
+
+.logged-in-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.logged-in-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.header-btn {
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.header-btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+}
+
+.header-btn-outline:hover {
+  background: var(--primary);
+  color: var(--text-inverse);
+}
+
+.header-btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border: 2px solid var(--danger);
+}
+
+.header-btn-danger:hover {
+  background: var(--danger);
+  color: var(--text-inverse);
+}
+
+/* ── Print Media ── */
+@media print {
+  .no-print { display: none !important; }
+  .print-overlay { position: static; overflow: visible; }
+  .print-sheet { padding: 0; }
+  body > div > *:not(.print-overlay) { display: none !important; }
+}
+
+/* ── Responsive Adjustments ── */
+@media (max-width: 480px) {
+  body {
+    padding: 16px;
   }
   
-  /* Print media — hide toolbar, show only cards */
-  @media print {
-    .no-print { display: none !important; }
-    .print-overlay { position: static; overflow: visible; }
-    .print-sheet { padding: 0; }
-    body > div > *:not(.print-overlay) { display: none !important; }
+  .title {
+    font-size: 24px;
   }
+  
+  .photo-gallery {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .skill-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+}
