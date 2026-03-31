@@ -585,6 +585,88 @@ app.post('/api/archive/student/:batchId/:studentId', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ── RESTORE STUDENT: move images back to main Cloudinary ─────────────────────
+app.post('/api/archive/restore/:batchId/:studentId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    let migrated = 0, skipped = 0, failed = 0;
+    const errors = [];
+
+    for (const cat of student.categories) {
+      for (const item of cat.items) {
+        for (let i = 0; i < (item.images || []).length; i++) {
+          const imgRef = item.images[i];
+          if (!/^[a-f\d]{24}$/i.test(imgRef)) { skipped++; continue; }
+
+          const imgDoc = await Image.findById(imgRef);
+          if (!imgDoc?.url) { skipped++; continue; }
+
+          // Only restore if currently in archive account
+          if (!imgDoc.url.includes(process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME)) {
+            skipped++; continue;
+          }
+
+          try {
+            const fetchRes = await fetch(imgDoc.url);
+            const arrayBuffer = await fetchRes.arrayBuffer();
+            const base64 = Buffer.from(arrayBuffer).toString('base64');
+            const mimeType = fetchRes.headers.get('content-type') || 'image/jpeg';
+            const dataUrl = `data:${mimeType};base64,${base64}`;
+
+            const { url, publicId } = await cloudinaryUpload(dataUrl);
+            imgDoc.url = url;
+            imgDoc.publicId = publicId;
+            await imgDoc.save();
+            migrated++;
+          } catch (e) {
+            failed++;
+            errors.push({ item: item.name, error: e.message });
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, student: student.name, migrated, skipped, failed, errors });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PERMANENT DELETE STUDENT: delete all images + student record ──────────────
+app.delete('/api/archive/permanent/:batchId/:studentId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    // Delete all Image documents + Cloudinary files
+    for (const cat of student.categories) {
+      for (const item of cat.items) {
+        for (const imgRef of (item.images || [])) {
+          if (!/^[a-f\d]{24}$/i.test(imgRef)) continue;
+          const imgDoc = await Image.findById(imgRef);
+          if (imgDoc?.publicId) {
+            await cloudinaryDelete(imgDoc.publicId).catch(() => {});
+          }
+          await Image.findByIdAndDelete(imgRef).catch(() => {});
+        }
+      }
+    }
+
+    // Remove student from batch
+    batch.students = batch.students.filter(s => s._id.toString() !== req.params.studentId);
+    await batch.save();
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));
 

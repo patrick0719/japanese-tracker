@@ -1918,35 +1918,49 @@ function App() {
   }
   <h1 className="student-profile-name">{selectedStudent.name}</h1>
   {!isViewer && (
-    <button
-      onClick={async () => {
-        if (!window.confirm(`Archive all exam images of ${selectedStudent.name}? This will move them to the archive storage.`)) return;
-        try {
-          const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-          const data = await res.json();
-          if (data.success) {
-            alert(`✅ Done! ${data.migrated} image(s) archived, ${data.skipped} skipped.`);
-          } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
-          }
-        } catch (e) {
-          alert('Failed to archive: ' + e.message);
-        }
-      }}
-      style={{
-        background: 'transparent',
-        color: '#8B2020',
-        border: '1.5px solid #8B2020',
-        borderRadius: 8,
-        fontSize: 13,
-        fontWeight: 600,
-        padding: '7px 16px',
-        cursor: 'pointer',
-        marginTop: 4,
-      }}
-    >
-      📦 Archive Images
-    </button>
+    <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+      <button
+        onClick={async () => {
+          if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: 'transparent', color: '#8B2020', border: '1.5px solid #8B2020', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >📦 Archive</button>
+
+      <button
+        onClick={async () => {
+          if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: 'transparent', color: '#007AFF', border: '1.5px solid #007AFF', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >🔄 Restore</button>
+
+      <button
+        onClick={async () => {
+          if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
+          if (!window.confirm(`Are you sure? This is irreversible.`)) return;
+          try {
+            const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+              alert(`🗑️ ${selectedStudent.name} permanently deleted.`);
+              goBack();
+            } else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >🗑️ Delete</button>
+    </div>
   )}
 </div>
 
