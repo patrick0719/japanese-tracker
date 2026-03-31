@@ -695,3 +695,35 @@ app.post('/api/translate', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ── DIAGNOSTIC: check image format ──────────────────────────────────────────
+app.get('/api/diagnostic/images', async (req, res) => {
+  try {
+    const batches = await Batch.find();
+    const result = [];
+    batches.forEach(batch => {
+      batch.students.forEach(student => {
+        student.categories.forEach(cat => {
+          cat.items.forEach(item => {
+            (item.images || []).forEach(img => {
+              if (!img) return;
+              result.push({
+                batch: batch.name,
+                student: student.name,
+                format: img.startsWith('data:') ? 'base64'
+                  : img.startsWith('http') ? 'url'
+                  : 'unknown',
+                preview: img.substring(0, 60)
+              });
+            });
+          });
+        });
+      });
+    });
+    res.json({
+      total: result.length,
+      base64Count: result.filter(r => r.format === 'base64').length,
+      urlCount: result.filter(r => r.format === 'url').length,
+      samples: result.slice(0, 5)
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
