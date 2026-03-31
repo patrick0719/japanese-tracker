@@ -536,6 +536,11 @@ app.delete('/api/diagnostic/cleanup-empty', async (req, res) => {
     res.json({ deleted: result.deletedCount });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+// ── DIAGNOSTIC: check env var names ─────────────────────────────────────────
+app.get('/api/diagnostic/env-names', (req, res) => {
+  const keys = Object.keys(process.env).filter(k => k.startsWith('CLOUDINARY'));
+  res.json(keys);
+});
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));
 
