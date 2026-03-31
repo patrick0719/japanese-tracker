@@ -1912,12 +1912,43 @@ function App() {
     <>
       <button className="back-btn" onClick={goBack}>←</button>
       <div className="student-profile-header">
-        {selectedStudent.photo
-          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
-          : <span className="student-profile-icon">👤</span>
+  {selectedStudent.photo
+    ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+    : <span className="student-profile-icon">👤</span>
+  }
+  <h1 className="student-profile-name">{selectedStudent.name}</h1>
+  {!isViewer && (
+    <button
+      onClick={async () => {
+        if (!window.confirm(`Archive all exam images of ${selectedStudent.name}? This will move them to the archive storage.`)) return;
+        try {
+          const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+            alert(`✅ Done! ${data.migrated} image(s) archived, ${data.skipped} skipped.`);
+          } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+          }
+        } catch (e) {
+          alert('Failed to archive: ' + e.message);
         }
-        <h1 className="student-profile-name">{selectedStudent.name}</h1>
-      </div>
+      }}
+      style={{
+        background: 'transparent',
+        color: '#8B2020',
+        border: '1.5px solid #8B2020',
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: 600,
+        padding: '7px 16px',
+        cursor: 'pointer',
+        marginTop: 4,
+      }}
+    >
+      📦 Archive Images
+    </button>
+  )}
+</div>
 
       {/* ── Exam Categories Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
