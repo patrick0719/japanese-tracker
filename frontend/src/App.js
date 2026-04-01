@@ -1109,6 +1109,8 @@ function App() {
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       const data = await res.json();
+      // Sort by most recently created first (MongoDB _id contains timestamp)
+      data.sort((a, b) => (b._id > a._id ? 1 : -1));
       setBatches(data);
       // Fetch all teachers to resolve signatures
       try {
