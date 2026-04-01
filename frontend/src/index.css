@@ -213,7 +213,7 @@
    }
    
    .student-profile-avatar {
-     width: 100px; height: 100px;
+     width: 150px; height: 150px;
      border-radius: 22px;
      object-fit: cover;
      border: 3px solid var(--surface);
