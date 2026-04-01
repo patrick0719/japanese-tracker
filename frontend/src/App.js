@@ -1281,7 +1281,7 @@ function App() {
         body: JSON.stringify({ name: newName, teacherId: selectedTeacher?._id || null })
       });
       const newBatch = await res.json();
-      setBatches(prev => [...prev, newBatch]);
+      setBatches(prev => [newBatch, ...prev]);
       closeModal();
     } catch { alert('Error saving batch.'); }
     setSaving(false);
@@ -2414,7 +2414,8 @@ function App() {
     const titles = { batch: 'Add New Batch', student: 'Add New Student', editStudent: 'Edit Student', category: 'Add Exam Category', exam: 'Add New Exam', evaluation: 'New Evaluation' };
     return (
       <div className="modal-overlay">
-        <div className="modal">
+        <div className="modal-sheet">
+          <div className="modal-handle" />
           <h2 className="modal-title">{titles[modalType]}</h2>
           {modalType === 'evaluation' ? (
             <>
@@ -2424,7 +2425,7 @@ function App() {
               </div>
               <div className="form-group">
                 <label>Date:</label>
-                <input type="date" value={evalDate} onChange={(e) => setEvalDate(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15 }} />
+                <input type="date" value={evalDate} onChange={(e) => setEvalDate(e.target.value)} />
               </div>
               <p style={{ fontSize: 12, color: '#8e8e93', margin: '4px 0 0' }}>
                 This will be saved as the <strong>{['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th'][evaluations.length] || `${evaluations.length+1}th`} Evaluation</strong>.
@@ -2515,9 +2516,9 @@ function App() {
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., N5 Saturday 2PM" />
             </div>
           )}
-          <div className="modal-buttons">
-            <button className="cancel-btn" onClick={closeModal} disabled={saving}>Cancel</button>
-            <button className="save-btn" disabled={saving}
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <button className="btn-secondary" onClick={closeModal} disabled={saving} style={{ flex: 1 }}>Cancel</button>
+            <button className="btn-primary" disabled={saving} style={{ flex: 2 }}
               onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
               {saving ? 'Saving...' : 'Save'}
             </button>
