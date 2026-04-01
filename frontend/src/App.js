@@ -772,76 +772,71 @@ function TeacherSelect({ onSelect }) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px' }}>
-      <img src={LOGO_DATA_URL} alt="Sage Asian" style={{ width: '55%', maxWidth: 240, marginBottom: 28, objectFit: 'contain' }} />
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>Select Teacher</h2>
-      <p style={{ fontSize: 13, color: '#8e8e93', marginBottom: 24 }}>Tap your name to continue</p>
-      <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {loadingT && <p style={{ textAlign: 'center', color: '#8e8e93' }}>Loading...</p>}
+    <div className="teacher-screen">
+      <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" />
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Select Teacher</h2>
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>Tap your name to continue</p>
+      <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {loadingT && <p className="loading-text">Loading...</p>}
         {teachers.map(t => (
           <div key={t._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => onSelect(t)} style={{
-              flex: 1, display: 'flex', alignItems: 'center', gap: 14,
-              background: '#fff', border: 'none', borderRadius: 14,
-              padding: '12px 20px', fontSize: 17, fontWeight: 600, color: '#1c1c1e',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.08)', cursor: 'pointer',
-            }}>
-              {/* Photo or emoji — tap to change */}
+            <button onClick={() => onSelect(t)} className="teacher-card">
               <label onClick={e => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }} title="Tap to change photo">
                 {t.photo
-                  ? <img src={t.photo} alt={t.name} style={{ width: 46, height: 46, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e5e5ea' }} />
-                  : <span style={{ fontSize: 36, lineHeight: 1 }}>{t.emoji}</span>
+                  ? <img src={t.photo} alt={t.name} className="student-avatar" />
+                  : <span style={{ fontSize: 34, lineHeight: 1 }}>{t.emoji}</span>
                 }
-                <span style={{ position: 'absolute', bottom: -2, right: -4, background: '#007AFF', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>✎</span>
+                <span style={{ position: 'absolute', bottom: -2, right: -4, background: 'var(--accent)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>✎</span>
                 <input type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => e.target.files[0] && uploadTeacherPhoto(t._id, e.target.files[0])} />
               </label>
-              {t.name}
-              <span style={{ marginLeft: 'auto', color: '#c7c7cc', fontSize: 20 }}>›</span>
+              <span style={{ flex: 1, textAlign: 'left', fontSize: 16, fontWeight: 600 }}>{t.name}</span>
+              <span className="chevron">›</span>
             </button>
             {deleteId === t._id ? (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => deleteTeacher(t._id)} style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
-                <button onClick={() => setDeleteId(null)} style={{ background: '#e5e5ea', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => deleteTeacher(t._id)} className="btn-danger" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Delete</button>
+                <button onClick={() => setDeleteId(null)} className="btn-cancel" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Cancel</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <label title="Upload signature" style={{ cursor: 'pointer', fontSize: 18, padding: '4px 8px', color: t.signature ? '#34c759' : '#8e8e93' }}>
+                <label title="Upload signature" style={{ cursor: 'pointer', fontSize: 18, padding: '4px 8px', color: t.signature ? 'var(--green)' : 'var(--text-tertiary)' }}>
                   ✍️
                   <input type="file" accept="image/*" style={{ display: 'none' }}
                     onChange={e => e.target.files[0] && uploadSignature(t._id, e.target.files[0])} />
                 </label>
-                <button onClick={() => setDeleteId(t._id)} style={{ background: 'none', border: 'none', color: '#ff3b30', fontSize: 18, cursor: 'pointer', padding: '4px 8px' }}>✕</button>
+                <button onClick={() => setDeleteId(t._id)} className="delete-btn-icon">✕</button>
               </div>
             )}
           </div>
         ))}
         {showAdd ? (
-          <div style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#6e6e73', marginBottom: 8 }}>Choose emoji</p>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+          <div className="login-card" style={{ padding: 16 }}>
+            <p className="section-title" style={{ marginTop: 0 }}>Choose emoji</p>
+            <div className="emoji-row" style={{ marginBottom: 14 }}>
               {EMOJIS.map(e => (
-                <button key={e} onClick={() => setNewEmoji(e)} style={{ fontSize: 24, background: newEmoji === e ? '#e8f4ff' : 'none', border: newEmoji === e ? '2px solid #007AFF' : '2px solid transparent', borderRadius: 8, padding: '4px 8px', cursor: 'pointer' }}>{e}</button>
+                <button key={e} onClick={() => setNewEmoji(e)} className={`emoji-btn${newEmoji === e ? ' selected' : ''}`}>{e}</button>
               ))}
             </div>
-            <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-              placeholder="Teacher name" autoFocus
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, marginBottom: 10, boxSizing: 'border-box' }} />
+            <div className="form-group">
+              <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
+                placeholder="Teacher name" autoFocus />
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={addTeacher} disabled={saving || !newName.trim()} style={{ flex: 1, background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+              <button onClick={addTeacher} disabled={saving || !newName.trim()} className="btn-primary" style={{ fontSize: 14 }}>
                 {saving ? 'Saving...' : 'Add Teacher'}
               </button>
-              <button onClick={() => { setShowAdd(false); setNewName(''); }} style={{ background: '#e5e5ea', border: 'none', borderRadius: 10, padding: '12px 16px', fontSize: 15, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => { setShowAdd(false); setNewName(''); }} className="btn-secondary" style={{ fontSize: 14 }}>Cancel</button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setShowAdd(true)} style={{ background: '#fff', border: '2px dashed #c7c7cc', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 600, color: '#007AFF', cursor: 'pointer' }}>
+          <button onClick={() => setShowAdd(true)} className="print-qr-button" style={{ marginTop: 0 }}>
             + Add Teacher
           </button>
         )}
       </div>
       <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(TEACHER_KEY); window.location.reload(); }}
-        style={{ marginTop: 36, background: 'none', border: 'none', color: '#ff3b30', fontSize: 14, cursor: 'pointer' }}>
+        className="btn-logout" style={{ marginTop: 36 }}>
         Logout
       </button>
     </div>
@@ -885,48 +880,36 @@ function LoginScreen({ onLogin }) {
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#f2f2f7',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      padding: '32px 24px', zIndex: 99999,
-    }}>
-      <img src={LOGO_DATA_URL} alt="Sage Asian" style={{ width: '65%', maxWidth: 280, marginBottom: 32, objectFit: 'contain' }} />
-      <div style={{ width: '100%', maxWidth: 360, background: '#fff', borderRadius: 16, padding: '28px 24px', boxShadow: '0 4px 24px rgba(0,0,0,0.10)' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: 20, fontSize: 20, fontWeight: 700, color: '#1c1c1e' }}>Login</h2>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 13, color: '#6e6e73', fontWeight: 600 }}>Username</label>
+    <div className="login-screen">
+      <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" style={{ marginBottom: 32 }} />
+      <div className="login-card">
+        <h2 className="login-title">Welcome back 👋</h2>
+        <div className="form-group">
+          <label>Username</label>
           <input
             type="text"
             value={username}
             onChange={e => { setUsername(e.target.value); setError(''); }}
             placeholder="Enter username"
-            style={{ display: 'block', width: '100%', marginTop: 6, padding: '12px 14px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
-        <div style={{ marginBottom: 8 }}>
-          <label style={{ fontSize: 13, color: '#6e6e73', fontWeight: 600 }}>Password</label>
-          <div style={{ position: 'relative', marginTop: 6 }}>
+        <div className="form-group">
+          <label>Password</label>
+          <div className="password-wrapper">
             <input
               type={showPass ? 'text' : 'password'}
               value={password}
               onChange={e => { setPassword(e.target.value); setError(''); }}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
               placeholder="Enter password"
-              style={{ display: 'block', width: '100%', padding: '12px 44px 12px 14px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
             />
-            <button onClick={() => setShowPass(p => !p)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#8e8e93' }}>
+            <button onClick={() => setShowPass(p => !p)} className="password-toggle">
               {showPass ? '🙈' : '👁️'}
             </button>
           </div>
         </div>
-        {error && <p style={{ color: '#ff3b30', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{error}</p>}
-        <button
-          onClick={handleLogin}
-          style={{ width: '100%', marginTop: 16, padding: '14px', background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
-        >
-          Login
-        </button>
+        {error && <p className="error-text">{error}</p>}
+        <button onClick={handleLogin} className="btn-primary" style={{ marginTop: 8 }}>Login</button>
       </div>
     </div>
   );
@@ -1737,21 +1720,22 @@ function App() {
     // ── Company list view ─────────────────────────────────────────────
     return (
       <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div>
-            <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
-            <h1 className="title" style={{ margin: '2px 0 0 0' }}>{kumiai}</h1>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ background: '#fff3cd', color: '#856404', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6, border: '1px solid #ffc107' }}>VIEW ONLY</span>
-            <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }}
-              style={{ background: 'none', border: '1.5px solid #ff3b30', borderRadius: 8, color: '#ff3b30', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
-              Logout
-            </button>
+        <div className="header-banner">
+          <div className="top-row">
+            <div>
+              <p className="logged-in-label">Logged in as</p>
+              <h1 className="title">{kumiai}</h1>
+            </div>
+            <div className="top-row-actions">
+              <span className="badge-view-only">VIEW ONLY</span>
+              <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>
+        <h2 className="section-title">
           Companies ({groupKeys.length})
         </h2>
 
@@ -1787,34 +1771,43 @@ function App() {
 
   const renderBatches = () => (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <div>
-          <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
-          <h1 className="title" style={{ margin: '2px 0 0 0' }}>
-            {isViewer
-              ? (localStorage.getItem(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
-                : localStorage.getItem(ROLE_KEY) === 'wbc' ? 'WBC'
-                : localStorage.getItem(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMUSUISHIN'
-                : localStorage.getItem(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
-                : 'PHGIC')
-              : `${selectedTeacher?.emoji} ${selectedTeacher?.name}`}
-          </h1>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {isViewer && <span style={{ background: '#fff3cd', color: '#856404', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6, border: '1px solid #ffc107' }}>VIEW ONLY</span>}
-          {!isViewer && (
-            <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }}
-              style={{ background: 'none', border: '1.5px solid #8B0000', borderRadius: 8, color: '#8B0000', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
-              Switch
+      <div className="header-banner">
+        <div className="top-row">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {!isViewer && selectedTeacher?.photo && (
+              <img src={selectedTeacher.photo} alt={selectedTeacher.name}
+                style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
+            )}
+            {!isViewer && !selectedTeacher?.photo && (
+              <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji}</span>
+            )}
+            <div>
+              <p className="logged-in-label">Logged in as</p>
+              <h1 className="title">
+                {isViewer
+                  ? (localStorage.getItem(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
+                    : localStorage.getItem(ROLE_KEY) === 'wbc' ? 'WBC'
+                    : localStorage.getItem(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMUSUISHIN'
+                    : localStorage.getItem(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
+                    : 'PHGIC')
+                  : selectedTeacher?.name}
+              </h1>
+            </div>
+          </div>
+          <div className="top-row-actions">
+            {isViewer && <span className="badge-view-only">VIEW ONLY</span>}
+            {!isViewer && (
+              <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">
+                Switch
+              </button>
+            )}
+            <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); localStorage.removeItem(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
+              Logout
             </button>
-          )}
-          <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); localStorage.removeItem(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }}
-            style={{ background: 'none', border: '1.5px solid #ff3b30', borderRadius: 8, color: '#ff3b30', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
-            Logout
-          </button>
+          </div>
         </div>
       </div>
-      <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>{isViewer ? 'All Batches' : 'My Batches'}</h2>
+      <h2 className="section-title">{isViewer ? 'All Batches' : 'My Batches'}</h2>
       {(isViewer ? batches.filter(b => b.students.some(s => s.status === 'Selected')) : batches).map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
