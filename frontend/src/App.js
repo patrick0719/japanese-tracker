@@ -2273,20 +2273,47 @@ function App() {
         <h1 className="title">📁 {selectedCategory?.name}</h1>
       </div>
       <h2 className="section-title">Exams</h2>
-      {(selectedCategory?.items || []).map(item => (
-        <div key={item._id} className="card exam-card clickable" onClick={() => goToExamDetail(item)}>
-          <div className="card-content">
-            <div>
-              <h3 className="card-title">📝 {item.name}</h3>
-              <p className="card-subtitle">{item.date} • Score: {item.score}/{item.totalScore ?? 100}</p>
-            </div>
-            <div className="exam-right">
-              {item.images?.length > 0 && <span className="has-photo-badge">📷</span>}
-              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>}
-            </div>
-          </div>
+      {(selectedCategory?.items || []).length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">📝</div>
+          <p className="empty-state-text">No exams yet</p>
+          <p className="empty-state-sub">Add an exam to start tracking scores</p>
         </div>
-      ))}
+      ) : (
+        <div className="exam-list">
+          {(selectedCategory?.items || []).map((item, idx) => {
+            const score = item.score ?? 0;
+            const total = item.totalScore ?? 100;
+            const pct = Math.round((score / total) * 100);
+            const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+            const bg   = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
+            return (
+              <div key={item._id} className="exam-list-card clickable" onClick={() => goToExamDetail(item)}>
+                {/* Score badge */}
+                <div className="exam-score-badge" style={{ background: bg, color }}>
+                  <span className="exam-score-num">{score}</span>
+                  <span className="exam-score-sep">/{total}</span>
+                </div>
+                {/* Info */}
+                <div className="exam-list-info">
+                  <p className="exam-list-name">{item.name}</p>
+                  <p className="exam-list-meta">{item.date}</p>
+                  {item.images?.length > 0 && (
+                    <span className="exam-photo-chip">📷 {item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
+                {/* Pct pill */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                  <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
+                  {!isViewer && (
+                    <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>+ Add Exam</button>}
     </>
   );
@@ -2295,109 +2322,105 @@ function App() {
     const rawImages = selectedExam.images?.length > 0
       ? selectedExam.images
       : selectedExam.image ? [selectedExam.image] : [];
-    // Resolve IDs to URLs — legacy base64 and Cloudinary URLs pass through
     const allImages = rawImages.map(idOrData =>
       (idOrData.startsWith('data:') || idOrData.startsWith('http')) ? idOrData : (resolvedImages[idOrData] || null)
     );
+    const score = selectedExam.score ?? 0;
+    const total = selectedExam.totalScore ?? 100;
+    const pct = Math.round((score / total) * 100);
+    const pctColor = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+    const pctBg    = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
 
     return (
       <>
         <button className="back-btn" onClick={goBack}>←</button>
-        <div className="header-with-back">
-          <h1 className="title">{selectedExam.name}</h1>
-        </div>
-        <div className="exam-detail-info">
-          <span className="detail-badge">📅 {selectedExam.date}</span>
-          <span className="detail-badge">🎯 Score: {selectedExam.score}/{selectedExam.totalScore ?? 100}</span>
+
+        {/* Hero score card */}
+        <div className="exam-detail-hero">
+          <div className="exam-detail-hero-left">
+            <h1 className="exam-detail-title">{selectedExam.name}</h1>
+            <p className="exam-detail-date">📅 {selectedExam.date}</p>
+          </div>
+          <div className="exam-detail-score-ring" style={{ background: pctBg, borderColor: pctColor }}>
+            <span className="exam-detail-score-num" style={{ color: pctColor }}>{score}</span>
+            <span className="exam-detail-score-total" style={{ color: pctColor }}>/{total}</span>
+            <span className="exam-detail-score-pct" style={{ color: pctColor }}>{pct}%</span>
+          </div>
         </div>
 
-        <h2 className="section-title">Exam Pages ({allImages.length} pages)</h2>
-
-        {/* Action buttons — hidden for viewer */}
+        {/* Action buttons */}
         {!isViewer && (
-          <div style={{ display: 'flex', gap: 10, marginBottom: 16, padding: '0 4px' }}>
-            <button className="save-btn" style={{ flex: 1 }} onClick={() => openScanner(selectedExam._id)}>
-              📷 Scan Page
+          <div className="exam-action-row">
+            <button className="exam-action-btn scan" onClick={() => openScanner(selectedExam._id)}>
+              <span>📷</span> Scan Page
             </button>
-            <button className="cancel-btn" style={{ flex: 1 }} onClick={() => triggerFileInput(selectedExam._id)}>
-              🖼️ Upload Page
+            <button className="exam-action-btn upload" onClick={() => triggerFileInput(selectedExam._id)}>
+              <span>🖼️</span> Upload
             </button>
           </div>
         )}
 
-        {/* Document pages — vertical list like Files app */}
+        {/* Pages */}
+        <h2 className="section-title">
+          Exam Pages {rawImages.length > 0 && `· ${rawImages.length} page${rawImages.length !== 1 ? 's' : ''}`}
+        </h2>
+
         {rawImages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>📄</div>
-            <p style={{ color: '#8E8E93' }}>No pages yet. Scan or upload to add.</p>
+          <div className="exam-empty-pages">
+            <div style={{ fontSize: 52, marginBottom: 14 }}>📄</div>
+            <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>No pages yet</p>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Scan or upload exam pages to get started</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px' }}>
+          <div className="exam-pages-grid">
             {rawImages.map((idOrData, idx) => {
               const src = (idOrData.startsWith('data:') || idOrData.startsWith('http')) ? idOrData : resolvedImages[idOrData];
               return (
-              <div key={idx} style={{
-                background: '#fff',
-                borderRadius: 12,
-                boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-                overflow: 'hidden',
-                position: 'relative'
-              }}>
-                {/* Page header */}
-                <div style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 12px', background: '#f5f5f7', borderBottom: '1px solid #e5e5ea'
-                }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>Page {idx + 1}</span>
+                <div key={idx} className="exam-page-card">
+                  {/* Page number pill */}
+                  <div className="exam-page-num-pill">Page {idx + 1}</div>
+
+                  {/* Delete button */}
                   {!isViewer && (
                     <button
+                      className="exam-page-delete"
                       onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
-                      style={{
-                        background: 'none', border: 'none', color: '#ff3b30',
-                        fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '2px 6px'
-                      }}
-                    >
-                      🗑 Delete
-                    </button>
+                    >✕</button>
+                  )}
+
+                  {/* Image */}
+                  {src ? (
+                    <img
+                      src={src}
+                      alt={`Page ${idx + 1}`}
+                      className="exam-page-img"
+                      onClick={() => setImageViewer({ images: allImages.filter(Boolean), index: allImages.filter(Boolean).indexOf(src) })}
+                    />
+                  ) : (
+                    <div className="exam-page-loading">
+                      <span>⏳</span>
+                      <p>Loading...</p>
+                    </div>
+                  )}
+
+                  {/* Tap to view hint */}
+                  {src && (
+                    <div className="exam-page-tap-hint">Tap to view</div>
                   )}
                 </div>
-                {/* Document image or loading placeholder */}
-                {src ? (
-                <img
-                  src={src}
-                  alt={`Page ${idx + 1}`}
-                  onClick={() => setImageViewer({ images: allImages.filter(Boolean), index: allImages.filter(Boolean).indexOf(src) })}
-                  style={{
-                    width: '100%',
-                    aspectRatio: '210 / 297',
-                    objectFit: 'contain',
-                    display: 'block',
-                    background: '#fafafa',
-                    cursor: 'zoom-in'
-                  }}
-                />
-                ) : (
-                  <div style={{ width: '100%', aspectRatio: '210/297', background: '#f5f5f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: '#8e8e93', fontSize: 13 }}>⏳ Loading...</span>
-                  </div>
-                )}
-              </div>
               );
             })}
           </div>
         )}
 
-        {/* Spacer before delete button */}
         <div style={{ height: 16 }} />
 
-        {/* Hidden — keep old empty state removed */}
-        {false && (
-          <div></div>
+        {!isViewer && (
+          <button className="btn-danger" style={{ width: '100%', marginTop: 8 }}
+            onClick={(e) => deleteExam(selectedExam._id, e)}>
+            🗑 Delete Exam
+          </button>
         )}
-
-        {!isViewer && <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
-          🗑 Delete Exam
-        </button>}
 
         <input
           type="file"
