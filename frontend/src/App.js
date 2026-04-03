@@ -293,16 +293,21 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
-      <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, zIndex: 10, position: 'relative' }}>
+      <div style={{
+        background: '#000', padding: '12px 20px',
+        paddingTop: 'env(safe-area-inset-top, 12px)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexShrink: 0, zIndex: 10, position: 'relative'
+      }}>
         <button onClick={onRetake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
           ← Retake
         </button>
         <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
-        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
           Use ✓
         </button>
       </div>
-      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center', padding: '6px 0', flexShrink: 0 }}>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center', padding: '5px 0', flexShrink: 0 }}>
         Drag the green corners to adjust
       </div>
       {/* Wrapper gives the canvas measurable dimensions */}
@@ -318,6 +323,19 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
           onTouchMove={onPointerMove}
           onTouchEnd={onPointerUp}
         />
+      </div>
+      {/* Bottom confirm button — always reachable even if top bar is under notch */}
+      <div style={{
+        flexShrink: 0, background: '#000', padding: '14px 24px',
+        paddingBottom: 'env(safe-area-inset-bottom, 14px)',
+        display: 'flex', gap: 12
+      }}>
+        <button onClick={onRetake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer' }}>
+          ← Retake
+        </button>
+        <button onClick={onConfirm} style={{ flex: 2, background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+          ✓ Use This Page
+        </button>
       </div>
     </div>
   );
@@ -676,7 +694,10 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
         {/* Top bar */}
-        <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{
+          background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
+          paddingTop: 'env(safe-area-inset-top, 12px)'
+        }}>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
             Cancel
           </button>
@@ -686,33 +707,37 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
           <button
             onClick={finishBulkScan}
             disabled={bulkUploading || scannedPages.length === 0}
-            style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: 15, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}
+            style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}
           >
-            {bulkUploading ? 'Uploading...' : `Upload (${scannedPages.length})`}
+            {bulkUploading ? '⏳ Uploading…' : `✅ Done (${scannedPages.length})`}
           </button>
         </div>
 
-        {/* Scanned pages grid */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        {/* Scrollable pages grid — takes remaining space above bottom bar */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, alignContent: 'start' }}>
           {scannedPages.map((url, idx) => (
             <div key={idx} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#222', aspectRatio: '3/4' }}>
               <img src={url} alt={`Page ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>
+              <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>
                 Page {idx + 1}
               </div>
               <button
                 onClick={() => removeBulkPage(idx)}
-                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
               >✕</button>
             </div>
           ))}
         </div>
 
-        {/* Bottom: scan next page button */}
-        <div style={{ background: '#111', padding: '16px 24px', display: 'flex', justifyContent: 'center' }}>
+        {/* Bottom bar — always visible, never scrolled away */}
+        <div style={{
+          flexShrink: 0, background: '#000', padding: '14px 24px',
+          paddingBottom: 'env(safe-area-inset-bottom, 14px)',
+          display: 'flex', justifyContent: 'center'
+        }}>
           <button
             onClick={scanNextPage}
-            style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 40px', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 48px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
           >
             📸 Scan Next Page
           </button>
@@ -737,54 +762,68 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   // Camera phase
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+      {/* Status bar at top */}
+      <div style={{
+        flexShrink: 0, paddingTop: 'env(safe-area-inset-top, 12px)',
+        background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 16px'
+      }}>
+        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 18px', fontSize: 15, cursor: 'pointer' }}>
+          Cancel
+        </button>
+        <div style={{
+          background: detected ? 'rgba(0,160,70,0.92)' : 'rgba(60,60,60,0.9)',
+          color: '#fff', padding: '6px 16px', borderRadius: 20,
+          fontSize: 13, fontWeight: 600
+        }}>
+          {detected ? '🟢 ' + status : '🔍 ' + status}
+        </div>
+        {/* Page counter / review shortcut */}
+        {bulkMode && scannedPages.length > 0 ? (
+          <button
+            onClick={() => setPhase('review')}
+            style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', minWidth: 60, textAlign: 'center' }}
+          >
+            {scannedPages.length}p ›
+          </button>
+        ) : (
+          <div style={{ width: 70 }} />
+        )}
+      </div>
+
+      {/* Camera viewfinder */}
       <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
         <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
         <canvas ref={overlayCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-        <div style={{
-          position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)',
-          background: detected ? 'rgba(0,160,70,0.92)' : 'rgba(0,0,0,0.72)',
-          color: '#fff', padding: '8px 20px', borderRadius: 20,
-          fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap'
-        }}>
-          {detected ? '🟢 ' + status : '🔍 ' + status}
-        </div>
-
         {/* Dotted guide when nothing detected */}
         {!detected && (
           <div style={{
-            position: 'absolute', top: '8%', left: '5%', right: '5%', bottom: '18%',
-            border: '2px dashed rgba(255,255,255,0.4)', borderRadius: 12, pointerEvents: 'none',
+            position: 'absolute', top: '6%', left: '5%', right: '5%', bottom: '6%',
+            border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 12, pointerEvents: 'none',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>Place document inside</span>
+            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Place document inside</span>
           </div>
         )}
       </div>
 
-      <div style={{ background: '#111', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, cursor: 'pointer' }}>
-          Cancel
-        </button>
+      {/* Bottom shutter bar - always visible, fixed height */}
+      <div style={{
+        flexShrink: 0, background: '#111',
+        paddingBottom: 'env(safe-area-inset-bottom, 12px)',
+        height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}>
         <button onClick={takePhoto} style={{
           background: '#fff', color: '#000', border: 'none', borderRadius: 50,
-          width: 64, height: 64, fontSize: 26, fontWeight: 700, cursor: 'pointer',
-          boxShadow: '0 0 0 4px rgba(255,255,255,0.3)'
+          width: 72, height: 72, fontSize: 28, fontWeight: 700, cursor: 'pointer',
+          boxShadow: '0 0 0 5px rgba(255,255,255,0.25), 0 0 0 8px rgba(255,255,255,0.1)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0
         }}>
           📸
         </button>
-        {/* In bulk mode, show page count + review button; otherwise spacer */}
-        {bulkMode && scannedPages.length > 0 ? (
-          <button
-            onClick={() => setPhase('review')}
-            style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', minWidth: 70, textAlign: 'center' }}
-          >
-            {scannedPages.length}p ›
-          </button>
-        ) : (
-          <div style={{ width: 80 }} />
-        )}
       </div>
     </div>
   );
@@ -1646,12 +1685,78 @@ function App() {
 
   const handleScanCapture = async (imageDataOrArray) => {
     setShowScanner(false);
-    if (scanningExamId) {
-      const images = Array.isArray(imageDataOrArray) ? imageDataOrArray : [imageDataOrArray];
-      for (const imageData of images) {
-        await uploadImage(scanningExamId, imageData);
-      }
-      setScanningExamId(null);
+    if (!scanningExamId) return;
+    const examId = scanningExamId;
+    setScanningExamId(null);
+
+    const images = Array.isArray(imageDataOrArray) ? imageDataOrArray : [imageDataOrArray];
+
+    // Track accumulated imageIds locally so each upload sees the latest list,
+    // not the stale selectedExam from the React closure
+    let accumulatedImageIds = [...(selectedExam?.images || [])];
+
+    for (const imageData of images) {
+      try {
+        // Step 1: Upload to Cloudinary
+        const formData = new FormData();
+        const blob = await fetch(imageData).then(r => r.blob());
+        formData.append('file', blob, 'image.jpg');
+        formData.append('upload_preset', CLOUDINARY_PRESET);
+        formData.append('folder', 'sage-bulacan');
+        const cdnRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+          method: 'POST', body: formData
+        });
+        const cdnData = await cdnRes.json();
+        if (!cdnData.secure_url) throw new Error('Cloudinary upload failed');
+
+        // Step 2: Save to MongoDB
+        const imgRes = await fetch(`${API}/images`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: cdnData.secure_url, publicId: cdnData.public_id })
+        });
+        const { _id: imageId } = await imgRes.json();
+
+        // Step 3: Attach imageId to exam
+        const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/image`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error('Upload failed');
+
+        // Cache and accumulate
+        imageCache.current[imageId] = cdnData.secure_url;
+        accumulatedImageIds = [...accumulatedImageIds, imageId];
+
+        // Update state with accumulated list so each iteration stacks correctly
+        setResolvedImages(prev => ({ ...prev, [imageId]: cdnData.secure_url }));
+        setSelectedExam(prev => ({ ...prev, images: accumulatedImageIds }));
+        setSelectedCategory(prev => ({
+          ...prev,
+          items: prev.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it)
+        }));
+        setSelectedStudent(prev => ({
+          ...prev,
+          categories: prev.categories.map(c => c._id === selectedCategory._id
+            ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+            : c)
+        }));
+        setSelectedBatch(prev => ({
+          ...prev,
+          students: prev.students.map(s => s._id === selectedStudent._id
+            ? { ...s, categories: s.categories.map(c => c._id === selectedCategory._id
+                ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+                : c) }
+            : s)
+        }));
+        setBatches(prev => prev.map(b => b._id === selectedBatch._id
+          ? { ...b, students: b.students.map(s => s._id === selectedStudent._id
+              ? { ...s, categories: s.categories.map(c => c._id === selectedCategory._id
+                  ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+                  : c) }
+              : s) }
+          : b));
+      } catch { alert('Error saving one of the scanned pages.'); }
     }
   };
 
