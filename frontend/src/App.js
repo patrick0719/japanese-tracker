@@ -324,7 +324,7 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
 }
 
 // ── DOCUMENT SCANNER COMPONENT (CamScanner-style) ──────────────────────────
-function DocumentScanner({ onCapture, onClose }) {
+function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const overlayCanvasRef = useRef(null);
@@ -333,7 +333,7 @@ function DocumentScanner({ onCapture, onClose }) {
   const stableCountRef = useRef(0);
   const lastCornersRef = useRef(null);
 
-  // phase: 'camera' | 'crop'
+  // phase: 'camera' | 'crop' | 'review' (bulk only)
   const [phase, setPhase] = useState('camera');
   const [capturedDataUrl, setCapturedDataUrl] = useState(null);
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 });
@@ -344,6 +344,10 @@ function DocumentScanner({ onCapture, onClose }) {
   const [status, setStatus] = useState('Initializing camera...');
   const [detected, setDetected] = useState(false);
   const capturingRef = useRef(false);
+
+  // Bulk scan pages accumulator
+  const [scannedPages, setScannedPages] = useState([]);
+  const [bulkUploading, setBulkUploading] = useState(false);
 
   // ── CAMERA PHASE ─────────────────────────────────────────────────
   useEffect(() => {
@@ -622,7 +626,13 @@ function DocumentScanner({ onCapture, onClose }) {
         }
       }
       dst.getContext('2d').putImageData(outData, 0, 0);
-      onCapture(dst.toDataURL('image/jpeg', 0.92));
+      const croppedUrl = dst.toDataURL('image/jpeg', 0.92);
+      if (bulkMode) {
+        setScannedPages(prev => [...prev, croppedUrl]);
+        setPhase('review');
+      } else {
+        onCapture(croppedUrl);
+      }
     };
     img.src = capturedDataUrl;
   };
@@ -636,6 +646,80 @@ function DocumentScanner({ onCapture, onClose }) {
     setDetected(false);
     setPhase('camera');
   };
+
+  // Bulk: go back to camera to scan next page
+  const scanNextPage = () => {
+    capturingRef.current = false;
+    setCapturedDataUrl(null);
+    setCorners(null);
+    stableCountRef.current = 0;
+    lastCornersRef.current = null;
+    setDetected(false);
+    setPhase('camera');
+  };
+
+  // Bulk: upload all scanned pages
+  const finishBulkScan = async () => {
+    if (scannedPages.length === 0) return;
+    setBulkUploading(true);
+    await onCapture(scannedPages);
+    setBulkUploading(false);
+  };
+
+  // Bulk: remove a page from the list
+  const removeBulkPage = (idx) => {
+    setScannedPages(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // ── BULK REVIEW PHASE ─────────────────────────────────────────────
+  if (bulkMode && phase === 'review') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+        {/* Top bar */}
+        <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
+            Cancel
+          </button>
+          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
+            {scannedPages.length} Page{scannedPages.length !== 1 ? 's' : ''} Scanned
+          </span>
+          <button
+            onClick={finishBulkScan}
+            disabled={bulkUploading || scannedPages.length === 0}
+            style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: 15, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}
+          >
+            {bulkUploading ? 'Uploading...' : `Upload (${scannedPages.length})`}
+          </button>
+        </div>
+
+        {/* Scanned pages grid */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          {scannedPages.map((url, idx) => (
+            <div key={idx} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#222', aspectRatio: '3/4' }}>
+              <img src={url} alt={`Page ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>
+                Page {idx + 1}
+              </div>
+              <button
+                onClick={() => removeBulkPage(idx)}
+                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >✕</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom: scan next page button */}
+        <div style={{ background: '#111', padding: '16px 24px', display: 'flex', justifyContent: 'center' }}>
+          <button
+            onClick={scanNextPage}
+            style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 40px', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            📸 Scan Next Page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ── CROP RENDER ──────────────────────────────────────────────────
   if (phase === 'crop' && capturedDataUrl && corners) {
@@ -690,7 +774,17 @@ function DocumentScanner({ onCapture, onClose }) {
         }}>
           📸
         </button>
-        <div style={{ width: 80 }} />
+        {/* In bulk mode, show page count + review button; otherwise spacer */}
+        {bulkMode && scannedPages.length > 0 ? (
+          <button
+            onClick={() => setPhase('review')}
+            style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', minWidth: 70, textAlign: 'center' }}
+          >
+            {scannedPages.length}p ›
+          </button>
+        ) : (
+          <div style={{ width: 80 }} />
+        )}
       </div>
     </div>
   );
@@ -1550,10 +1644,13 @@ function App() {
     setShowScanner(true);
   };
 
-  const handleScanCapture = async (imageData) => {
+  const handleScanCapture = async (imageDataOrArray) => {
     setShowScanner(false);
     if (scanningExamId) {
-      await uploadImage(scanningExamId, imageData);
+      const images = Array.isArray(imageDataOrArray) ? imageDataOrArray : [imageDataOrArray];
+      for (const imageData of images) {
+        await uploadImage(scanningExamId, imageData);
+      }
       setScanningExamId(null);
     }
   };
@@ -2825,8 +2922,10 @@ function App() {
       {renderPrintQRs()}
       {showScanner && (
         <DocumentScanner
+          bulkMode={true}
           onCapture={handleScanCapture}
           onClose={() => { setShowScanner(false); setScanningExamId(null); }}
+        />
         />
       )}
       {imageViewer && (
