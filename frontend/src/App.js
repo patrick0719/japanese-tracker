@@ -3,8 +3,20 @@ import QRCode from 'qrcode';
 import './index.css';
 
 const API = 'https://japanese-tracker-production.up.railway.app/api';
-const CLOUDINARY_CLOUD = 'daofbq9wz';
-const CLOUDINARY_PRESET = 'cnbztuzc';
+// TODO: set REACT_APP_CLOUDINARY_CLOUD and REACT_APP_CLOUDINARY_PRESET in your .env file
+const CLOUDINARY_CLOUD = process.env.REACT_APP_CLOUDINARY_CLOUD || 'daofbq9wz';
+const CLOUDINARY_PRESET = process.env.REACT_APP_CLOUDINARY_PRESET || 'cnbztuzc';
+
+// Safe localStorage helper — returns null on SecurityError (e.g. private/incognito mode)
+function safeLocalGet(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function safeLocalSet(key, value) {
+  try { localStorage.setItem(key, value); } catch {}
+}
+function safeLocalRemove(key) {
+  try { localStorage.removeItem(key); } catch {}
+}
 
 
 // Compress image before sending to backend
@@ -49,16 +61,21 @@ function ImageViewer({ images, startIndex, onClose }) {
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
-      display: 'flex', flexDirection: 'column'
-    }}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Image viewer, ${images.length} pages`}
+      style={{
+        position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
+        display: 'flex', flexDirection: 'column'
+      }}
+    >
       {/* Top bar */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '12px 20px', background: 'rgba(0,0,0,0.8)'
       }}>
-        <button onClick={onClose} style={{
+        <button onClick={onClose} aria-label="Close image viewer" style={{
           background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1
         }}>✕</button>
         <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
@@ -75,7 +92,7 @@ function ImageViewer({ images, startIndex, onClose }) {
       >
         <img
           src={images[current]}
-          alt={`Page ${current + 1}`}
+          alt={`Page ${current + 1} of ${images.length}`}
           style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
         />
       </div>
@@ -85,28 +102,44 @@ function ImageViewer({ images, startIndex, onClose }) {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '16px 24px', background: 'rgba(0,0,0,0.8)'
       }}>
-        <button onClick={prev} disabled={current === 0} style={{
-          background: current === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
-          color: '#fff', border: 'none', borderRadius: 10,
-          padding: '10px 24px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer'
-        }}>‹</button>
+        <button
+          onClick={prev}
+          disabled={current === 0}
+          aria-label="Previous page"
+          style={{
+            background: current === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
+            color: '#fff', border: 'none', borderRadius: 10,
+            padding: '10px 24px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer'
+          }}>‹</button>
 
         {/* Dot indicators */}
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div role="tablist" aria-label="Page navigation" style={{ display: 'flex', gap: 6 }}>
           {images.map((_, i) => (
-            <div key={i} onClick={() => setCurrent(i)} style={{
-              width: i === current ? 20 : 8, height: 8,
-              borderRadius: 4, background: i === current ? '#fff' : 'rgba(255,255,255,0.4)',
-              cursor: 'pointer', transition: 'all 0.2s'
-            }} />
+            <div
+              key={i}
+              role="tab"
+              aria-selected={i === current}
+              aria-label={`Go to page ${i + 1}`}
+              tabIndex={0}
+              onClick={() => setCurrent(i)}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setCurrent(i)}
+              style={{
+                width: i === current ? 20 : 8, height: 8,
+                borderRadius: 4, background: i === current ? '#fff' : 'rgba(255,255,255,0.4)',
+                cursor: 'pointer', transition: 'all 0.2s'
+              }} />
           ))}
         </div>
 
-        <button onClick={next} disabled={current === images.length - 1} style={{
-          background: current === images.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
-          color: '#fff', border: 'none', borderRadius: 10,
-          padding: '10px 24px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer'
-        }}>›</button>
+        <button
+          onClick={next}
+          disabled={current === images.length - 1}
+          aria-label="Next page"
+          style={{
+            background: current === images.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
+            color: '#fff', border: 'none', borderRadius: 10,
+            padding: '10px 24px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer'
+          }}>›</button>
       </div>
     </div>
   );
@@ -118,15 +151,16 @@ function ProgressChart({ student, batch, onClose }) {
   const [timeRange, setTimeRange] = useState('all');
   const [selectedCategories, setSelectedCategories] = useState([]);
 
-  useEffect(() => {
-    processChartData();
-  }, [student, timeRange, selectedCategories]);
-
-  const processChartData = () => {
+  const processChartData = useCallback(() => {
     setLoading(true);
     
     const allExams = [];
     const categories = new Set();
+
+    // Compute cutoff dates ONCE — avoid mutating `now` across multiple calls
+    const now = new Date();
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+    const oneMonthAgo   = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
     
     (student.categories || []).forEach(cat => {
       categories.add(cat.name);
@@ -135,13 +169,10 @@ function ProgressChart({ student, batch, onClose }) {
           const date = new Date(item.date);
           const pct = (item.score / item.totalScore) * 100;
           
-          const now = new Date();
           let include = true;
           if (timeRange === '3months') {
-            const threeMonthsAgo = new Date(now.setMonth(now.getMonth() - 3));
             include = date >= threeMonthsAgo;
           } else if (timeRange === '1month') {
-            const oneMonthAgo = new Date(now.setMonth(now.getMonth() - 1));
             include = date >= oneMonthAgo;
           }
           
@@ -170,7 +201,9 @@ function ProgressChart({ student, batch, onClose }) {
       const sumXY = points.reduce((s, p, i) => s + i * p.percentage, 0);
       const sumXX = points.reduce((s, p, i) => s + i * i, 0);
       
-      const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+      const denom = n * sumXX - sumX * sumX;
+      if (denom === 0) return null;
+      const slope = (n * sumXY - sumX * sumY) / denom;
       const intercept = (sumY - slope * sumX) / n;
       
       return points.map((_, i) => slope * i + intercept);
@@ -188,7 +221,11 @@ function ProgressChart({ student, batch, onClose }) {
     
     setChartData({ exams: allExams, categories: Array.from(categories), trend, stats });
     setLoading(false);
-  };
+  }, [student, timeRange, selectedCategories]);
+
+  useEffect(() => {
+    processChartData();
+  }, [processChartData]);
 
   const renderChart = () => {
     if (!chartData || chartData.exams.length === 0) return null;
@@ -200,7 +237,10 @@ function ProgressChart({ student, batch, onClose }) {
     const chartHeight = height - padding.top - padding.bottom;
     
     const exams = chartData.exams;
-    const scaleX = (i) => padding.left + (i / (exams.length - 1 || 1)) * chartWidth;
+    // When there's only 1 exam, centre it instead of pinning to x=0
+    const scaleX = (i) => exams.length === 1
+      ? padding.left + chartWidth / 2
+      : padding.left + (i / (exams.length - 1)) * chartWidth;
     const scaleY = (val) => padding.top + chartHeight - (val / 100) * chartHeight;
     
     const scorePath = exams.map((e, i) => {
@@ -260,11 +300,17 @@ function ProgressChart({ student, batch, onClose }) {
           <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
             {e.dateStr.slice(5)}
           </text>
-        )) : exams.filter((_, i) => i % Math.ceil(exams.length / 6) === 0).map((e, i) => (
-          <text key={i} x={scaleX(i * Math.ceil(exams.length / 6))} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i * Math.ceil(exams.length / 6))}, ${height - 10})`}>
-            {e.dateStr.slice(5)}
-          </text>
-        ))}
+        )) : (() => {
+          const step = Math.ceil(exams.length / 6);
+          return exams
+            .map((e, i) => ({ e, i }))
+            .filter(({ i }) => i % step === 0)
+            .map(({ e, i }) => (
+              <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
+                {e.dateStr.slice(5)}
+              </text>
+            ));
+        })()}
       </svg>
     );
   };
@@ -500,11 +546,9 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   const draw = useCallback((img, crns) => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
-    console.log('[draw] canvas:', canvas ? 'ok' : 'NULL', 'container:', container ? 'ok' : 'NULL');
     if (!canvas || !container) return;
     const cW = container.offsetWidth;
     const cH = container.offsetHeight;
-    console.log('[draw] container size:', cW, 'x', cH, 'imgW:', imgW, 'imgH:', imgH, 'img:', img ? img.naturalWidth+'x'+img.naturalHeight : 'NULL');
     if (!cW || !cH || !imgW || !imgH) return;
 
     canvas.width = cW;
@@ -570,24 +614,19 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
 
   // Load image then draw — runs once on mount
   useEffect(() => {
-    console.log('[CropScreen] mounted, dataUrl length:', dataUrl ? dataUrl.length : 0);
-    console.log('[CropScreen] imgW:', imgW, 'imgH:', imgH);
-    console.log('[CropScreen] corners:', corners);
     const img = new Image();
     img.onload = () => {
-      console.log('[CropScreen] image loaded:', img.naturalWidth, img.naturalHeight);
       loadedImgRef.current = img;
       setTimeout(() => {
-        const container = containerRef.current;
-        const canvas = canvasRef.current;
-        console.log('[CropScreen] container:', container ? container.offsetWidth + 'x' + container.offsetHeight : 'NULL');
-        console.log('[CropScreen] canvas:', canvas ? 'exists' : 'NULL');
         draw(img, cornersRef.current);
       }, 50);
     };
-    img.onerror = (e) => console.error('[CropScreen] image FAILED to load', e);
+    img.onerror = (e) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[CropScreen] image failed to load', e);
+      }
+    };
     img.src = dataUrl;
-    console.log('[CropScreen] set img.src, type:', dataUrl ? dataUrl.substring(0, 30) : 'empty');
   }, []); // eslint-disable-line
 
   // Redraw whenever corners change (dragging)
@@ -1031,7 +1070,8 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     img.src = capturedDataUrl;
   };
 
-  const retake = () => {
+  // Shared reset — used by both "Retake" and "Scan Next Page"
+  const resetToCamera = () => {
     capturingRef.current = false;
     setCapturedDataUrl(null);
     setCorners(null);
@@ -1041,16 +1081,10 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     setPhase('camera');
   };
 
+  const retake = resetToCamera;
+
   // Bulk: go back to camera to scan next page
-  const scanNextPage = () => {
-    capturingRef.current = false;
-    setCapturedDataUrl(null);
-    setCorners(null);
-    stableCountRef.current = 0;
-    lastCornersRef.current = null;
-    setDetected(false);
-    setPhase('camera');
-  };
+  const scanNextPage = resetToCamera;
 
   // Bulk: upload all scanned pages
   const finishBulkScan = async () => {
@@ -1611,7 +1645,7 @@ function TeacherSelect({ onSelect }) {
           </button>
         )}
       </div>
-      <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(TEACHER_KEY); window.location.reload(); }}
+      <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(TEACHER_KEY); window.location.reload(); }}
         className="btn-logout" style={{ marginTop: 36 }}>
         Logout
       </button>
@@ -1634,28 +1668,28 @@ function LoginScreen({ onLogin }) {
 
   const handleLogin = () => {
     if (username === ADMIN_USER && password === ADMIN_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'admin');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'admin');
       onLogin('admin');
     } else if (username === PHGIC_USER && password === PHGIC_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'viewer');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'viewer');
       onLogin('viewer');
     } else if (username === SETOUCHI_USER && password === SETOUCHI_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'setouchi');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'setouchi');
       onLogin('setouchi');
     } else if (username === WBC_USER && password === WBC_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'wbc');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'wbc');
       onLogin('wbc');
     } else if (username === GYOUMUSUISHIN_USER && password === GYOUMUSUISHIN_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'gyoumusuishin');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'gyoumusuishin');
       onLogin('gyoumusuishin');
     } else if (username === GREENSERVICES_USER && password === GREENSERVICES_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'greenservices');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'greenservices');
       onLogin('greenservices');
     } else {
       setError('Invalid username or password.');
@@ -1814,14 +1848,14 @@ function App() {
   const pullStartY = useRef(null);
   const PULL_THRESHOLD = 100;
   const [showSettings, setShowSettings] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
-  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)));
+  const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
+  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
   const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
   const [qrPassInput, setQrPassInput] = useState('');
   const [qrPassError, setQrPassError] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState(() => {
-    const s = localStorage.getItem(TEACHER_KEY);
+    const s = safeLocalGet(TEACHER_KEY);
     return s ? JSON.parse(s) : null;
   });
 
@@ -1836,7 +1870,7 @@ function App() {
     if (batchId && studentId) {
       if (isPhgicScan) {
         // QR scan — require password before granting access
-        const alreadyAuthed = localStorage.getItem(AUTH_KEY) === 'true' && localStorage.getItem(ROLE_KEY) === 'viewer';
+        const alreadyAuthed = safeLocalGet(AUTH_KEY) === 'true' && safeLocalGet(ROLE_KEY) === 'viewer';
         if (alreadyAuthed) {
           // Already verified this session, let them in
           setIsLoggedIn(true);
@@ -1849,12 +1883,12 @@ function App() {
         }
       } else {
         // Admin QR — require login first, then deeplink navigates after auth
-        const alreadyLoggedIn = localStorage.getItem(AUTH_KEY) === 'true';
+        const alreadyLoggedIn = safeLocalGet(AUTH_KEY) === 'true';
         setPendingDeepLink({ batchId, studentId });
         if (alreadyLoggedIn) {
           setIsLoggedIn(true);
-          const role = localStorage.getItem(ROLE_KEY);
-          const teacher = localStorage.getItem(TEACHER_KEY);
+          const role = safeLocalGet(ROLE_KEY);
+          const teacher = safeLocalGet(TEACHER_KEY);
           setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role));
           if (['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) {
             fetchBatches(null);
@@ -1867,12 +1901,12 @@ function App() {
         // If not logged in, LoginScreen will show — after login pendingDeepLink will auto-navigate
       }
     } else {
-      const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
-      const role = localStorage.getItem(ROLE_KEY);
+      const isAuth = safeLocalGet(AUTH_KEY) === 'true';
+      const role = safeLocalGet(ROLE_KEY);
       if (isAuth && ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) {
         fetchBatches(null);
       } else {
-        const saved = localStorage.getItem(TEACHER_KEY);
+        const saved = safeLocalGet(TEACHER_KEY);
         const teacher = saved ? JSON.parse(saved) : null;
         if (isAuth && teacher) {
           fetchBatches(teacher._id);
@@ -2008,7 +2042,7 @@ function App() {
   };
 
   const goBack = () => {
-    const role = localStorage.getItem(ROLE_KEY);
+    const role = safeLocalGet(ROLE_KEY);
     const isKumiai = ['setouchi','wbc','gyoumusuishin','greenservices'].includes(role);
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
     else if (view === 'examItems') { setView('categories'); setSelectedCategory(null); }
@@ -2455,8 +2489,8 @@ function App() {
           onKeyDown={e => {
             if (e.key === 'Enter') {
               if (qrPassInput === PHGIC_PASS) {
-                localStorage.setItem(AUTH_KEY, 'true');
-                localStorage.setItem(ROLE_KEY, 'viewer');
+                safeLocalSet(AUTH_KEY, 'true');
+                safeLocalSet(ROLE_KEY, 'viewer');
                 setIsLoggedIn(true);
                 setIsViewer(true);
                 setPendingDeepLink(qrPasswordPrompt);
@@ -2476,8 +2510,8 @@ function App() {
         <button
           onClick={() => {
             if (qrPassInput === PHGIC_PASS) {
-              localStorage.setItem(AUTH_KEY, 'true');
-              localStorage.setItem(ROLE_KEY, 'viewer');
+              safeLocalSet(AUTH_KEY, 'true');
+              safeLocalSet(ROLE_KEY, 'viewer');
               setIsLoggedIn(true);
               setIsViewer(true);
               setPendingDeepLink(qrPasswordPrompt);
@@ -2502,7 +2536,7 @@ function App() {
       setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role));
       if (['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) fetchBatches(null);
       else {
-        const teacher = localStorage.getItem(TEACHER_KEY);
+        const teacher = safeLocalGet(TEACHER_KEY);
         if (teacher) fetchBatches(JSON.parse(teacher)._id);
       }
     }} />
@@ -2510,14 +2544,14 @@ function App() {
 
   if (!isViewer && !selectedTeacher) return (
     <TeacherSelect onSelect={(t) => {
-      localStorage.setItem(TEACHER_KEY, JSON.stringify(t));
+      safeLocalSet(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
       fetchBatches(t._id);
     }} />
   );
 
   const renderCompanyGroups = () => {
-    const role = localStorage.getItem(ROLE_KEY);
+    const role = safeLocalGet(ROLE_KEY);
     const kumiai = role === 'setouchi' ? 'Setouchi'
       : role === 'wbc' ? 'WBC'
       : role === 'gyoumusuishin' ? 'Gyoumusuishin'
@@ -2595,7 +2629,7 @@ function App() {
             </div>
             <div className="top-row-actions">
               <span className="badge-view-only">VIEW ONLY</span>
-              <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
+              <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
                 Logout
               </button>
             </div>
@@ -2652,10 +2686,10 @@ function App() {
               <p className="logged-in-label">Logged in as</p>
               <h1 className="title">
                 {isViewer
-                  ? (localStorage.getItem(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
-                    : localStorage.getItem(ROLE_KEY) === 'wbc' ? 'WBC'
-                    : localStorage.getItem(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMUSUISHIN'
-                    : localStorage.getItem(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
+                  ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
+                    : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WBC'
+                    : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMUSUISHIN'
+                    : safeLocalGet(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
                     : 'PHGIC')
                   : selectedTeacher?.name}
               </h1>
@@ -2664,16 +2698,16 @@ function App() {
           <div className="top-row-actions">
             {isViewer && <span className="badge-view-only">VIEW ONLY</span>}
             {!isViewer && (
-              <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">
+              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">
                 Switch
               </button>
             )}
-            {localStorage.getItem(ROLE_KEY) === 'admin' && (
+            {safeLocalGet(ROLE_KEY) === 'admin' && (
               <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
                 ⚙️
               </button>
             )}
-            <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); localStorage.removeItem(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
+            <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
               Logout
             </button>
           </div>
@@ -2700,7 +2734,7 @@ function App() {
   );
 
   const renderStudents = () => {
-    const role = localStorage.getItem(ROLE_KEY);
+    const role = safeLocalGet(ROLE_KEY);
     let visibleStudents = selectedBatch.students;
     if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'Setouchi' || (!s.kumiai && s.companyName === 'Setouchi')));
     else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
@@ -3813,7 +3847,7 @@ function App() {
       <style>{`
         @keyframes ptr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
-      {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
+      {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
       {view === 'students' && renderStudents()}
       {view === 'categories' && renderCategories()}
       {view === 'evaluations' && renderEvaluations()}
