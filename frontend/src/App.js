@@ -1160,8 +1160,9 @@ function App() {
   const [selectedCompany, setSelectedCompany] = useState(null); // { name, students[] }
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
+  const [pullTriggered, setPullTriggered] = useState(false);
   const pullStartY = useRef(null);
-  const PULL_THRESHOLD = 110;
+  const PULL_THRESHOLD = 100;
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
@@ -2961,16 +2962,33 @@ function App() {
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
     // Cancel if user scrolled away from top during the move
-    if (window.scrollY > 5) { pullStartY.current = null; setPullDistance(0); return; }
+    if (window.scrollY > 5) { pullStartY.current = null; setPullDistance(0); setPullTriggered(false); return; }
     const dist = e.touches[0].clientY - pullStartY.current;
-    if (dist > 0) setPullDistance(Math.min(dist, 120));
-    else { pullStartY.current = null; setPullDistance(0); }
+    if (dist > 0) {
+      const clamped = Math.min(dist, 130);
+      setPullDistance(clamped);
+      // Haptic + visual "triggered" state when crossing threshold
+      if (clamped >= PULL_THRESHOLD && !pullTriggered) {
+        setPullTriggered(true);
+        // Vibration API — works on Android Chrome and some iOS
+        if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+      } else if (clamped < PULL_THRESHOLD && pullTriggered) {
+        setPullTriggered(false);
+      }
+    } else {
+      pullStartY.current = null;
+      setPullDistance(0);
+      setPullTriggered(false);
+    }
   };
   const onTouchEnd = async () => {
     if (pullDistance >= PULL_THRESHOLD && !pullRefreshing) {
       setPullRefreshing(true);
       setPullDistance(0);
+      setPullTriggered(false);
       pullStartY.current = null;
+      // Success haptic pulse
+      if (navigator.vibrate) navigator.vibrate(40);
       try {
         if (isViewer) await fetchBatches(null);
         else if (selectedTeacher) await fetchBatches(selectedTeacher._id);
@@ -2979,6 +2997,7 @@ function App() {
       }
     } else {
       setPullDistance(0);
+      setPullTriggered(false);
       pullStartY.current = null;
     }
   };
@@ -2990,32 +3009,86 @@ function App() {
       onTouchEnd={onTouchEnd}
       style={{ overflowY: 'auto', minHeight: '100vh', position: 'relative' }}
     >
-      {/* Pull-to-refresh indicator */}
-      {(pullDistance > 0 || pullRefreshing) && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-          display: 'flex', justifyContent: 'center', alignItems: 'center',
-          height: pullRefreshing ? 56 : Math.min(pullDistance * 0.6, 56),
-          background: 'transparent',
-          transition: pullRefreshing ? 'height 0.2s' : 'none',
-          overflow: 'hidden',
-          pointerEvents: 'none',
-        }}>
+      {/* ── Pull-to-refresh indicator ── */}
+      {(pullDistance > 0 || pullRefreshing) && (() => {
+        const MAX = 72; // max indicator height in px
+        const progress = Math.min(pullDistance / PULL_THRESHOLD, 1); // 0→1
+        const indicatorH = pullRefreshing ? MAX : Math.round(progress * MAX);
+        const circleSize = 44;
+        const radius = 16;
+        const circumference = 2 * Math.PI * radius;
+        const dashOffset = circumference * (1 - (pullTriggered ? 1 : progress));
+        const rotate = pullTriggered || pullRefreshing ? 0 : progress * 200;
+
+        return (
           <div style={{
-            background: '#fff',
-            borderRadius: '50%',
-            width: 36, height: 36,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-            transform: pullRefreshing ? 'none' : `rotate(${pullDistance * 2}deg)`,
-            transition: pullRefreshing ? 'transform 0.6s linear' : 'none',
-            animation: pullRefreshing ? 'spin 0.7s linear infinite' : 'none',
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+            display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
+            height: indicatorH,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+            transition: pullRefreshing ? 'height 0.25s cubic-bezier(0.34,1.56,0.64,1)' : 'none',
           }}>
-            {pullRefreshing ? '🔄' : '↓'}
+            <div style={{
+              marginBottom: 6,
+              width: circleSize, height: circleSize,
+              borderRadius: '50%',
+              background: pullTriggered || pullRefreshing
+                ? 'linear-gradient(135deg, #8B0000, #c0392b)'
+                : 'rgba(255,255,255,0.95)',
+              boxShadow: pullTriggered || pullRefreshing
+                ? '0 4px 20px rgba(139,0,0,0.35)'
+                : '0 2px 12px rgba(0,0,0,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transform: `scale(${0.7 + progress * 0.3})`,
+              transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
+            }}>
+              {pullRefreshing ? (
+                /* Spinning arc when refreshing */
+                <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute', animation: 'ptr-spin 0.8s linear infinite' }}>
+                  <circle cx={circleSize/2} cy={circleSize/2} r={radius}
+                    fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" />
+                  <circle cx={circleSize/2} cy={circleSize/2} r={radius}
+                    fill="none" stroke="#fff" strokeWidth="2.5"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={circumference * 0.72}
+                    strokeLinecap="round"
+                    transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} />
+                </svg>
+              ) : (
+                /* Progress arc while pulling */
+                <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute' }}>
+                  <circle cx={circleSize/2} cy={circleSize/2} r={radius}
+                    fill="none" stroke="rgba(139,0,0,0.15)" strokeWidth="2.5" />
+                  <circle cx={circleSize/2} cy={circleSize/2} r={radius}
+                    fill="none"
+                    stroke={pullTriggered ? '#fff' : '#8B0000'}
+                    strokeWidth="2.5"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={dashOffset}
+                    strokeLinecap="round"
+                    transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`}
+                    style={{ transition: 'stroke-dashoffset 0.05s, stroke 0.2s' }} />
+                </svg>
+              )}
+              {/* Arrow icon */}
+              <svg width="16" height="16" viewBox="0 0 16 16" style={{
+                position: 'relative', zIndex: 1,
+                transform: `rotate(${pullTriggered || pullRefreshing ? 180 : rotate}deg)`,
+                transition: pullTriggered ? 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)' : 'none',
+              }}>
+                <path d="M8 2 L8 11 M4 7 L8 11 L12 7"
+                  stroke={pullTriggered || pullRefreshing ? '#fff' : '#8B0000'}
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"
+                  style={{ transition: 'stroke 0.2s' }} />
+              </svg>
+            </div>
           </div>
-        </div>
-      )}
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        );
+      })()}
+      <style>{`
+        @keyframes ptr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
       {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
       {view === 'students' && renderStudents()}
       {view === 'categories' && renderCategories()}
