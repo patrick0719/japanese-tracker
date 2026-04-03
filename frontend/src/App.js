@@ -1931,6 +1931,9 @@ function App() {
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [pullTriggered, setPullTriggered] = useState(false);
+  const pullDistanceRef = useRef(0);      // mirrors pullDistance — never stale in touch handlers
+  const pullTriggeredRef = useRef(false); // mirrors pullTriggered
+  const pullRefreshingRef = useRef(false);// mirrors pullRefreshing
   const pullStartY = useRef(null);
   const scrollContainerRef = useRef(null);
   const PULL_THRESHOLD = 100;
@@ -3800,51 +3803,62 @@ function App() {
     } catch {}
   };
 
+  // helpers that keep state + ref in sync
+  const setDist = (v) => { pullDistanceRef.current = v; setPullDistance(v); };
+  const setTriggered = (v) => { pullTriggeredRef.current = v; setPullTriggered(v); };
+  const setRefreshing = (v) => { pullRefreshingRef.current = v; setPullRefreshing(v); };
+
   const onTouchStart = (e) => {
+    // Only arm when the scroll container is truly at the top
     const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-    if (scrollTop === 0) {
-      pullStartY.current = e.touches[0].clientY;
-    } else {
-      pullStartY.current = null;
-    }
+    pullStartY.current = scrollTop === 0 ? e.touches[0].clientY : null;
   };
+
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
-    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-    if (scrollTop > 5) { pullStartY.current = null; setPullDistance(0); setPullTriggered(false); return; }
+    // Disarm if container drifted from top (momentum scroll from prev gesture)
+    if ((scrollContainerRef.current?.scrollTop ?? 0) > 5) {
+      pullStartY.current = null;
+      setDist(0);
+      setTriggered(false);
+      return;
+    }
     const dist = e.touches[0].clientY - pullStartY.current;
     if (dist > 0) {
       const clamped = Math.min(dist, 130);
-      setPullDistance(clamped);
-      if (clamped >= PULL_THRESHOLD && !pullTriggered) {
-        setPullTriggered(true);
+      setDist(clamped);
+      if (clamped >= PULL_THRESHOLD && !pullTriggeredRef.current) {
+        setTriggered(true);
         haptic('medium');
-      } else if (clamped < PULL_THRESHOLD && pullTriggered) {
-        setPullTriggered(false);
+      } else if (clamped < PULL_THRESHOLD && pullTriggeredRef.current) {
+        setTriggered(false);
         haptic('light');
       }
     } else {
+      // finger moved back up — reset
       pullStartY.current = null;
-      setPullDistance(0);
-      setPullTriggered(false);
+      setDist(0);
+      setTriggered(false);
     }
   };
+
   const onTouchEnd = async () => {
-    if (pullDistance >= PULL_THRESHOLD && !pullRefreshing) {
-      setPullRefreshing(true);
-      setPullDistance(0);
-      setPullTriggered(false);
+    // Read from refs — never stale
+    if (pullDistanceRef.current >= PULL_THRESHOLD && !pullRefreshingRef.current) {
+      setRefreshing(true);
+      setDist(0);
+      setTriggered(false);
       pullStartY.current = null;
       haptic('success');
       try {
         if (isViewer) await fetchBatches(null);
         else if (selectedTeacher) await fetchBatches(selectedTeacher._id);
       } finally {
-        setPullRefreshing(false);
+        setRefreshing(false);
       }
     } else {
-      setPullDistance(0);
-      setPullTriggered(false);
+      setDist(0);
+      setTriggered(false);
       pullStartY.current = null;
     }
   };
