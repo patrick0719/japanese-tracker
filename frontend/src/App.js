@@ -355,7 +355,7 @@ function ProgressChart({ student, batch, onClose }) {
         )}
         <div>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1c1c1e' }}>{student.name}</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#8e8e93' }}>{batch.name}</p>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#8e8e93' }}>{batch?.name}</p>
           {student.companyName && (
             <span style={{
               display: 'inline-block', marginTop: 4,
@@ -778,9 +778,6 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   // Bulk scan pages accumulator
   const [scannedPages, setScannedPages] = useState([]);
   const [bulkUploading, setBulkUploading] = useState(false);
-  //ProgressChart
-  const [showProgressChart, setShowProgressChart] = useState(false);
-  const [progressChartStudent, setProgressChartStudent] = useState(null);
 
   // ── CAMERA PHASE ─────────────────────────────────────────────────
   useEffect(() => {
@@ -1533,6 +1530,8 @@ function TeacherSelect({ onSelect }) {
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('👩‍🏫');
   const [saving, setSaving] = useState(false);
+  const [showProgressChart, setShowProgressChart] = useState(false);
+  const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const EMOJIS = ['👩‍🏫','👨‍🏫','👩','👨','🧑‍🏫'];
 
@@ -1650,12 +1649,12 @@ function TeacherSelect({ onSelect }) {
         Logout
       </button>
       {showProgressChart && progressChartStudent && (
-  <ProgressChart
-    student={progressChartStudent}
-    batch={selectedBatch}
-    onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
-  />
-)}
+        <ProgressChart
+          student={progressChartStudent}
+          batch={null}
+          onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -1848,6 +1847,8 @@ function App() {
   const pullStartY = useRef(null);
   const PULL_THRESHOLD = 100;
   const [showSettings, setShowSettings] = useState(false);
+  const [showProgressChart, setShowProgressChart] = useState(false);
+  const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
