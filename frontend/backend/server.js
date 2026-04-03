@@ -176,5 +176,42 @@ app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:it
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── ADMIN: CLOUDINARY STORAGE USAGE ──────────────────────────────────────────
+app.get('/api/admin/storage-usage', async (req, res) => {
+  try {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey    = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(500).json({ error: 'Cloudinary credentials not configured in server env.' });
+    }
+
+    const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+
+    const usageRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/usage`, {
+      headers: { Authorization: `Basic ${auth}` }
+    });
+    const usage = await usageRes.json();
+
+    if (usage.error) return res.status(500).json({ error: usage.error.message });
+
+    res.json({
+      used_bytes:  (usage.storage?.usage || 0),
+      limit_bytes: (usage.storage?.limit || 25 * 1024 * 1024 * 1024),
+      bandwidth:   { used: usage.bandwidth?.usage || 0, limit: usage.bandwidth?.limit || 0 },
+      resources: {
+        image_count: usage.resources?.image?.usage || 0,
+        image_size:  usage.resources?.image?.usage_bytes || 0,
+        raw_count:   usage.resources?.raw?.usage || 0,
+        raw_size:    usage.resources?.raw?.usage_bytes || 0,
+      },
+      last_updated: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));
