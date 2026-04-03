@@ -830,6 +830,273 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
 }
 
 
+// ── SETTINGS PAGE ────────────────────────────────────────────────────────────
+function SettingsPage({ batches, onClose, API }) {
+  const [storage, setStorage] = useState(null);
+  const [storageLoading, setStorageLoading] = useState(true);
+  const [storageError, setStorageError] = useState(null);
+  const [clearLoading, setClearLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState('storage');
+
+  // Compute app stats from batches
+  const totalStudents = batches.reduce((s, b) => s + b.students.length, 0);
+  const totalExams = batches.reduce((s, b) =>
+    s + b.students.reduce((ss, st) =>
+      ss + (st.categories || []).reduce((sss, c) => sss + (c.items || []).length, 0), 0), 0);
+  const totalImages = batches.reduce((s, b) =>
+    s + b.students.reduce((ss, st) =>
+      ss + (st.categories || []).reduce((sss, c) =>
+        sss + (c.items || []).reduce((si, i) => si + (i.images || []).length, 0), 0), 0), 0);
+  const totalBatches = batches.length;
+  const APP_VERSION = '2.4.0';
+
+  useEffect(() => {
+    const fetchStorage = async () => {
+      setStorageLoading(true);
+      try {
+        const res = await fetch(`${API}/admin/storage-usage`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        setStorage(data);
+      } catch (e) {
+        setStorageError(e.message);
+      } finally {
+        setStorageLoading(false);
+      }
+    };
+    fetchStorage();
+  }, [API]);
+
+  const formatBytes = (bytes) => {
+    if (bytes == null) return '—';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  };
+
+  const usedBytes = storage?.used_bytes ?? 0;
+  const limitBytes = storage?.limit_bytes ?? (25 * 1024 * 1024 * 1024); // 25GB Cloudinary free
+  const usedPct = Math.min((usedBytes / limitBytes) * 100, 100);
+  const barColor = usedPct > 85 ? '#ff3b30' : usedPct > 65 ? '#ff9500' : '#34C759';
+
+  const navItems = [
+    { id: 'storage', label: '🗄️ Storage', },
+    { id: 'stats', label: '📊 App Info', },
+    { id: 'manage', label: '🖼️ Manage', },
+  ];
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10000,
+      background: '#f2f2f7', display: 'flex', flexDirection: 'column',
+      fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+    }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+        padding: '16px 20px',
+        paddingTop: 'env(safe-area-inset-top, 16px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0,
+        boxShadow: '0 2px 12px rgba(139,0,0,0.3)',
+      }}>
+        <button onClick={onClose} style={{
+          background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
+          borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
+        }}>← Back</button>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>⚙️ Settings</span>
+        <div style={{ width: 72 }} />
+      </div>
+
+      {/* Tab Nav */}
+      <div style={{
+        display: 'flex', background: '#fff',
+        borderBottom: '1px solid #e5e5ea', flexShrink: 0,
+      }}>
+        {navItems.map(n => (
+          <button key={n.id} onClick={() => setActiveSection(n.id)} style={{
+            flex: 1, padding: '12px 4px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 12, fontWeight: activeSection === n.id ? 700 : 500,
+            color: activeSection === n.id ? '#8B0000' : '#8e8e93',
+            borderBottom: activeSection === n.id ? '2.5px solid #8B0000' : '2.5px solid transparent',
+            transition: 'all 0.18s',
+          }}>{n.label}</button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', paddingBottom: 32 }}>
+
+        {/* ── STORAGE TAB ── */}
+        {activeSection === 'storage' && (
+          <div>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>☁️ Cloudinary Storage</span>
+                {storageLoading && <span style={{ fontSize: 12, color: '#8e8e93' }}>Loading…</span>}
+                {storageError && <span style={{ fontSize: 12, color: '#ff3b30' }}>⚠ Error</span>}
+              </div>
+
+              {storageLoading ? (
+                <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[0,1,2].map(i => (
+                      <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: '#8B0000', animation: `dotPulse 1.1s ease-in-out ${i*0.18}s infinite` }} />
+                    ))}
+                  </div>
+                </div>
+              ) : storageError ? (
+                <div style={{ textAlign: 'center', padding: '16px 0', color: '#ff3b30', fontSize: 13 }}>
+                  {storageError}<br />
+                  <span style={{ color: '#8e8e93', fontSize: 12 }}>Check CLOUDINARY_API_KEY & CLOUDINARY_API_SECRET in server env.</span>
+                </div>
+              ) : (
+                <>
+                  {/* Big usage numbers */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{formatBytes(usedBytes)}</div>
+                      <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 2 }}>used of {formatBytes(limitBytes)}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: barColor, lineHeight: 1 }}>{usedPct.toFixed(1)}%</div>
+                      <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 2 }}>{formatBytes(limitBytes - usedBytes)} free</div>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ background: '#f2f2f7', borderRadius: 99, height: 12, overflow: 'hidden', marginBottom: 16 }}>
+                    <div style={{
+                      height: '100%', width: `${usedPct}%`,
+                      background: usedPct > 85
+                        ? 'linear-gradient(90deg, #ff9500, #ff3b30)'
+                        : usedPct > 65
+                        ? 'linear-gradient(90deg, #34C759, #ff9500)'
+                        : 'linear-gradient(90deg, #34C759, #30d158)',
+                      borderRadius: 99,
+                      transition: 'width 0.6s cubic-bezier(0.34,1.56,0.64,1)',
+                    }} />
+                  </div>
+
+                  {/* Resource breakdown */}
+                  {storage?.resources && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      {[
+                        { label: '🖼 Images', count: storage.resources.image_count, size: storage.resources.image_size },
+                        { label: '📄 Raw files', count: storage.resources.raw_count, size: storage.resources.raw_size },
+                      ].map((r, i) => (
+                        <div key={i} style={{ background: '#f9f9f9', borderRadius: 12, padding: '12px 14px' }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#1c1c1e', marginBottom: 2 }}>{r.label}</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: '#3a3a3c' }}>{(r.count || 0).toLocaleString()}</div>
+                          <div style={{ fontSize: 11, color: '#8e8e93' }}>{formatBytes(r.size)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {usedPct > 80 && (
+                    <div style={{ marginTop: 14, background: '#fff3cd', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#856404', fontWeight: 500 }}>
+                      ⚠️ Storage is getting full. Consider archiving old images.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 13, color: '#8e8e93', lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 600, color: '#3a3a3c' }}>Plan: </span>Cloudinary Free Tier — 25 GB storage, 25 GB bandwidth/month.
+                Images are stored in the <code style={{ background: '#f2f2f7', padding: '1px 5px', borderRadius: 4 }}>sage-bulacan</code> folder.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── APP INFO TAB ── */}
+        {activeSection === 'stats' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: 'linear-gradient(135deg, #8B0000, #c0392b)', borderRadius: 16, padding: 20, color: '#fff' }}>
+              <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 4 }}>App Version</div>
+              <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1 }}>v{APP_VERSION}</div>
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Sage Asian Japanese Tracker</div>
+            </div>
+
+            {[
+              { icon: '🗂️', label: 'Total Batches', value: totalBatches },
+              { icon: '👥', label: 'Total Students', value: totalStudents.toLocaleString() },
+              { icon: '📝', label: 'Total Exams', value: totalExams.toLocaleString() },
+              { icon: '🖼️', label: 'Total Images', value: totalImages.toLocaleString() },
+            ].map((stat, i) => (
+              <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <span style={{ fontSize: 28 }}>{stat.icon}</span>
+                <div>
+                  <div style={{ fontSize: 13, color: '#8e8e93' }}>{stat.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1.2 }}>{stat.value}</div>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>Backend</div>
+              <div style={{ fontSize: 13, color: '#3a3a3c', fontWeight: 500 }}>Railway · MongoDB Atlas · Cloudinary CDN</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── MANAGE TAB ── */}
+        {activeSection === 'manage' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>🖼️ Image Storage</div>
+              <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                To free up Cloudinary storage, use the <strong>📦 Archive</strong> feature per student to move old exam images to the archive folder. Archived images are still accessible but won't count against your active quota in most plans.
+              </p>
+              <div style={{ background: '#f2f2f7', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#3a3a3c' }}>
+                <strong>How to archive:</strong><br />
+                Student → Categories screen → tap <strong>📦 Archive</strong>
+              </div>
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>🗑️ Permanent Delete</div>
+              <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                To permanently delete a student and all their images from Cloudinary and the database, use the <strong>🗑️ Delete</strong> button on the student's Categories screen. This <strong>cannot be undone</strong>.
+              </p>
+              <div style={{ background: '#fff3f3', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#c0392b', fontWeight: 500 }}>
+                ⚠️ Permanent delete removes all data from Cloudinary and MongoDB.
+              </div>
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>📊 Storage by Batch</div>
+              <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 12px 0' }}>Estimated image count per batch:</p>
+              {batches.map(b => {
+                const imgCount = b.students.reduce((s, st) =>
+                  s + (st.categories || []).reduce((ss, c) =>
+                    ss + (c.items || []).reduce((si, i) => si + (i.images || []).length, 0), 0), 0);
+                const pct = totalImages > 0 ? (imgCount / totalImages) * 100 : 0;
+                return (
+                  <div key={b._id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>🎌 {b.name}</span>
+                      <span style={{ fontSize: 12, color: '#8e8e93' }}>{imgCount} images</span>
+                    </div>
+                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #8B0000, #c0392b)', borderRadius: 99 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
+    </div>
+  );
+}
+
 // ── LOGIN SCREEN ─────────────────────────────────────────────────────────────
 const ADMIN_USER = 'sagebulacan97';
 const ADMIN_PASS = 'July142018';
@@ -1163,6 +1430,7 @@ function App() {
   const [pullTriggered, setPullTriggered] = useState(false);
   const pullStartY = useRef(null);
   const PULL_THRESHOLD = 100;
+  const [showSettings, setShowSettings] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
@@ -2004,6 +2272,11 @@ function App() {
             {!isViewer && (
               <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">
                 Switch
+              </button>
+            )}
+            {localStorage.getItem(ROLE_KEY) === 'admin' && (
+              <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
+                ⚙️
               </button>
             )}
             <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); localStorage.removeItem(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
@@ -3150,6 +3423,13 @@ function App() {
           images={imageViewer.images}
           startIndex={imageViewer.index}
           onClose={() => setImageViewer(null)}
+        />
+      )}
+      {showSettings && (
+        <SettingsPage
+          batches={batches}
+          onClose={() => setShowSettings(false)}
+          API={API}
         />
       )}
     </div>
