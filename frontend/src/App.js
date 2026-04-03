@@ -211,12 +211,50 @@ function ProgressChart({ student, batch, onClose }) {
     
     const trend = calculateTrend(allExams);
     
+    // ── Smart stats ──────────────────────────────────────────────────
+    const n = allExams.length;
+    const avg = n > 0 ? Math.round(allExams.reduce((s, e) => s + e.percentage, 0) / n) : 0;
+
+    // Recent trend: avg of last 3 exams vs avg of previous 3 exams
+    // More accurate than first-vs-last because it smooths outliers
+    let recentTrend = null;
+    let recentTrendLabel = '';
+    if (n >= 2) {
+      const window = Math.min(3, Math.floor(n / 2));
+      const recentAvg = Math.round(
+        allExams.slice(-window).reduce((s, e) => s + e.percentage, 0) / window
+      );
+      const prevAvg = Math.round(
+        allExams.slice(-(window * 2), -window).reduce((s, e) => s + e.percentage, 0) / window
+      );
+      recentTrend = recentAvg - prevAvg;
+      recentTrendLabel = `Last ${window} vs prev ${window}`;
+    }
+
+    // Improving streak: how many consecutive exams (from latest) have been going up
+    let streak = 0;
+    for (let i = n - 1; i > 0; i--) {
+      if (allExams[i].percentage > allExams[i - 1].percentage) streak++;
+      else break;
+    }
+
+    // Consistency: % of exams at or above the student's own average
+    const consistency = n > 0
+      ? Math.round((allExams.filter(e => e.percentage >= avg).length / n) * 100)
+      : 0;
+
     const stats = {
-      totalExams: allExams.length,
-      avgScore: allExams.length > 0 ? Math.round(allExams.reduce((s, e) => s + e.percentage, 0) / allExams.length) : 0,
-      bestScore: allExams.length > 0 ? Math.max(...allExams.map(e => e.percentage)) : 0,
-      latestScore: allExams.length > 0 ? allExams[allExams.length - 1].percentage : 0,
-      improvement: allExams.length > 1 ? allExams[allExams.length - 1].percentage - allExams[0].percentage : 0
+      totalExams: n,
+      avgScore: avg,
+      bestScore: n > 0 ? Math.max(...allExams.map(e => e.percentage)) : 0,
+      latestScore: n > 0 ? allExams[n - 1].percentage : 0,
+      // Keep raw improvement for backward compat
+      improvement: n > 1 ? allExams[n - 1].percentage - allExams[0].percentage : 0,
+      // Smart metrics
+      recentTrend,
+      recentTrendLabel,
+      streak,
+      consistency,
     };
     
     setChartData({ exams: allExams, categories: Array.from(categories), trend, stats });
@@ -370,12 +408,24 @@ function ProgressChart({ student, batch, onClose }) {
         {!loading && chartData && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
-              { label: 'Total Exams', value: chartData.stats.totalExams, icon: '📝', color: '#007AFF' },
-              { label: 'Average Score', value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759' },
-              { label: 'Best Score', value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500' },
-              { label: 'Improvement', value: (chartData.stats.improvement > 0 ? '+' : '') + chartData.stats.improvement + '%', 
-                icon: chartData.stats.improvement >= 0 ? '📈' : '📉', 
-                color: chartData.stats.improvement >= 0 ? '#34C759' : '#FF3B30' }
+              { label: 'Total Exams', value: chartData.stats.totalExams, icon: '📝', color: '#007AFF', sub: null },
+              { label: 'Average Score', value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759', sub: null },
+              { label: 'Best Score', value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
+              chartData.stats.recentTrend !== null
+                ? {
+                    label: 'Recent Trend',
+                    value: (chartData.stats.recentTrend > 0 ? '+' : '') + chartData.stats.recentTrend + '%',
+                    icon: chartData.stats.recentTrend > 0 ? '📈' : chartData.stats.recentTrend < 0 ? '📉' : '➡️',
+                    color: chartData.stats.recentTrend > 0 ? '#34C759' : chartData.stats.recentTrend < 0 ? '#FF3B30' : '#8e8e93',
+                    sub: chartData.stats.recentTrendLabel,
+                  }
+                : {
+                    label: 'Latest Score',
+                    value: chartData.stats.latestScore + '%',
+                    icon: '🎯',
+                    color: '#8B0000',
+                    sub: null,
+                  },
             ].map((stat, i) => (
               <div key={i} style={{
                 background: '#fff', borderRadius: 14, padding: '16px 14px',
@@ -384,10 +434,47 @@ function ProgressChart({ student, batch, onClose }) {
                 <div style={{ fontSize: 24, marginBottom: 6 }}>{stat.icon}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
                 <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
+                {stat.sub && <div style={{ fontSize: 10, color: '#c7c7cc', marginTop: 2 }}>{stat.sub}</div>}
               </div>
             ))}
           </div>
         )}
+
+        {/* ── Smart insight banner ── */}
+        {!loading && chartData && chartData.stats.totalExams >= 2 && (() => {
+          const { streak, consistency, recentTrend, avgScore, totalExams } = chartData.stats;
+          let icon, color, bg, message;
+
+          if (streak >= 3) {
+            icon = '🔥'; bg = '#fff8e1'; color = '#e65100';
+            message = `On a ${streak}-exam winning streak! Keep it up.`;
+          } else if (recentTrend !== null && recentTrend >= 5) {
+            icon = '🚀'; bg = '#e8f5e9'; color = '#2e7d32';
+            message = `Strong recent momentum — up ${recentTrend}% in the last exams.`;
+          } else if (recentTrend !== null && recentTrend <= -5) {
+            icon = '⚠️'; bg = '#fff3e0'; color = '#e65100';
+            message = `Recent dip of ${Math.abs(recentTrend)}%. May need extra review.`;
+          } else if (consistency >= 70) {
+            icon = '💪'; bg = '#e3f2fd'; color = '#1565c0';
+            message = `Very consistent — ${consistency}% of exams at or above personal average.`;
+          } else if (totalExams >= 5 && avgScore >= 80) {
+            icon = '⭐'; bg = '#f3e5f5'; color = '#6a1b9a';
+            message = `Excellent average of ${avgScore}% across ${totalExams} exams.`;
+          } else {
+            icon = '📌'; bg = '#f2f2f7'; color = '#8e8e93';
+            message = `Consistency rate: ${consistency}% of exams at or above personal average.`;
+          }
+
+          return (
+            <div style={{
+              background: bg, borderRadius: 12, padding: '12px 14px',
+              marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 10
+            }}>
+              <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
+              <p style={{ margin: 0, fontSize: 13, color, fontWeight: 500, lineHeight: 1.4 }}>{message}</p>
+            </div>
+          );
+        })()}
 
         <div style={{
           background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
