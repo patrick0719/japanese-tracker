@@ -2926,7 +2926,6 @@ function App() {
           onCapture={handleScanCapture}
           onClose={() => { setShowScanner(false); setScanningExamId(null); }}
         />
-        />
       )}
       {imageViewer && (
         <ImageViewer
