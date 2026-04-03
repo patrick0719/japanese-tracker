@@ -1933,6 +1933,7 @@ function App() {
   const [pullTriggered, setPullTriggered] = useState(false);
   const pullStartY = useRef(null);
   const pullStartX = useRef(null);
+  const scrollContainerRef = useRef(null);
   const PULL_THRESHOLD = 100;
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
@@ -3801,9 +3802,8 @@ function App() {
   };
 
   const onTouchStart = (e) => {
-    // Snapshot scroll position at the moment of touch — scrollY during move can lag
-    const scrollAtStart = window.scrollY || document.documentElement.scrollTop;
-    if (scrollAtStart === 0) {
+    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
+    if (scrollTop === 0) {
       pullStartY.current = e.touches[0].clientY;
       pullStartX.current = e.touches[0].clientX;
     } else {
@@ -3813,9 +3813,9 @@ function App() {
   };
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
-    // If page has drifted away from top (momentum scroll), disarm immediately
-    const currentScroll = window.scrollY || document.documentElement.scrollTop;
-    if (currentScroll > 2) {
+    // If container scrolled away from top during gesture, disarm
+    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
+    if (scrollTop > 2) {
       pullStartY.current = null;
       pullStartX.current = null;
       setPullDistance(0);
@@ -3824,7 +3824,7 @@ function App() {
     }
     const dy = e.touches[0].clientY - pullStartY.current;
     const dx = Math.abs(e.touches[0].clientX - (pullStartX.current || 0));
-    // Only arm if gesture is more vertical than horizontal (not a side-swipe)
+    // Disarm if not a clear downward pull (horizontal swipe or upward)
     if (dy <= 0 || dx > dy) {
       pullStartY.current = null;
       pullStartX.current = null;
@@ -3834,7 +3834,6 @@ function App() {
     }
     const clamped = Math.min(dy, 130);
     setPullDistance(clamped);
-    // Haptic + visual "triggered" state when crossing threshold
     if (clamped >= PULL_THRESHOLD && !pullTriggered) {
       setPullTriggered(true);
       haptic('medium');
@@ -3865,6 +3864,7 @@ function App() {
 
   return (
     <div
+      ref={scrollContainerRef}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
