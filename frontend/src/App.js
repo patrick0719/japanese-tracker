@@ -3810,26 +3810,24 @@ function App() {
   const setRefreshing = (v) => { pullRefreshingRef.current = v; setPullRefreshing(v); };
 
   const onTouchStart = (e) => {
-    // Only arm when the scroll container is truly at the top.
-    // Use a small dead-zone (≤ 2px) so a hair of momentum scroll doesn't
-    // block legitimate pull-to-refresh, but fast flings are caught in onTouchMove.
-    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-    if (scrollTop <= 2) {
-      pullStartY.current = e.touches[0].clientY;
-      pullStartScrollTop.current = scrollTop; // snapshot for velocity guard
-    } else {
-      pullStartY.current = null;
-    }
+    // Snapshot the finger Y immediately so we don't lose the touch point.
+    const startY = e.touches[0].clientY;
+
+    // Wait one animation frame so any momentum scroll can update scrollTop
+    // before we decide whether to arm. This catches the "fast fling then
+    // immediately touch again" case where scrollTop reads 0 too early.
+    requestAnimationFrame(() => {
+      const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
+      pullStartY.current = scrollTop === 0 ? startY : null;
+    });
   };
 
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
 
+    // Zero-tolerance: if scrollTop moved even 1px, the user is scrolling — disarm.
     const currentScrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-
-    // Disarm if the container moved away from top (momentum scroll settling in).
-    // Threshold raised to 3px — more reliable than 5px on fast flings.
-    if (currentScrollTop > 3) {
+    if (currentScrollTop > 0) {
       pullStartY.current = null;
       setDist(0);
       setTriggered(false);
@@ -3838,9 +3836,7 @@ function App() {
 
     const dist = e.touches[0].clientY - pullStartY.current;
 
-    // ── Threads-style intent guard ───────────────────────────────────────────
-    // If the finger moved up (negative dist) before we've built any pull
-    // distance, the user is scrolling — not pulling. Disarm immediately.
+    // Only engage on clear downward swipe.
     if (dist <= 0) {
       pullStartY.current = null;
       setDist(0);
@@ -3848,13 +3844,7 @@ function App() {
       return;
     }
 
-    // Require at least 6px of downward movement before engaging the indicator.
-    // This dead-zone eats the tiny "bounce" at the top of a fast scroll.
-    const DEAD_ZONE = 6;
-    if (dist < DEAD_ZONE) return;
-
-    const adjusted = dist - DEAD_ZONE;
-    const clamped = Math.min(adjusted, 130);
+    const clamped = Math.min(dist, 130);
     setDist(clamped);
     if (clamped >= PULL_THRESHOLD && !pullTriggeredRef.current) {
       setTriggered(true);
