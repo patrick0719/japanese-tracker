@@ -1002,6 +1002,71 @@
      padding: 4px;
    }
    
+   /* ── BATCH SCORE DASHBOARD ───────────────────────────── */
+   .batch-dashboard {
+     background: var(--surface);
+     border-radius: var(--radius-lg);
+     border: 1px solid var(--border);
+     padding: 16px;
+     margin-bottom: 14px;
+     box-shadow: var(--shadow-xs);
+   }
+   
+   .batch-dashboard-title {
+     font-size: 13px;
+     font-weight: 700;
+     color: var(--text-primary);
+     margin-bottom: 12px;
+     letter-spacing: -0.01em;
+   }
+   
+   .batch-stats-grid {
+     display: grid;
+     grid-template-columns: 1fr 1fr 1fr 1fr;
+     gap: 8px;
+     margin-bottom: 12px;
+   }
+   
+   .batch-stat-card {
+     display: flex;
+     flex-direction: column;
+     align-items: center;
+     justify-content: center;
+     padding: 10px 6px;
+     border-radius: var(--radius-md);
+     gap: 3px;
+   }
+   
+   .batch-stat-num {
+     font-family: var(--font-display);
+     font-size: 18px;
+     font-weight: 800;
+     letter-spacing: -0.03em;
+     line-height: 1;
+   }
+   
+   .batch-stat-label {
+     font-size: 9px;
+     font-weight: 700;
+     text-transform: uppercase;
+     letter-spacing: 0.05em;
+     opacity: 0.8;
+   }
+   
+   .batch-progress-bar-wrap {
+     height: 6px;
+     background: var(--surface3);
+     border-radius: 3px;
+     overflow: hidden;
+     margin-top: 4px;
+   }
+   
+   .batch-progress-bar {
+     height: 100%;
+     border-radius: 3px;
+     transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+   }
+   
    /* ── RESPONSIVE ──────────────────────────────────────── */
    @media (max-width: 400px) { :root { --page-pad: 14px; } .title { font-size: 22px; } }
    @media (min-width: 481px) {
