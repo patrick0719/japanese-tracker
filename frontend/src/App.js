@@ -2587,33 +2587,34 @@ function App() {
           </div>
           <h2 className="section-title">{students.length} Student{students.length !== 1 ? 's' : ''}</h2>
           {students.map(student => (
-            <div key={student._id} className="card student-card clickable"
-              onClick={() => { setSelectedBatch(student.batch); goToCategories(student); }}>
-              <div className="card-content">
-                <div className="student-card-left">
-                  {student.photo
-                    ? <img src={student.photo} alt={student.name} className="student-avatar" />
-                    : <span className="student-avatar-icon">👤</span>
-                  }
-                  <div>
-                    <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
-                    {/* Inside the student card, next to the name */}
-<button
-  onClick={(e) => { e.stopPropagation(); setProgressChartStudent(student); setShowProgressChart(true); }}
-  style={{
-    background: '#8B0000', color: '#fff', border: 'none',
-    borderRadius: 8, padding: '6px 12px', fontSize: 12,
-    fontWeight: 600, cursor: 'pointer', marginLeft: 'auto'
-  }}
->
-  📈 Progress
-</button>
-                    <p className="card-subtitle">{student.batchName}</p>
-                  </div>
+          <div key={student._id} className="card student-card clickable"
+            onClick={() => { setSelectedBatch(student.batch); goToCategories(student); }}>
+            <div className="card-content">
+              <div className="student-card-left">
+                {student.photo
+                  ? <img src={student.photo} alt={student.name} className="student-avatar" />
+                  : <span className="student-avatar-icon">👤</span>
+                }
+                <div>
+                  <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
+                  <p className="card-subtitle">{student.batchName}</p>
                 </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setProgressChartStudent(student); setShowProgressChart(true); }}
+                  style={{
+                    background: '#8B0000', color: '#fff', border: 'none',
+                    borderRadius: 8, padding: '6px 12px', fontSize: 12,
+                    fontWeight: 600, cursor: 'pointer', flexShrink: 0
+                  }}
+                >
+                  📈 Progress
+                </button>
                 <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
               </div>
             </div>
+          </div>
           ))}
         </>
       );
@@ -3876,6 +3877,13 @@ function App() {
           batches={batches}
           onClose={() => setShowSettings(false)}
           API={API}
+        />
+      )}
+      {showProgressChart && progressChartStudent && (
+        <ProgressChart
+          student={progressChartStudent}
+          batch={selectedBatch}
+          onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
         />
       )}
     </div>
