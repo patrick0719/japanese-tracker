@@ -1932,7 +1932,6 @@ function App() {
   const [pullDistance, setPullDistance] = useState(0);
   const [pullTriggered, setPullTriggered] = useState(false);
   const pullStartY = useRef(null);
-  const pullStartX = useRef(null);
   const scrollContainerRef = useRef(null);
   const PULL_THRESHOLD = 100;
   const [showSettings, setShowSettings] = useState(false);
@@ -3805,41 +3804,29 @@ function App() {
     const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
     if (scrollTop === 0) {
       pullStartY.current = e.touches[0].clientY;
-      pullStartX.current = e.touches[0].clientX;
     } else {
       pullStartY.current = null;
-      pullStartX.current = null;
     }
   };
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
-    // If container scrolled away from top during gesture, disarm
     const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-    if (scrollTop > 2) {
+    if (scrollTop > 5) { pullStartY.current = null; setPullDistance(0); setPullTriggered(false); return; }
+    const dist = e.touches[0].clientY - pullStartY.current;
+    if (dist > 0) {
+      const clamped = Math.min(dist, 130);
+      setPullDistance(clamped);
+      if (clamped >= PULL_THRESHOLD && !pullTriggered) {
+        setPullTriggered(true);
+        haptic('medium');
+      } else if (clamped < PULL_THRESHOLD && pullTriggered) {
+        setPullTriggered(false);
+        haptic('light');
+      }
+    } else {
       pullStartY.current = null;
-      pullStartX.current = null;
       setPullDistance(0);
       setPullTriggered(false);
-      return;
-    }
-    const dy = e.touches[0].clientY - pullStartY.current;
-    const dx = Math.abs(e.touches[0].clientX - (pullStartX.current || 0));
-    // Disarm if not a clear downward pull (horizontal swipe or upward)
-    if (dy <= 0 || dx > dy) {
-      pullStartY.current = null;
-      pullStartX.current = null;
-      setPullDistance(0);
-      setPullTriggered(false);
-      return;
-    }
-    const clamped = Math.min(dy, 130);
-    setPullDistance(clamped);
-    if (clamped >= PULL_THRESHOLD && !pullTriggered) {
-      setPullTriggered(true);
-      haptic('medium');
-    } else if (clamped < PULL_THRESHOLD && pullTriggered) {
-      setPullTriggered(false);
-      haptic('light');
     }
   };
   const onTouchEnd = async () => {
