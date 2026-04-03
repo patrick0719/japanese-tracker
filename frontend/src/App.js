@@ -2951,6 +2951,47 @@ function App() {
     );
   };
 
+
+  // Cross-platform haptic — works on Android (Vibration API) + iOS (AudioContext click)
+  const haptic = (type = 'light') => {
+    // Android / some browsers
+    if (navigator.vibrate) {
+      if (type === 'light') navigator.vibrate(10);
+      else if (type === 'medium') navigator.vibrate(30);
+      else if (type === 'success') navigator.vibrate([15, 30, 15]);
+    }
+    // iOS Safari — AudioContext short click triggers taptic engine indirectly
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === 'light') {
+        osc.frequency.value = 1000;
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.04);
+      } else if (type === 'medium') {
+        osc.frequency.value = 600;
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.07);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.07);
+      } else if (type === 'success') {
+        // Two-tone success click
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        osc.frequency.setValueAtTime(900, ctx.currentTime + 0.06);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.12);
+      }
+      setTimeout(() => ctx.close(), 200);
+    } catch {}
+  };
+
   const onTouchStart = (e) => {
     // Only arm pull-to-refresh if page is truly at the top
     if (window.scrollY === 0) {
@@ -2970,10 +3011,10 @@ function App() {
       // Haptic + visual "triggered" state when crossing threshold
       if (clamped >= PULL_THRESHOLD && !pullTriggered) {
         setPullTriggered(true);
-        // Vibration API — works on Android Chrome and some iOS
-        if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+        haptic('medium');
       } else if (clamped < PULL_THRESHOLD && pullTriggered) {
         setPullTriggered(false);
+        haptic('light');
       }
     } else {
       pullStartY.current = null;
@@ -2987,8 +3028,7 @@ function App() {
       setPullDistance(0);
       setPullTriggered(false);
       pullStartY.current = null;
-      // Success haptic pulse
-      if (navigator.vibrate) navigator.vibrate(40);
+      haptic('success');
       try {
         if (isViewer) await fetchBatches(null);
         else if (selectedTeacher) await fetchBatches(selectedTeacher._id);
