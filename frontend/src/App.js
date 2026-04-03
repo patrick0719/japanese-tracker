@@ -111,6 +111,379 @@ function ImageViewer({ images, startIndex, onClose }) {
     </div>
   );
 }
+// ── PROGRESS CHART COMPONENT ─────────────────────────────────────────────────
+function ProgressChart({ student, batch, onClose }) {
+  const [chartData, setChartData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState('all');
+  const [selectedCategories, setSelectedCategories] = useState([]);
+
+  useEffect(() => {
+    processChartData();
+  }, [student, timeRange, selectedCategories]);
+
+  const processChartData = () => {
+    setLoading(true);
+    
+    const allExams = [];
+    const categories = new Set();
+    
+    (student.categories || []).forEach(cat => {
+      categories.add(cat.name);
+      (cat.items || []).forEach(item => {
+        if (item.date && item.score != null && item.totalScore) {
+          const date = new Date(item.date);
+          const pct = (item.score / item.totalScore) * 100;
+          
+          const now = new Date();
+          let include = true;
+          if (timeRange === '3months') {
+            const threeMonthsAgo = new Date(now.setMonth(now.getMonth() - 3));
+            include = date >= threeMonthsAgo;
+          } else if (timeRange === '1month') {
+            const oneMonthAgo = new Date(now.setMonth(now.getMonth() - 1));
+            include = date >= oneMonthAgo;
+          }
+          
+          if (include && (selectedCategories.length === 0 || selectedCategories.includes(cat.name))) {
+            allExams.push({
+              date,
+              dateStr: item.date,
+              score: item.score,
+              total: item.totalScore,
+              percentage: Math.round(pct),
+              category: cat.name,
+              examName: item.name
+            });
+          }
+        }
+      });
+    });
+    
+    allExams.sort((a, b) => a.date - b.date);
+    
+    const calculateTrend = (points) => {
+      if (points.length < 2) return null;
+      const n = points.length;
+      const sumX = points.reduce((s, p, i) => s + i, 0);
+      const sumY = points.reduce((s, p) => s + p.percentage, 0);
+      const sumXY = points.reduce((s, p, i) => s + i * p.percentage, 0);
+      const sumXX = points.reduce((s, p, i) => s + i * i, 0);
+      
+      const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+      const intercept = (sumY - slope * sumX) / n;
+      
+      return points.map((_, i) => slope * i + intercept);
+    };
+    
+    const trend = calculateTrend(allExams);
+    
+    const stats = {
+      totalExams: allExams.length,
+      avgScore: allExams.length > 0 ? Math.round(allExams.reduce((s, e) => s + e.percentage, 0) / allExams.length) : 0,
+      bestScore: allExams.length > 0 ? Math.max(...allExams.map(e => e.percentage)) : 0,
+      latestScore: allExams.length > 0 ? allExams[allExams.length - 1].percentage : 0,
+      improvement: allExams.length > 1 ? allExams[allExams.length - 1].percentage - allExams[0].percentage : 0
+    };
+    
+    setChartData({ exams: allExams, categories: Array.from(categories), trend, stats });
+    setLoading(false);
+  };
+
+  const renderChart = () => {
+    if (!chartData || chartData.exams.length === 0) return null;
+    
+    const width = 340;
+    const height = 220;
+    const padding = { top: 20, right: 20, bottom: 40, left: 40 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    
+    const exams = chartData.exams;
+    const scaleX = (i) => padding.left + (i / (exams.length - 1 || 1)) * chartWidth;
+    const scaleY = (val) => padding.top + chartHeight - (val / 100) * chartHeight;
+    
+    const scorePath = exams.map((e, i) => {
+      const x = scaleX(i);
+      const y = scaleY(e.percentage);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
+    
+    const trendPath = chartData.trend?.map((t, i) => {
+      const x = scaleX(i);
+      const y = scaleY(t);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ') || '';
+    
+    const gridLines = [0, 25, 50, 75, 100].map(val => ({
+      y: scaleY(val),
+      label: val + '%'
+    }));
+
+    return (
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ maxWidth: 400 }}>
+        <rect x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} fill="#f8f9fa" rx={4} />
+        
+        {gridLines.map((line, i) => (
+          <g key={i}>
+            <line x1={padding.left} y1={line.y} x2={width - padding.right} y2={line.y} 
+              stroke="#e5e5ea" strokeWidth={1} strokeDasharray="4,4" />
+            <text x={padding.left - 8} y={line.y + 4} textAnchor="end" fontSize={10} fill="#8e8e93">{line.label}</text>
+          </g>
+        ))}
+        
+        {trendPath && (
+          <path d={trendPath} fill="none" stroke="#8B0000" strokeWidth={2} strokeDasharray="6,4" opacity={0.6} />
+        )}
+        
+        <path d={scorePath} fill="none" stroke="#007AFF" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        
+        <defs>
+          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#007AFF" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="#007AFF" stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
+        <path 
+          d={`${scorePath} L ${scaleX(exams.length - 1)} ${scaleY(0)} L ${scaleX(0)} ${scaleY(0)} Z`}
+          fill="url(#areaGradient)"
+        />
+        
+        {exams.map((e, i) => (
+          <g key={i}>
+            <circle cx={scaleX(i)} cy={scaleY(e.percentage)} r={5} fill="#fff" stroke="#007AFF" strokeWidth={2} />
+            <title>{`${e.examName}\n${e.category}: ${e.score}/${e.total} (${e.percentage}%)\n${e.dateStr}`}</title>
+          </g>
+        ))}
+        
+        {exams.length <= 8 ? exams.map((e, i) => (
+          <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
+            {e.dateStr.slice(5)}
+          </text>
+        )) : exams.filter((_, i) => i % Math.ceil(exams.length / 6) === 0).map((e, i) => (
+          <text key={i} x={scaleX(i * Math.ceil(exams.length / 6))} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i * Math.ceil(exams.length / 6))}, ${height - 10})`}>
+            {e.dateStr.slice(5)}
+          </text>
+        ))}
+      </svg>
+    );
+  };
+
+  const toggleCategory = (cat) => {
+    setSelectedCategories(prev => 
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: '#f2f2f7', zIndex: 9999,
+      display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif'
+    }}>
+      <div style={{
+        background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+        padding: '16px 20px',
+        paddingTop: 'env(safe-area-inset-top, 16px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0,
+        boxShadow: '0 2px 12px rgba(139,0,0,0.3)'
+      }}>
+        <button onClick={onClose} style={{
+          background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
+          borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
+        }}>← Back</button>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 Progress Chart</span>
+        <div style={{ width: 72 }} />
+      </div>
+
+      <div style={{
+        background: '#fff', padding: '16px 20px', borderBottom: '1px solid #e5e5ea',
+        display: 'flex', alignItems: 'center', gap: 14
+      }}>
+        {student.photo ? (
+          <img src={student.photo} alt={student.name} style={{
+            width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid #8B0000'
+          }} />
+        ) : (
+          <span style={{ fontSize: 40 }}>👤</span>
+        )}
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1c1c1e' }}>{student.name}</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#8e8e93' }}>{batch.name}</p>
+          {student.companyName && (
+            <span style={{
+              display: 'inline-block', marginTop: 4,
+              background: '#e8f5e9', color: '#2e7d32',
+              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12
+            }}>🏢 {student.companyName}</span>
+          )}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px' }}>
+        {!loading && chartData && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
+            {[
+              { label: 'Total Exams', value: chartData.stats.totalExams, icon: '📝', color: '#007AFF' },
+              { label: 'Average Score', value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759' },
+              { label: 'Best Score', value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500' },
+              { label: 'Improvement', value: (chartData.stats.improvement > 0 ? '+' : '') + chartData.stats.improvement + '%', 
+                icon: chartData.stats.improvement >= 0 ? '📈' : '📉', 
+                color: chartData.stats.improvement >= 0 ? '#34C759' : '#FF3B30' }
+            ].map((stat, i) => (
+              <div key={i} style={{
+                background: '#fff', borderRadius: 14, padding: '16px 14px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)', textAlign: 'center'
+              }}>
+                <div style={{ fontSize: 24, marginBottom: 6 }}>{stat.icon}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{
+          background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+        }}>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>⏱️ Time Range</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { id: 'all', label: 'All Time' },
+              { id: '3months', label: '3 Months' },
+              { id: '1month', label: '1 Month' }
+            ].map(opt => (
+              <button key={opt.id} onClick={() => setTimeRange(opt.id)} style={{
+                flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none',
+                fontSize: 13, fontWeight: timeRange === opt.id ? 700 : 500,
+                background: timeRange === opt.id ? '#8B0000' : '#f2f2f7',
+                color: timeRange === opt.id ? '#fff' : '#3a3a3c',
+                cursor: 'pointer', transition: 'all 0.2s'
+              }}>{opt.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {!loading && chartData && chartData.categories.length > 0 && (
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+          }}>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>📁 Categories</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {chartData.categories.map(cat => {
+                const colors = {
+                  'Kanji': '#FF6B6B', 'Grammar': '#4ECDC4', 'Vocabulary': '#45B7D1',
+                  'Reading': '#96CEB4', 'Listening': '#FFEAA7', 'Speaking': '#DDA0DD'
+                };
+                const color = colors[cat] || '#8B0000';
+                const isSelected = selectedCategories.includes(cat);
+                return (
+                  <button key={cat} onClick={() => toggleCategory(cat)} style={{
+                    padding: '6px 14px', borderRadius: 20, border: 'none',
+                    fontSize: 12, fontWeight: isSelected ? 700 : 500,
+                    background: isSelected ? color : '#f2f2f7',
+                    color: isSelected ? '#fff' : '#3a3a3c',
+                    cursor: 'pointer', transition: 'all 0.2s'
+                  }}>{cat}</button>
+                );
+              })}
+              {selectedCategories.length > 0 && (
+                <button onClick={() => setSelectedCategories([])} style={{
+                  padding: '6px 14px', borderRadius: 20, border: '1.5px solid #8e8e93',
+                  fontSize: 12, fontWeight: 500, background: '#fff',
+                  color: '#8e8e93', cursor: 'pointer'
+                }}>Clear</button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div style={{
+          background: '#fff', borderRadius: 16, padding: '20px 16px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📈 Score Trend</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 12, height: 3, background: '#007AFF', borderRadius: 2 }} />
+                Actual
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 12, height: 3, background: '#8B0000', borderRadius: 2, opacity: 0.6 }} />
+                Trend
+              </span>
+            </div>
+          </div>
+          
+          {loading ? (
+            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{
+                    width: 8, height: 8, borderRadius: '50%', background: '#8B0000',
+                    animation: `dotPulse 1.1s ease-in-out ${i*0.18}s infinite`
+                  }} />
+                ))}
+              </div>
+            </div>
+          ) : chartData?.exams.length === 0 ? (
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8e8e93' }}>
+              <span style={{ fontSize: 40, marginBottom: 10 }}>📊</span>
+              <p style={{ margin: 0, fontSize: 14 }}>No exam data available</p>
+              <p style={{ margin: '4px 0 0', fontSize: 12 }}>Add exams with dates to see progress</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              {renderChart()}
+            </div>
+          )}
+        </div>
+
+        {!loading && chartData && chartData.exams.length > 0 && (
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: 16,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+          }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📝 Recent Exams</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {chartData.exams.slice(-5).reverse().map((exam, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 14px', background: '#f9f9f9', borderRadius: 10
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{
+                      width: 36, height: 36, borderRadius: '50%',
+                      background: exam.percentage >= 80 ? '#e8f5e9' : exam.percentage >= 60 ? '#fff8e1' : '#ffebee',
+                      color: exam.percentage >= 80 ? '#2e7d32' : exam.percentage >= 60 ? '#f57c00' : '#c62828',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 13, fontWeight: 700
+                    }}>{exam.percentage}%</span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1c1c1e' }}>{exam.examName}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#8e8e93' }}>{exam.category} • {exam.dateStr}</p>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: 13, fontWeight: 700, color: '#3a3a3c',
+                    background: '#f2f2f7', padding: '4px 10px', borderRadius: 8
+                  }}>{exam.score}/{exam.total}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ height: 20 }} />
+      </div>
+
+      <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
+    </div>
+  );
+}
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
 function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRetake }) {
@@ -366,6 +739,9 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   // Bulk scan pages accumulator
   const [scannedPages, setScannedPages] = useState([]);
   const [bulkUploading, setBulkUploading] = useState(false);
+  //ProgressChart
+  const [showProgressChart, setShowProgressChart] = useState(false);
+  const [progressChartStudent, setProgressChartStudent] = useState(null);
 
   // ── CAMERA PHASE ─────────────────────────────────────────────────
   useEffect(() => {
@@ -1239,6 +1615,13 @@ function TeacherSelect({ onSelect }) {
         className="btn-logout" style={{ marginTop: 36 }}>
         Logout
       </button>
+      {showProgressChart && progressChartStudent && (
+  <ProgressChart
+    student={progressChartStudent}
+    batch={selectedBatch}
+    onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
+  />
+)}
     </div>
   );
 }
@@ -2179,6 +2562,17 @@ function App() {
                   }
                   <div>
                     <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
+                    {/* Inside the student card, next to the name */}
+<button
+  onClick={(e) => { e.stopPropagation(); setProgressChartStudent(student); setShowProgressChart(true); }}
+  style={{
+    background: '#8B0000', color: '#fff', border: 'none',
+    borderRadius: 8, padding: '6px 12px', fontSize: 12,
+    fontWeight: 600, cursor: 'pointer', marginLeft: 'auto'
+  }}
+>
+  📈 Progress
+</button>
                     <p className="card-subtitle">{student.batchName}</p>
                   </div>
                 </div>
@@ -2434,6 +2828,23 @@ function App() {
     </div>
   )}
 </div>
+{/* Progress Chart Button - Kumiai/Viewer only */}
+{isViewer && (
+  <button
+    onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}
+    style={{
+      width: '100%', background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+      color: '#fff', border: 'none', borderRadius: 12,
+      padding: '14px 20px', fontSize: 15, fontWeight: 700,
+      cursor: 'pointer', marginBottom: 16,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      boxShadow: '0 2px 8px rgba(139,0,0,0.25)'
+    }}
+  >
+    <span style={{ fontSize: 20 }}>📈</span>
+    View Progress Chart
+  </button>
+)}
 
       {/* ── Exam Categories Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
