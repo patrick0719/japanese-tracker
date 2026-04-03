@@ -2189,48 +2189,65 @@ function App() {
     return (
       <>
         <button className="back-btn" onClick={goBack}>←</button>
-        <div className="header-with-back">
-          <h1 className="title">📋 {selectedEvaluation?.ordinal} Evaluation</h1>
-        </div>
 
-        {/* Header info */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#3a3a3c' }}>{selectedEvaluation?.title}</p>
-            <p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>📅 {selectedEvaluation?.date}</p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ margin: 0, fontSize: 12, color: '#8e8e93' }}>Student</p>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>{selectedStudent?.name}</p>
-          </div>
-        </div>
-
-        {/* Company Name */}
-        {selectedStudent?.companyName && (
-          <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 20 }}>🏢</span>
+        {/* Hero banner */}
+        <div className="eval-hero">
+          <div className="eval-hero-top">
             <div>
-              <p style={{ margin: 0, fontSize: 11, color: '#8e8e93', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Company</p>
-              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#3a3a3c' }}>{selectedStudent.companyName}</p>
+              <p className="eval-ordinal">{selectedEvaluation?.ordinal} Evaluation</p>
+              <h1 className="eval-title">{selectedEvaluation?.title}</h1>
+              <p className="eval-date">📅 {selectedEvaluation?.date}</p>
+            </div>
+            <div className="eval-student-badge">
+              {selectedStudent?.photo
+                ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="eval-student-avatar" />
+                : <span className="eval-student-icon">👤</span>
+              }
+              <p className="eval-student-name">{selectedStudent?.name}</p>
             </div>
           </div>
-        )}
-
-        {/* Ratings Section */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 16px' }}>Skills Rating (0–10)</h3>
-          {ratingField('reading', 'READING', '読むこと')}
-          {ratingField('listening', 'LISTENING', '聞くこと')}
-          {ratingField('speaking', 'SPEAKING', '話すこと')}
+          {selectedStudent?.companyName && (
+            <div className="eval-company-chip">
+              🏢 {selectedStudent.companyName}
+            </div>
+          )}
         </div>
 
-        {/* Text Fields Section */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 16px' }}>Details</h3>
-          {textField('from', 'FROM', null, 'e.g., Lesson 1')}
-          {textField('to', 'TO', null, 'e.g., Lesson 10')}
+        {/* Skills Rating */}
+        <div className="section-box">
+          <div className="section-box-header">
+            <span className="section-box-title">🎯 Skills Rating</span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>Score 0 – 10</span>
+          </div>
+          {ratingField('reading',   'READING',   '読むこと')}
+          {ratingField('listening', 'LISTENING', '聞くこと')}
+          {ratingField('speaking',  'SPEAKING',  '話すこと')}
+        </div>
+
+        {/* Lesson Details */}
+        <div className="section-box">
+          <div className="section-box-header">
+            <span className="section-box-title">📖 Lesson Details</span>
+          </div>
+          <div className="eval-lesson-row">
+            <div className="form-group" style={{ flex: 1 }}>
+              {textField('from', 'FROM', null, 'e.g., Lesson 1')}
+            </div>
+            <div className="eval-lesson-arrow">→</div>
+            <div className="form-group" style={{ flex: 1 }}>
+              {textField('to', 'TO', null, 'e.g., Lesson 10')}
+            </div>
+          </div>
           {textField('currentLesson', 'CURRENT LESSON', null, 'e.g., Chapter 3 - Greetings')}
-          {textField('remarks', 'REMARKS', '備考', 'コメントを入力してください...')}
+        </div>
+
+        {/* Remarks */}
+        <div className="section-box">
+          <div className="section-box-header">
+            <span className="section-box-title">💬 Remarks</span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>備考</span>
+          </div>
+          {textField('remarks', null, null, 'コメントを入力してください...')}
         </div>
 
         {/* Teacher Signature */}
@@ -2239,17 +2256,19 @@ function App() {
           const teacher = allTeachers.find(t => t._id === batchTeacherId);
           if (!teacher?.signature) return null;
           return (
-            <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 12px' }}>Teacher's Signature</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div className="section-box">
+              <div className="section-box-header">
+                <span className="section-box-title">✍️ Teacher's Signature</span>
+              </div>
+              <div className="eval-signature-row">
                 <img
                   src={teacher.signature}
                   alt={`${teacher.name} signature`}
-                  style={{ height: 72, maxWidth: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid #e5e5ea', background: '#fafafa', padding: 4 }}
+                  className="eval-signature-img"
                 />
                 <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{teacher.name}</p>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#8e8e93' }}>Class Teacher</p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{teacher.name}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>Class Teacher</p>
                 </div>
               </div>
             </div>
@@ -2257,8 +2276,7 @@ function App() {
         })()}
 
         {!isViewer && (
-          <button onClick={saveEvaluationFields} disabled={evalSaving}
-            style={{ width: '100%', background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: evalSaving ? 'not-allowed' : 'pointer', marginBottom: 24, opacity: evalSaving ? 0.7 : 1 }}>
+          <button onClick={saveEvaluationFields} disabled={evalSaving} className="btn-primary" style={{ marginBottom: 24, opacity: evalSaving ? 0.7 : 1, cursor: evalSaving ? 'not-allowed' : 'pointer' }}>
             {evalSaving ? 'Saving...' : '💾 Save Evaluation'}
           </button>
         )}
@@ -2285,8 +2303,8 @@ function App() {
             const score = item.score ?? 0;
             const total = item.totalScore ?? 100;
             const pct = Math.round((score / total) * 100);
-            const color = pct >= 60 ? 'var(--green)' : pct >= 0 ? 'var(--amber)' : 'var(--red)';
-            const bg   = pct >= 60 ? 'var(--green-soft)' : pct >= 0 ? 'var(--amber-soft)' : 'var(--red-soft)';
+            const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+            const bg   = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
             return (
               <div key={item._id} className="exam-list-card clickable" onClick={() => goToExamDetail(item)}>
                 {/* Score badge */}
@@ -2328,8 +2346,8 @@ function App() {
     const score = selectedExam.score ?? 0;
     const total = selectedExam.totalScore ?? 100;
     const pct = Math.round((score / total) * 100);
-    const pctColor = pct >= 60 ? 'var(--green)' : pct >= 0 ? 'var(--amber)' : 'var(--red)';
-    const pctBg    = pct >= 60 ? 'var(--green-soft)' : pct >= 0 ? 'var(--amber-soft)' : 'var(--red-soft)';
+    const pctColor = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+    const pctBg    = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
 
     return (
       <>
