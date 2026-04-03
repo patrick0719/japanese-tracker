@@ -1935,6 +1935,7 @@ function App() {
   const pullTriggeredRef = useRef(false); // mirrors pullTriggered
   const pullRefreshingRef = useRef(false);// mirrors pullRefreshing
   const pullStartY = useRef(null);
+  const pullStartScrollTop = useRef(0); // scrollTop snapshot at touchstart, used by onTouchMove velocity guard
   const scrollContainerRef = useRef(null);
   const PULL_THRESHOLD = 100;
   const [showSettings, setShowSettings] = useState(false);
@@ -3809,36 +3810,58 @@ function App() {
   const setRefreshing = (v) => { pullRefreshingRef.current = v; setPullRefreshing(v); };
 
   const onTouchStart = (e) => {
-    // Only arm when the scroll container is truly at the top
+    // Only arm when the scroll container is truly at the top.
+    // Use a small dead-zone (≤ 2px) so a hair of momentum scroll doesn't
+    // block legitimate pull-to-refresh, but fast flings are caught in onTouchMove.
     const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-    pullStartY.current = scrollTop === 0 ? e.touches[0].clientY : null;
+    if (scrollTop <= 2) {
+      pullStartY.current = e.touches[0].clientY;
+      pullStartScrollTop.current = scrollTop; // snapshot for velocity guard
+    } else {
+      pullStartY.current = null;
+    }
   };
 
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
-    // Disarm if container drifted from top (momentum scroll from prev gesture)
-    if ((scrollContainerRef.current?.scrollTop ?? 0) > 5) {
+
+    const currentScrollTop = scrollContainerRef.current?.scrollTop ?? 0;
+
+    // Disarm if the container moved away from top (momentum scroll settling in).
+    // Threshold raised to 3px — more reliable than 5px on fast flings.
+    if (currentScrollTop > 3) {
       pullStartY.current = null;
       setDist(0);
       setTriggered(false);
       return;
     }
+
     const dist = e.touches[0].clientY - pullStartY.current;
-    if (dist > 0) {
-      const clamped = Math.min(dist, 130);
-      setDist(clamped);
-      if (clamped >= PULL_THRESHOLD && !pullTriggeredRef.current) {
-        setTriggered(true);
-        haptic('medium');
-      } else if (clamped < PULL_THRESHOLD && pullTriggeredRef.current) {
-        setTriggered(false);
-        haptic('light');
-      }
-    } else {
-      // finger moved back up — reset
+
+    // ── Threads-style intent guard ───────────────────────────────────────────
+    // If the finger moved up (negative dist) before we've built any pull
+    // distance, the user is scrolling — not pulling. Disarm immediately.
+    if (dist <= 0) {
       pullStartY.current = null;
       setDist(0);
       setTriggered(false);
+      return;
+    }
+
+    // Require at least 6px of downward movement before engaging the indicator.
+    // This dead-zone eats the tiny "bounce" at the top of a fast scroll.
+    const DEAD_ZONE = 6;
+    if (dist < DEAD_ZONE) return;
+
+    const adjusted = dist - DEAD_ZONE;
+    const clamped = Math.min(adjusted, 130);
+    setDist(clamped);
+    if (clamped >= PULL_THRESHOLD && !pullTriggeredRef.current) {
+      setTriggered(true);
+      haptic('medium');
+    } else if (clamped < PULL_THRESHOLD && pullTriggeredRef.current) {
+      setTriggered(false);
+      haptic('light');
     }
   };
 
@@ -3869,7 +3892,7 @@ function App() {
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      style={{ overflowY: 'auto', minHeight: '100vh', position: 'relative' }}
+      style={{ overflowY: 'auto', minHeight: '100vh', position: 'relative', overscrollBehaviorY: 'contain' }}
     >
       {/* ── Pull-to-refresh indicator ── */}
       {(pullDistance > 0 || pullRefreshing) && (() => {
