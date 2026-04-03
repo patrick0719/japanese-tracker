@@ -413,7 +413,7 @@ function ProgressChart({ student, batch, onClose }) {
               { label: 'Best Score', value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
               chartData.stats.recentTrend !== null
                 ? {
-                    label: 'Recent Trend',
+                    label: 'Improvement',
                     value: (chartData.stats.recentTrend > 0 ? '+' : '') + chartData.stats.recentTrend + '%',
                     icon: chartData.stats.recentTrend > 0 ? '📈' : chartData.stats.recentTrend < 0 ? '📉' : '➡️',
                     color: chartData.stats.recentTrend > 0 ? '#34C759' : chartData.stats.recentTrend < 0 ? '#FF3B30' : '#8e8e93',
@@ -1932,6 +1932,7 @@ function App() {
   const [pullDistance, setPullDistance] = useState(0);
   const [pullTriggered, setPullTriggered] = useState(false);
   const pullStartY = useRef(null);
+  const pullStartX = useRef(null);
   const PULL_THRESHOLD = 100;
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
@@ -3800,33 +3801,46 @@ function App() {
   };
 
   const onTouchStart = (e) => {
-    // Only arm pull-to-refresh if page is truly at the top
-    if (window.scrollY === 0) {
+    // Snapshot scroll position at the moment of touch — scrollY during move can lag
+    const scrollAtStart = window.scrollY || document.documentElement.scrollTop;
+    if (scrollAtStart === 0) {
       pullStartY.current = e.touches[0].clientY;
+      pullStartX.current = e.touches[0].clientX;
     } else {
       pullStartY.current = null;
+      pullStartX.current = null;
     }
   };
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
-    // Cancel if user scrolled away from top during the move
-    if (window.scrollY > 5) { pullStartY.current = null; setPullDistance(0); setPullTriggered(false); return; }
-    const dist = e.touches[0].clientY - pullStartY.current;
-    if (dist > 0) {
-      const clamped = Math.min(dist, 130);
-      setPullDistance(clamped);
-      // Haptic + visual "triggered" state when crossing threshold
-      if (clamped >= PULL_THRESHOLD && !pullTriggered) {
-        setPullTriggered(true);
-        haptic('medium');
-      } else if (clamped < PULL_THRESHOLD && pullTriggered) {
-        setPullTriggered(false);
-        haptic('light');
-      }
-    } else {
+    // If page has drifted away from top (momentum scroll), disarm immediately
+    const currentScroll = window.scrollY || document.documentElement.scrollTop;
+    if (currentScroll > 2) {
       pullStartY.current = null;
+      pullStartX.current = null;
       setPullDistance(0);
       setPullTriggered(false);
+      return;
+    }
+    const dy = e.touches[0].clientY - pullStartY.current;
+    const dx = Math.abs(e.touches[0].clientX - (pullStartX.current || 0));
+    // Only arm if gesture is more vertical than horizontal (not a side-swipe)
+    if (dy <= 0 || dx > dy) {
+      pullStartY.current = null;
+      pullStartX.current = null;
+      setPullDistance(0);
+      setPullTriggered(false);
+      return;
+    }
+    const clamped = Math.min(dy, 130);
+    setPullDistance(clamped);
+    // Haptic + visual "triggered" state when crossing threshold
+    if (clamped >= PULL_THRESHOLD && !pullTriggered) {
+      setPullTriggered(true);
+      haptic('medium');
+    } else if (clamped < PULL_THRESHOLD && pullTriggered) {
+      setPullTriggered(false);
+      haptic('light');
     }
   };
   const onTouchEnd = async () => {
