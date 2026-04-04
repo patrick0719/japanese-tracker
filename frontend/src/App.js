@@ -2293,6 +2293,22 @@ function App() {
     } catch { alert('Error updating status.'); }
   };
 
+  const toggleArchiveStudent = async (student) => {
+    const newArchived = !student.isArchived;
+    const label = newArchived ? 'archive' : 'unarchive';
+    if (!window.confirm(`${newArchived ? 'Archive' : 'Unarchive'} ${student.name}? ${newArchived ? 'They will no longer appear on the Kumiai side.' : 'They will be visible again on the Kumiai side.'}`)) return;
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${student._id}/archive`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isArchived: newArchived })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === student._id);
+      if (updatedStudent) setSelectedStudent(updatedStudent);
+    } catch { alert(`Error: could not ${label} student.`); }
+  };
+
   const deleteCategory = async (catId, e) => {
     if (e) e.stopPropagation();
     if (!window.confirm('Delete this category and all its exams?')) return;
@@ -2829,7 +2845,7 @@ function App() {
 
   const renderStudents = () => {
     const role = safeLocalGet(ROLE_KEY);
-    let visibleStudents = selectedBatch.students;
+    let visibleStudents = selectedBatch.students.filter(s => !s.isArchived); // always hide archived
     if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'Setouchi' || (!s.kumiai && s.companyName === 'Setouchi')));
     else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
     else if (role === 'gyoumusuishin') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.kumiai === 'Gyoumusuishin');
@@ -2937,6 +2953,16 @@ function App() {
         }}
         style={{ background: 'transparent', color: '#007AFF', border: '1.5px solid #007AFF', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
       >🔄 Restore</button>
+
+      <button
+        onClick={() => toggleArchiveStudent(selectedStudent)}
+        style={{
+          background: selectedStudent.isArchived ? 'transparent' : '#555',
+          color: selectedStudent.isArchived ? '#555' : '#fff',
+          border: '1.5px solid #555',
+          borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer'
+        }}
+      >{selectedStudent.isArchived ? '👁 Unarchive Student' : '🚫 Hide from Kumiai'}</button>
 
       <button
         onClick={async () => {

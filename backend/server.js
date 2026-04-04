@@ -91,6 +91,7 @@ mongoose.connect(process.env.MONGO_URI)
       name: String,
       photo: String,
       status: { type: String, default: 'Regular' },
+      isArchived: { type: Boolean, default: false },
       companyName: { type: String, default: '' },
       kumiai: { type: String, default: '' },
       categories: [{
@@ -245,6 +246,15 @@ app.patch('/api/batches/:batchId/students/:studentId/status', async (req, res) =
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     student.status = req.body.status;
+    await batch.save(); res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/batches/:batchId/students/:studentId/archive', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    student.isArchived = req.body.isArchived;
     await batch.save(); res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
