@@ -2845,12 +2845,12 @@ function App() {
 
   const renderStudents = () => {
     const role = safeLocalGet(ROLE_KEY);
-    let visibleStudents = selectedBatch.students.filter(s => !s.isArchived); // always hide archived
-    if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'Setouchi' || (!s.kumiai && s.companyName === 'Setouchi')));
-    else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
-    else if (role === 'gyoumusuishin') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.kumiai === 'Gyoumusuishin');
-    else if (role === 'greenservices') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.kumiai === 'Green Services');
-    else if (isViewer) visibleStudents = visibleStudents.filter(s => s.status === 'Selected');
+    let visibleStudents = selectedBatch.students;
+    if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && (s.kumiai === 'Setouchi' || (!s.kumiai && s.companyName === 'Setouchi')));
+    else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
+    else if (role === 'gyoumusuishin') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && s.kumiai === 'Gyoumusuishin');
+    else if (role === 'greenservices') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && s.kumiai === 'Green Services');
+    else if (isViewer) visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected');
     visibleStudents = visibleStudents.slice().sort((a, b) => a.name.localeCompare(b.name));
     return (
     <>
