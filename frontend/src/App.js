@@ -353,6 +353,51 @@ function ProgressChart({ student, batch, onClose }) {
     );
   };
 
+  const [ptrDist, setPtrDist] = useState(0);
+  const [ptrTriggered, setPtrTriggered] = useState(false);
+  const [ptrRefreshing, setPtrRefreshing] = useState(false);
+  const ptrDistRef = useRef(0);
+  const ptrTriggeredRef = useRef(false);
+  const ptrRefreshingRef = useRef(false);
+  const ptrStartY = useRef(null);
+  const ptrScrollRef = useRef(null);
+  const PTR_THRESHOLD = 80;
+
+  const ptrTouchStart = (e) => {
+    if (ptrRefreshingRef.current) return;
+    if ((ptrScrollRef.current?.scrollTop ?? 0) > 0) { ptrStartY.current = null; return; }
+    ptrStartY.current = e.touches[0].clientY;
+  };
+  const ptrTouchMove = (e) => {
+    if (ptrStartY.current === null) return;
+    if ((ptrScrollRef.current?.scrollTop ?? 0) > 0) {
+      ptrStartY.current = null;
+      setPtrDist(0); ptrDistRef.current = 0;
+      setPtrTriggered(false); ptrTriggeredRef.current = false;
+      return;
+    }
+    const dy = e.touches[0].clientY - ptrStartY.current;
+    if (dy <= 0) { setPtrDist(0); ptrDistRef.current = 0; setPtrTriggered(false); ptrTriggeredRef.current = false; return; }
+    const dist = Math.min(dy * 0.45, 120);
+    setPtrDist(dist); ptrDistRef.current = dist;
+    if (dist >= PTR_THRESHOLD && !ptrTriggeredRef.current) { setPtrTriggered(true); ptrTriggeredRef.current = true; }
+    else if (dist < PTR_THRESHOLD && ptrTriggeredRef.current) { setPtrTriggered(false); ptrTriggeredRef.current = false; }
+  };
+  const ptrTouchEnd = () => {
+    if (ptrDistRef.current >= PTR_THRESHOLD && !ptrRefreshingRef.current) {
+      ptrStartY.current = null;
+      setPtrDist(0); ptrDistRef.current = 0;
+      setPtrTriggered(false); ptrTriggeredRef.current = false;
+      setPtrRefreshing(true); ptrRefreshingRef.current = true;
+      // re-process chart data (simulates refresh)
+      setTimeout(() => { processChartData(); setPtrRefreshing(false); ptrRefreshingRef.current = false; }, 800);
+    } else {
+      ptrStartY.current = null;
+      setPtrDist(0); ptrDistRef.current = 0;
+      setPtrTriggered(false); ptrTriggeredRef.current = false;
+    }
+  };
+
   const toggleCategory = (cat) => {
     setSelectedCategories(prev => 
       prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
@@ -404,7 +449,40 @@ function ProgressChart({ student, batch, onClose }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px' }}>
+      <div
+        ref={ptrScrollRef}
+        onTouchStart={ptrTouchStart}
+        onTouchMove={ptrTouchMove}
+        onTouchEnd={ptrTouchEnd}
+        style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', position: 'relative' }}
+      >
+        {/* PTR indicator */}
+        {(ptrDist > 0 || ptrRefreshing) && (() => {
+          const progress = Math.min(ptrDist / PTR_THRESHOLD, 1);
+          const circleSize = 44; const radius = 16;
+          const circumference = 2 * Math.PI * radius;
+          const dashOffset = circumference * (1 - (ptrTriggered ? 1 : progress));
+          return (
+            <div style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 99, display: 'flex', justifyContent: 'center', paddingTop: 6, paddingBottom: 6, pointerEvents: 'none', marginTop: -20, marginBottom: 8 }}>
+              <div style={{ width: circleSize, height: circleSize, borderRadius: '50%', background: ptrTriggered || ptrRefreshing ? 'linear-gradient(135deg,#8B0000,#c0392b)' : 'rgba(255,255,255,0.97)', boxShadow: ptrTriggered || ptrRefreshing ? '0 4px 20px rgba(139,0,0,0.4)' : '0 2px 14px rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `scale(${0.65 + progress * 0.35})`, transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s' }}>
+                {ptrRefreshing ? (
+                  <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute', animation: 'ptr-spin 0.75s linear infinite' }}>
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" />
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="#fff" strokeWidth="2.5" strokeDasharray={circumference} strokeDashoffset={circumference * 0.72} strokeLinecap="round" transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} />
+                  </svg>
+                ) : (
+                  <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute' }}>
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="rgba(139,0,0,0.12)" strokeWidth="2.5" />
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke={ptrTriggered ? '#fff' : '#8B0000'} strokeWidth="2.5" strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} style={{ transition: 'stroke-dashoffset 0.06s, stroke 0.2s' }} />
+                  </svg>
+                )}
+                <svg width="16" height="16" viewBox="0 0 16 16" style={{ position: 'relative', zIndex: 1, transform: `rotate(${ptrTriggered || ptrRefreshing ? 180 : progress * 200}deg)`, transition: ptrTriggered ? 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1)' : 'transform 0.1s' }}>
+                  <path d="M8 2 L8 11 M4 7 L8 11 L12 7" stroke={ptrTriggered || ptrRefreshing ? '#fff' : '#8B0000'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" style={{ transition: 'stroke 0.2s' }} />
+                </svg>
+              </div>
+            </div>
+          );
+        })()}
         {!loading && chartData && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
