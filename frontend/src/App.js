@@ -2669,7 +2669,7 @@ function App() {
     const allStudents = [];
     batches.forEach(batch => {
       batch.students
-        .filter(s => s.status === 'Selected' && (s.kumiai === kumiai || (!s.kumiai && s.companyName === kumiai)))
+        .filter(s => !s.isArchived && s.status === 'Selected' && (s.kumiai === kumiai || (!s.kumiai && s.companyName === kumiai)))
         .forEach(s => allStudents.push({ ...s, batchName: batch.name, batchId: batch._id, batch }));
     });
 
@@ -2686,7 +2686,7 @@ function App() {
 
     // ── Company detail view (students inside a company) ───────────────
     if (selectedCompany) {
-      const students = selectedCompany.students.slice().sort((a, b) => a.name.localeCompare(b.name));
+      const students = selectedCompany.students.filter(s => !s.isArchived).slice().sort((a, b) => a.name.localeCompare(b.name));
       return (
         <>
           <button className="back-btn" onClick={() => setSelectedCompany(null)}>←</button>
@@ -2831,7 +2831,7 @@ function App() {
               <h2 className="card-title">🎌 {batch.name}</h2>
               <p className="card-subtitle">
                 {isViewer
-                  ? `${batch.students.filter(s => s.status === 'Selected').length} selected student${batch.students.filter(s => s.status === 'Selected').length !== 1 ? 's' : ''}`
+                  ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
                   : `${batch.students.length} student${batch.students.length !== 1 ? 's' : ''}`}
               </p>
             </div>
