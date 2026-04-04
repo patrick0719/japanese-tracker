@@ -255,6 +255,7 @@ app.patch('/api/batches/:batchId/students/:studentId/archive', async (req, res) 
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     student.isArchived = req.body.isArchived;
+    batch.markModified('students');
     await batch.save(); res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
