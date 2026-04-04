@@ -1931,13 +1931,12 @@ function App() {
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [pullTriggered, setPullTriggered] = useState(false);
-  const pullDistanceRef = useRef(0);      // mirrors pullDistance — never stale in touch handlers
-  const pullTriggeredRef = useRef(false); // mirrors pullTriggered
-  const pullRefreshingRef = useRef(false);// mirrors pullRefreshing
-  const pullStartY = useRef(null);
-  const pullStartScrollTop = useRef(0); // scrollTop snapshot at touchstart, used by onTouchMove velocity guard
-  const scrollContainerRef = useRef(null);
-  const PULL_THRESHOLD = 100;
+  const pullDistanceRef = useRef(0);
+  const pullTriggeredRef = useRef(false);
+  const pullRefreshingRef = useRef(false);
+  const pullStartY = useRef(null);        // finger Y at touchstart, null = disarmed
+  const pullScrollY = useRef(0);          // window.scrollY at touchstart
+  const PULL_THRESHOLD = 80;
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [progressChartStudent, setProgressChartStudent] = useState(null);
@@ -3830,64 +3829,57 @@ function App() {
     } catch {}
   };
 
-  // helpers that keep state + ref in sync
+  // ── helpers (keep state + ref in sync) ───────────────────────────────────
   const setDist = (v) => { pullDistanceRef.current = v; setPullDistance(v); };
   const setTriggered = (v) => { pullTriggeredRef.current = v; setPullTriggered(v); };
   const setRefreshing = (v) => { pullRefreshingRef.current = v; setPullRefreshing(v); };
 
+  // ── Pull-to-refresh handlers (window scroll — body is the scroller) ───────
   const onTouchStart = (e) => {
-    // Snapshot the finger Y immediately so we don't lose the touch point.
-    const startY = e.touches[0].clientY;
-
-    // Wait one animation frame so any momentum scroll can update scrollTop
-    // before we decide whether to arm. This catches the "fast fling then
-    // immediately touch again" case where scrollTop reads 0 too early.
-    requestAnimationFrame(() => {
-      const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-      pullStartY.current = scrollTop === 0 ? startY : null;
-    });
+    if (pullRefreshingRef.current) return;
+    // Only arm when the page is truly at the very top
+    if (window.scrollY > 0) { pullStartY.current = null; return; }
+    pullStartY.current = e.touches[0].clientY;
+    pullScrollY.current = window.scrollY;
   };
 
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
+    if (pullRefreshingRef.current) return;
 
-    // Zero-tolerance: if scrollTop moved even 1px, the user is scrolling — disarm.
-    const currentScrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-    if (currentScrollTop > 0) {
+    // If the page scrolled down since touchstart, the user is scrolling — disarm
+    if (window.scrollY > 0) {
       pullStartY.current = null;
-      setDist(0);
-      setTriggered(false);
+      setDist(0); setTriggered(false);
       return;
     }
 
-    const dist = e.touches[0].clientY - pullStartY.current;
+    const dy = e.touches[0].clientY - pullStartY.current;
 
-    // Only engage on clear downward swipe.
-    if (dist <= 0) {
-      pullStartY.current = null;
-      setDist(0);
-      setTriggered(false);
+    // Must be a clear downward drag
+    if (dy <= 0) {
+      setDist(0); setTriggered(false);
       return;
     }
 
-    const clamped = Math.min(dist, 130);
-    setDist(clamped);
-    if (clamped >= PULL_THRESHOLD && !pullTriggeredRef.current) {
+    // Rubber-band resistance: feels heavy like native
+    const resistance = 0.45;
+    const dist = Math.min(dy * resistance, 120);
+    setDist(dist);
+
+    if (dist >= PULL_THRESHOLD && !pullTriggeredRef.current) {
       setTriggered(true);
       haptic('medium');
-    } else if (clamped < PULL_THRESHOLD && pullTriggeredRef.current) {
+    } else if (dist < PULL_THRESHOLD && pullTriggeredRef.current) {
       setTriggered(false);
-      haptic('light');
     }
   };
 
   const onTouchEnd = async () => {
-    // Read from refs — never stale
     if (pullDistanceRef.current >= PULL_THRESHOLD && !pullRefreshingRef.current) {
-      setRefreshing(true);
-      setDist(0);
-      setTriggered(false);
       pullStartY.current = null;
+      setDist(0); setTriggered(false);
+      setRefreshing(true);
       haptic('success');
       try {
         if (isViewer) await fetchBatches(null);
@@ -3896,87 +3888,75 @@ function App() {
         setRefreshing(false);
       }
     } else {
-      setDist(0);
-      setTriggered(false);
       pullStartY.current = null;
+      setDist(0); setTriggered(false);
     }
   };
 
   return (
     <div
-      ref={scrollContainerRef}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      style={{ overflowY: 'auto', minHeight: '100vh', position: 'relative', overscrollBehaviorY: 'contain' }}
+      style={{ position: 'relative' }}
     >
       {/* ── Pull-to-refresh indicator ── */}
       {(pullDistance > 0 || pullRefreshing) && (() => {
-        const MAX = 72; // max indicator height in px
-        const progress = Math.min(pullDistance / PULL_THRESHOLD, 1); // 0→1
-        const indicatorH = pullRefreshing ? MAX : Math.round(progress * MAX);
+        const progress = Math.min(pullDistance / PULL_THRESHOLD, 1);
         const circleSize = 44;
         const radius = 16;
         const circumference = 2 * Math.PI * radius;
         const dashOffset = circumference * (1 - (pullTriggered ? 1 : progress));
-        const rotate = pullTriggered || pullRefreshing ? 0 : progress * 200;
+        const rotate = pullTriggered || pullRefreshing ? 180 : progress * 200;
 
         return (
           <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-            display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-            height: indicatorH,
-            overflow: 'hidden',
+            display: 'flex', justifyContent: 'center',
+            paddingTop: 10,
             pointerEvents: 'none',
-            transition: pullRefreshing ? 'height 0.25s cubic-bezier(0.34,1.56,0.64,1)' : 'none',
           }}>
             <div style={{
-              marginBottom: 6,
               width: circleSize, height: circleSize,
               borderRadius: '50%',
               background: pullTriggered || pullRefreshing
                 ? 'linear-gradient(135deg, #8B0000, #c0392b)'
-                : 'rgba(255,255,255,0.95)',
+                : 'rgba(255,255,255,0.97)',
               boxShadow: pullTriggered || pullRefreshing
-                ? '0 4px 20px rgba(139,0,0,0.35)'
-                : '0 2px 12px rgba(0,0,0,0.15)',
+                ? '0 4px 20px rgba(139,0,0,0.4)'
+                : '0 2px 14px rgba(0,0,0,0.18)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transform: `scale(${0.7 + progress * 0.3})`,
+              transform: `scale(${0.65 + progress * 0.35})`,
               transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
             }}>
               {pullRefreshing ? (
-                /* Spinning arc when refreshing */
-                <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute', animation: 'ptr-spin 0.8s linear infinite' }}>
+                <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`}
+                  style={{ position: 'absolute', animation: 'ptr-spin 0.75s linear infinite' }}>
                   <circle cx={circleSize/2} cy={circleSize/2} r={radius}
-                    fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" />
+                    fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" />
                   <circle cx={circleSize/2} cy={circleSize/2} r={radius}
                     fill="none" stroke="#fff" strokeWidth="2.5"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={circumference * 0.72}
+                    strokeDasharray={circumference} strokeDashoffset={circumference * 0.72}
                     strokeLinecap="round"
                     transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} />
                 </svg>
               ) : (
-                /* Progress arc while pulling */
-                <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute' }}>
+                <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`}
+                  style={{ position: 'absolute' }}>
                   <circle cx={circleSize/2} cy={circleSize/2} r={radius}
-                    fill="none" stroke="rgba(139,0,0,0.15)" strokeWidth="2.5" />
+                    fill="none" stroke="rgba(139,0,0,0.12)" strokeWidth="2.5" />
                   <circle cx={circleSize/2} cy={circleSize/2} r={radius}
-                    fill="none"
-                    stroke={pullTriggered ? '#fff' : '#8B0000'}
-                    strokeWidth="2.5"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={dashOffset}
+                    fill="none" stroke={pullTriggered ? '#fff' : '#8B0000'} strokeWidth="2.5"
+                    strokeDasharray={circumference} strokeDashoffset={dashOffset}
                     strokeLinecap="round"
                     transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`}
-                    style={{ transition: 'stroke-dashoffset 0.05s, stroke 0.2s' }} />
+                    style={{ transition: 'stroke-dashoffset 0.06s, stroke 0.2s' }} />
                 </svg>
               )}
-              {/* Arrow icon */}
               <svg width="16" height="16" viewBox="0 0 16 16" style={{
                 position: 'relative', zIndex: 1,
-                transform: `rotate(${pullTriggered || pullRefreshing ? 180 : rotate}deg)`,
-                transition: pullTriggered ? 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)' : 'none',
+                transform: `rotate(${rotate}deg)`,
+                transition: pullTriggered ? 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1)' : 'transform 0.1s',
               }}>
                 <path d="M8 2 L8 11 M4 7 L8 11 L12 7"
                   stroke={pullTriggered || pullRefreshing ? '#fff' : '#8B0000'}
