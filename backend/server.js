@@ -127,7 +127,16 @@ app.get('/api/config', (req, res) => {
   res.json({ cloudName: process.env.CLOUDINARY_CLOUD_NAME });
 });
 
-// POST bulk MUST be before GET /:id — otherwise Express matches "bulk" as an :id param
+// GET image by ID — returns Cloudinary URL
+app.get('/api/images/:id', async (req, res) => {
+  try {
+    const img = await Image.findById(req.params.id);
+    if (!img) return res.status(404).json({ error: 'Not found' });
+    res.json({ _id: img._id, url: img.url });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST bulk fetch images by IDs — returns { id: url } map in one round-trip
 app.post("/api/images/bulk", async (req, res) => {
   try {
     const { ids } = req.body;
@@ -137,15 +146,6 @@ app.post("/api/images/bulk", async (req, res) => {
     const map = {};
     images.forEach(img => { map[img._id.toString()] = img.url; });
     res.json(map);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET image by ID — returns Cloudinary URL
-app.get('/api/images/:id', async (req, res) => {
-  try {
-    const img = await Image.findById(req.params.id);
-    if (!img) return res.status(404).json({ error: 'Not found' });
-    res.json({ _id: img._id, url: img.url });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -334,14 +334,8 @@ app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:it
       await img.save();
       imageId = img._id.toString();
     } else if (image && /^[a-f\d]{24}$/i.test(image)) {
-      // FLOW B: App already saved the image via POST /api/images and sends back the _id
-      // Just use that imageId directly — no need to create a new Image doc
+      // FLOW B: App already saved via POST /api/images, just use the returned _id
       imageId = image;
-    } else if (image) {
-      // FLOW C: LEGACY — raw base64 or URL string sent directly
-      const img = new Image({ url: image });
-      await img.save();
-      imageId = img._id.toString();
     } else {
       return res.status(400).json({ error: 'No image data provided' });
     }
@@ -1051,6 +1045,38 @@ app.post('/api/translate', async (req, res) => {
     console.error('[translate] error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── FIX: patch empty Image documents that have no URL ───────────────────────
+// Matches imageId in batch → finds its Cloudinary URL via publicId or deletes if unfixable
+app.post('/api/admin/fix-empty-images', async (req, res) => {
+  try {
+    // Find all Image docs with no URL
+    const emptyImgs = await Image.find({ $or: [{ url: null }, { url: { $exists: false } }, { url: '' }] });
+    let fixed = 0, deleted = 0;
+    for (const img of emptyImgs) {
+      // Cannot recover without a publicId — delete the empty doc
+      // and remove the reference from all batch items
+      await Image.findByIdAndDelete(img._id);
+      // Remove stale imageId references from all batch items
+      const batches = await Batch.find({ 'students.categories.items.images': img._id.toString() });
+      for (const batch of batches) {
+        let changed = false;
+        for (const student of batch.students) {
+          for (const cat of student.categories) {
+            for (const item of cat.items) {
+              const before = item.images.length;
+              item.images = item.images.filter(id => id !== img._id.toString());
+              if (item.images.length !== before) changed = true;
+            }
+          }
+        }
+        if (changed) await batch.save();
+      }
+      deleted++;
+    }
+    res.json({ success: true, fixed, deleted, message: `Removed ${deleted} empty image records` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── DIAGNOSTIC: check image format ──────────────────────────────────────────
