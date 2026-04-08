@@ -313,31 +313,34 @@ app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:it
   try {
     const { url, publicId, image } = req.body;
 
-    // NEW FLOW: browser uploads to Cloudinary directly, sends us url + publicId
+    let imageId;
+
     if (url) {
+      // FLOW A: browser uploads to Cloudinary directly, sends url + publicId
       const img = new Image({ url, publicId });
       await img.save();
-      const batch = await Batch.findById(req.params.batchId);
-      const student = batch.students.id(req.params.studentId);
-      const cat = student.categories.id(req.params.catId);
-      const item = cat.items.id(req.params.itemId);
-      if (!item.images) item.images = [];
-      item.images.push(img._id.toString());
-      await batch.save();
-      return res.json({ success: true, imageId: img._id.toString() });
+      imageId = img._id.toString();
+    } else if (image && /^[a-f\d]{24}$/i.test(image)) {
+      // FLOW B: App already saved the image via POST /api/images and sends back the _id
+      // Just use that imageId directly — no need to create a new Image doc
+      imageId = image;
+    } else if (image) {
+      // FLOW C: LEGACY — raw base64 or URL string sent directly
+      const img = new Image({ url: image });
+      await img.save();
+      imageId = img._id.toString();
+    } else {
+      return res.status(400).json({ error: 'No image data provided' });
     }
 
-    // LEGACY FLOW: base64 sent directly (fallback)
-    const img = new Image({ url: image });
-    await img.save();
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     const cat = student.categories.id(req.params.catId);
     const item = cat.items.id(req.params.itemId);
     if (!item.images) item.images = [];
-    item.images.push(img._id.toString());
+    item.images.push(imageId);
     await batch.save();
-    res.json({ success: true, imageId: img._id.toString() });
+    res.json({ success: true, imageId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
