@@ -3476,20 +3476,19 @@ function App() {
       ? selectedExam.images
       : selectedExam.image ? [selectedExam.image] : [];
       const resolveOne = (idOrData) => {
-        if (!idOrData) return null;
-        
-        // Senior Fix: If it's already a full URL or base64, return it immediately
-        if (typeof idOrData === 'string' && (idOrData.startsWith('http') || idOrData.startsWith('data:'))) {
+        if (!idOrData || typeof idOrData !== 'string') return null;
+  
+        // Senior Fix: Force immediate return if it's a Cloudinary URL or Base64
+        if (idOrData.startsWith('http') || idOrData.startsWith('data:')) {
           return idOrData;
         }
-        
-        // Lookup for legacy IDs
+  
+        // Fallback for legacy Object IDs
         return resolvedImages[idOrData] || imageCache.current?.[idOrData] || null;
       };
   
-      // Filter out nulls to prevent empty slots in the grid
+      // Filter(Boolean) ensures we don't map over nulls which cause the "Loading" box
       const allImages = (rawImages || []).map(resolveOne).filter(Boolean);
-    const allImages = rawImages.map(resolveOne);
     const score = selectedExam.score ?? 0;
     const total = selectedExam.totalScore ?? 100;
     const pct = Math.round((score / total) * 100);
