@@ -30,35 +30,29 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.log('MongoDB error:', err));
 
-const batchSchema = new mongoose.Schema({
-  name: String,
-  teacherId: { type: String, default: null },
-  students: [{
+  const batchSchema = new mongoose.Schema({
     name: String,
-    photo: String,
-    status: { type: String, default: 'Regular' }, // 'Regular' or 'Selected'
-    categories: [{
+    teacherId: { type: String, default: null },
+    students: [{
       name: String,
-      items: [{
+      photo: String,
+      status: { type: String, default: 'Regular' }, // 'Regular' or 'Selected'
+      categories: [{
         name: String,
-        date: String,
-        score: Number,
-        images: [String]
+        items: [{
+          name: String,
+          date: String,
+          score: Number,
+          images: [String]
+        }]
       }]
     }]
-  }]
-});
+  });
 const Batch = mongoose.model('Batch', batchSchema);
 
-// ── IMAGE MODEL & ROUTES ──────────────────────────────────────────────────────
-// Stores Cloudinary URL + publicId so images can be looked up by ID after page reload
-const imageSchema = new mongoose.Schema({
-  url: String,       // Cloudinary secure_url
-  publicId: String,  // Cloudinary public_id (for future deletion)
-}, { timestamps: true });
+// 25002500 IMAGE MODEL & ROUTES 250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500
+const imageSchema = new mongoose.Schema({ url: String, publicId: String }, { timestamps: true });
 const Image = mongoose.model('Image', imageSchema);
-
-// POST — called after browser uploads to Cloudinary directly; saves URL reference
 app.post('/api/images', async (req, res) => {
   try {
     const { url, publicId } = req.body;
@@ -68,8 +62,17 @@ app.post('/api/images', async (req, res) => {
     res.json({ _id: img._id, url });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-// GET — called on page reload to retrieve Cloudinary URL from stored imageId
+// POST bulk MUST be before GET /:id — otherwise Express matches "bulk" as an :id param
+app.post('/api/images/bulk', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids?.length) return res.json({});
+    const imgs = await Image.find({ _id: { $in: ids } });
+    const map = {};
+    imgs.forEach(img => { map[img._id.toString()] = img.url; });
+    res.json(map);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 app.get('/api/images/:id', async (req, res) => {
   try {
     const img = await Image.findById(req.params.id);
@@ -183,32 +186,24 @@ app.delete('/api/batches/:batchId/students/:studentId/categories/:catId/items/:i
 app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId/image', async (req, res) => {
   try {
     const { url, publicId, image } = req.body;
-
-    // NEW FLOW: browser already uploaded to Cloudinary, sends url + publicId
+    let imageRef;
     if (url) {
       const img = new Image({ url, publicId });
       await img.save();
-      const batch = await Batch.findById(req.params.batchId);
-      const student = batch.students.id(req.params.studentId);
-      const cat = student.categories.id(req.params.catId);
-      const item = cat.items.id(req.params.itemId);
-      if (!item.images) item.images = [];
-      item.images.push(img._id.toString());
-      await batch.save();
-      return res.json({ success: true, imageId: img._id.toString() });
+      imageRef = img._id.toString();
+    } else if (image) {
+      imageRef = image;
+    } else {
+      return res.status(400).json({ error: 'url or image required' });
     }
-
-    // LEGACY FLOW: raw base64 sent directly
-    const img = new Image({ url: image });
-    await img.save();
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     const cat = student.categories.id(req.params.catId);
     const item = cat.items.id(req.params.itemId);
     if (!item.images) item.images = [];
-    item.images.push(img._id.toString());
+    item.images.push(imageRef);
     await batch.save();
-    res.json({ success: true, imageId: img._id.toString() });
+    res.json({ success: true, imageId: imageRef });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -221,7 +216,6 @@ app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:it
     const { index } = req.body;
     if (item.images && item.images[index] !== undefined) {
       const imageId = item.images[index];
-      // Delete Image doc from MongoDB if it's an ID (not legacy base64)
       if (imageId && !imageId.startsWith('data:') && !imageId.startsWith('http')) {
         await Image.findByIdAndDelete(imageId).catch(() => {});
       }
