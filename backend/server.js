@@ -127,16 +127,7 @@ app.get('/api/config', (req, res) => {
   res.json({ cloudName: process.env.CLOUDINARY_CLOUD_NAME });
 });
 
-// GET image by ID — returns Cloudinary URL
-app.get('/api/images/:id', async (req, res) => {
-  try {
-    const img = await Image.findById(req.params.id);
-    if (!img) return res.status(404).json({ error: 'Not found' });
-    res.json({ _id: img._id, url: img.url });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// POST bulk fetch images by IDs — returns { id: url } map in one round-trip
+// POST bulk MUST be before GET /:id — otherwise Express matches "bulk" as an :id param
 app.post("/api/images/bulk", async (req, res) => {
   try {
     const { ids } = req.body;
@@ -146,6 +137,15 @@ app.post("/api/images/bulk", async (req, res) => {
     const map = {};
     images.forEach(img => { map[img._id.toString()] = img.url; });
     res.json(map);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET image by ID — returns Cloudinary URL
+app.get('/api/images/:id', async (req, res) => {
+  try {
+    const img = await Image.findById(req.params.id);
+    if (!img) return res.status(404).json({ error: 'Not found' });
+    res.json({ _id: img._id, url: img.url });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
