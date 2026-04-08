@@ -14,15 +14,15 @@ const cloudinaryUpload = async (base64Data) => {
   const folder = 'sage-bulacan';
 
   if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error('Cloudinary configuration missing in environment variables.');
+    throw new Error('Cloudinary environment variables are missing');
   }
 
-  // Generate signature with mandatory alphabetical order: folder, then timestamp
+  // Cloudinary signature requires alphabetical order of parameters
   const timestamp = Math.floor(Date.now() / 1000);
   const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
   const signature = crypto.createHash('sha1').update(toSign).digest('hex');
 
-  // Use URLSearchParams to ensure stable, corruption-free transmission of base64 data
+  // Use URLSearchParams for clean, encoded, and reliable base64 transmission
   const params = new URLSearchParams();
   params.append('file', base64Data); 
   params.append('api_key', apiKey);
@@ -38,7 +38,8 @@ const cloudinaryUpload = async (base64Data) => {
   const data = await response.json();
 
   if (data.error) {
-    throw new Error(`Cloudinary Error: ${data.error.message}`);
+    console.error('Cloudinary API Error:', data.error.message);
+    throw new Error(data.error.message);
   }
 
   return { url: data.secure_url, publicId: data.public_id };
