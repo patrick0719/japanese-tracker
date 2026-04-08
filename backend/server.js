@@ -84,38 +84,37 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.log('MongoDB error:', err));
 
-  const batchSchema = new mongoose.Schema({
+const batchSchema = new mongoose.Schema({
+  name: String,
+  teacherId: { type: String, default: null },
+  students: [{
     name: String,
-    teacherId: { type: String, default: null },
-    students: [{
+    photo: String,
+    status: { type: String, default: 'Regular' },
+    isArchived: { type: Boolean, default: false },
+    companyName: { type: String, default: '' },
+    kumiai: { type: String, default: '' },
+    categories: [{
       name: String,
-      photo: String,
-      status: { type: String, default: 'Regular' },
-      isArchived: { type: Boolean, default: false },
-      companyName: { type: String, default: '' },
-      kumiai: { type: String, default: '' },
-      categories: [{
+      items: [{
         name: String,
-        items: [{
-          name: String,
-          date: String,
-          score: Number,
-          totalScore: { type: Number, default: 100 },
-          images: [String]
-        }]
-      }],
-      evaluations: [{
-        title: String,
-        ordinal: String,
         date: String,
-        fields: { type: mongoose.Schema.Types.Mixed, default: {} }
+        score: Number,
+        totalScore: { type: Number, default: 100 },
+        images: [String]
       }]
+    }],
+    evaluations: [{
+      title: String,
+      ordinal: String,
+      date: String,
+      fields: { type: mongoose.Schema.Types.Mixed, default: {} }
     }]
-  });
+  }]
+});
 const Batch = mongoose.model('Batch', batchSchema);
 
-// ── IMAGE ROUTES (Cloudinary storage) ────────────────────────────────────────
-// POST upload — sends base64 to Cloudinary, stores URL+publicId in MongoDB
+// ── IMAGE MODEL & ROUTES (Cloudinary storage) ─────────────────────────────────
 const imageSchema = new mongoose.Schema({
   url: String,       // Cloudinary URL
   publicId: String,  // Cloudinary public_id for deletion
@@ -123,12 +122,12 @@ const imageSchema = new mongoose.Schema({
 });
 const Image = mongoose.model('Image', imageSchema);
 
-// GET image by ID — returns Cloudinary URL
 // Expose cloud name for direct browser uploads
 app.get('/api/config', (req, res) => {
   res.json({ cloudName: process.env.CLOUDINARY_CLOUD_NAME });
 });
 
+// GET image by ID — returns Cloudinary URL
 app.get('/api/images/:id', async (req, res) => {
   try {
     const img = await Image.findById(req.params.id);
@@ -163,8 +162,8 @@ app.delete('/api/images/:id', async (req, res) => {
 const teacherSchema = new mongoose.Schema({
   name: String,
   emoji: { type: String, default: '👩‍🏫' },
-  photo: { type: String, default: null }, // base64 profile photo
-  signature: { type: String, default: null }, // base64 image
+  photo: { type: String, default: null },
+  signature: { type: String, default: null },
 });
 const Teacher = mongoose.model('Teacher', teacherSchema);
 
@@ -312,8 +311,24 @@ app.delete('/api/batches/:batchId/students/:studentId/categories/:catId/items/:i
 
 app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId/image', async (req, res) => {
   try {
-    // Save image to separate collection, store only the ID in batch
-    const img = new Image({ data: req.body.image });
+    const { url, publicId, image } = req.body;
+
+    // NEW FLOW: browser uploads to Cloudinary directly, sends us url + publicId
+    if (url) {
+      const img = new Image({ url, publicId });
+      await img.save();
+      const batch = await Batch.findById(req.params.batchId);
+      const student = batch.students.id(req.params.studentId);
+      const cat = student.categories.id(req.params.catId);
+      const item = cat.items.id(req.params.itemId);
+      if (!item.images) item.images = [];
+      item.images.push(img._id.toString());
+      await batch.save();
+      return res.json({ success: true, imageId: img._id.toString() });
+    }
+
+    // LEGACY FLOW: base64 sent directly (fallback)
+    const img = new Image({ url: image });
     await img.save();
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
@@ -335,7 +350,6 @@ app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:it
     const { index } = req.body;
     if (item.images && item.images[index] !== undefined) {
       const imageId = item.images[index];
-      // Delete from Image collection if it's an ID (not legacy base64)
       if (imageId && !imageId.startsWith('data:')) {
         await Image.findByIdAndDelete(imageId).catch(() => {});
       }
@@ -388,6 +402,7 @@ app.delete('/api/batches/:batchId/students/:studentId/evaluations/:evalId', asyn
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
 // ── ARCHIVE: migrate base64 images to Cloudinary ─────────────────────────────
 app.post('/api/archive/migrate-base64', async (req, res) => {
   try {
@@ -404,15 +419,10 @@ app.post('/api/archive/migrate-base64', async (req, res) => {
             for (let i = 0; i < (item.images || []).length; i++) {
               const imgRef = item.images[i];
 
-              // Check if this is an ObjectId (Image collection reference)
               if (/^[a-f\d]{24}$/i.test(imgRef)) {
                 const imgDoc = await Image.findById(imgRef);
                 if (!imgDoc) { skipped++; continue; }
-
-                // Already a Cloudinary URL — skip
                 if (imgDoc.url && imgDoc.url.startsWith('http')) { skipped++; continue; }
-
-                // It's base64 — upload to Cloudinary
                 try {
                   const { url, publicId } = await cloudinaryUpload(imgDoc.url || imgDoc.data);
                   imgDoc.url = url;
@@ -424,9 +434,7 @@ app.post('/api/archive/migrate-base64', async (req, res) => {
                   failed++;
                   errors.push({ student: student.name, item: item.name, error: e.message });
                 }
-
               } else if (imgRef && imgRef.startsWith('data:')) {
-                // Inline base64 directly in item.images — upload and replace
                 try {
                   const { url, publicId } = await cloudinaryUpload(imgRef);
                   const newImg = new Image({ url, publicId });
@@ -454,6 +462,7 @@ app.post('/api/archive/migrate-base64', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ── CLOUDINARY ARCHIVE UPLOAD (bagong account) ───────────────────────────────
 const cloudinaryArchiveUpload = async (base64Data) => {
   const cloudName = process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME;
@@ -507,13 +516,11 @@ app.post('/api/archive/batch/:batchId', async (req, res) => {
             const imgDoc = await Image.findById(imgRef);
             if (!imgDoc?.url) { skipped++; continue; }
 
-            // Already in archive account — skip
             if (imgDoc.url.includes(process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME)) {
               skipped++; continue;
             }
 
             try {
-              // Fetch from old Cloudinary, re-upload to archive
               const fetchRes = await fetch(imgDoc.url);
               const arrayBuffer = await fetchRes.arrayBuffer();
               const base64 = Buffer.from(arrayBuffer).toString('base64');
@@ -547,6 +554,7 @@ app.delete('/api/diagnostic/cleanup-empty', async (req, res) => {
     res.json({ deleted: result.deletedCount });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
 // ── ARCHIVE STUDENT: move one student's images to archive Cloudinary ──────────
 app.post('/api/archive/student/:batchId/:studentId', async (req, res) => {
   try {
@@ -596,6 +604,7 @@ app.post('/api/archive/student/:batchId/:studentId', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ── RESTORE STUDENT: move images back to main Cloudinary ─────────────────────
 app.post('/api/archive/restore/:batchId/:studentId', async (req, res) => {
   try {
@@ -616,7 +625,6 @@ app.post('/api/archive/restore/:batchId/:studentId', async (req, res) => {
           const imgDoc = await Image.findById(imgRef);
           if (!imgDoc?.url) { skipped++; continue; }
 
-          // Only restore if currently in archive account
           if (!imgDoc.url.includes(process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME)) {
             skipped++; continue;
           }
@@ -655,7 +663,6 @@ app.delete('/api/archive/permanent/:batchId/:studentId', async (req, res) => {
     const student = batch.students.id(req.params.studentId);
     if (!student) return res.status(404).json({ error: 'Student not found' });
 
-    // Delete all Image documents + Cloudinary files
     for (const cat of student.categories) {
       for (const item of cat.items) {
         for (const imgRef of (item.images || [])) {
@@ -669,7 +676,6 @@ app.delete('/api/archive/permanent/:batchId/:studentId', async (req, res) => {
       }
     }
 
-    // Remove student from batch
     batch.students = batch.students.filter(s => s._id.toString() !== req.params.studentId);
     await batch.save();
 
@@ -678,6 +684,7 @@ app.delete('/api/archive/permanent/:batchId/:studentId', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ── CLOUDINARY STORAGE USAGE ──────────────────────────────────────────────────
 app.get('/api/admin/storage-usage', async (req, res) => {
   try {
@@ -722,7 +729,6 @@ app.listen(PORT, () => console.log('Server running on port ' + PORT));
 
 // ── TRANSLATE ROUTE (Taglish map + MyMemory + post-processing) ───────────────
 
-// 210 common Taglish teacher evaluation phrases → natural Japanese
 const TAGLISH_MAP = [
   ['magaling siya', 'とても優秀な生徒です。'],
   ['magaling na magaling', '非常に優れた実力を持っています。'],
@@ -936,11 +942,9 @@ const TAGLISH_MAP = [
   ['sana mag aral na ng husto', '今後は学習により真剣に取り組んでほしいです。'],
 ];
 
-// Fuzzy match: check if input contains a known Taglish phrase
 const matchTaglish = (text) => {
   const lower = text.toLowerCase().trim();
-  // Try longest match first for accuracy
-  const sorted = [...TAGLISH_MAP].sort((a,b) => b[0].length - a[0].length);
+  const sorted = [...TAGLISH_MAP].sort((a, b) => b[0].length - a[0].length);
   for (const [phrase, japanese] of sorted) {
     if (lower.includes(phrase)) return japanese;
   }
@@ -1001,11 +1005,9 @@ app.post('/api/translate', async (req, res) => {
     const { text } = req.body;
     if (!text || !text.trim()) return res.json({ translation: '' });
 
-    // Step 1: Check Taglish phrase map first (fastest, most natural)
     const taglishMatch = matchTaglish(text);
     if (taglishMatch) return res.json({ translation: taglishMatch });
 
-    // Step 2: MyMemory translation with post-processing
     const tagalogWords = ['ang','ng','mga','na','sa','ay','niya','nila','kami','siya',
       'pero','kaya','dahil','para','mag','nag','yung','ung','din','rin',
       'talaga','medyo','masyado','sobra','kahit','dapat','pwede','hindi',
@@ -1034,6 +1036,7 @@ app.post('/api/translate', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ── DIAGNOSTIC: check image format ──────────────────────────────────────────
 app.get('/api/diagnostic/images', async (req, res) => {
   try {
