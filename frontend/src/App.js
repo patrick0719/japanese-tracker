@@ -3475,11 +3475,20 @@ function App() {
     const rawImages = selectedExam.images?.length > 0
       ? selectedExam.images
       : selectedExam.image ? [selectedExam.image] : [];
-    const resolveOne = (idOrData) => {
-      if (!idOrData) return null;
-      if (idOrData.startsWith('data:') || idOrData.startsWith('http')) return idOrData;
-      return resolvedImages[idOrData] || imageCache.current[idOrData] || null;
-    };
+      const resolveOne = (idOrData) => {
+        if (!idOrData) return null;
+        
+        // Senior Fix: If it's already a full URL or base64, return it immediately
+        if (typeof idOrData === 'string' && (idOrData.startsWith('http') || idOrData.startsWith('data:'))) {
+          return idOrData;
+        }
+        
+        // Lookup for legacy IDs
+        return resolvedImages[idOrData] || imageCache.current?.[idOrData] || null;
+      };
+  
+      // Filter out nulls to prevent empty slots in the grid
+      const allImages = (rawImages || []).map(resolveOne).filter(Boolean);
     const allImages = rawImages.map(resolveOne);
     const score = selectedExam.score ?? 0;
     const total = selectedExam.totalScore ?? 100;
