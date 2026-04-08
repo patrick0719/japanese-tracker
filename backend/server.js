@@ -11,37 +11,36 @@ const cloudinaryUpload = async (base64Data) => {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
-
-  // Strip data URL prefix if present
-  const base64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
-
-  // Generate signature
-  const timestamp = Math.floor(Date.now() / 1000);
   const folder = 'sage-bulacan';
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error('Cloudinary configuration missing in environment variables.');
+  }
+
+  // Generate signature with mandatory alphabetical order: folder, then timestamp
+  const timestamp = Math.floor(Date.now() / 1000);
   const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
   const signature = crypto.createHash('sha1').update(toSign).digest('hex');
 
-  // Build form data
-  const boundary = '----FormBoundary' + Math.random().toString(36).slice(2);
-  const CRLF = '\r\n';
+  // Use URLSearchParams to ensure stable, corruption-free transmission of base64 data
+  const params = new URLSearchParams();
+  params.append('file', base64Data); 
+  params.append('api_key', apiKey);
+  params.append('timestamp', timestamp);
+  params.append('signature', signature);
+  params.append('folder', folder);
 
-  const parts = [
-    `--${boundary}${CRLF}Content-Disposition: form-data; name="file"${CRLF}${CRLF}data:image/jpeg;base64,${base64}`,
-    `--${boundary}${CRLF}Content-Disposition: form-data; name="api_key"${CRLF}${CRLF}${apiKey}`,
-    `--${boundary}${CRLF}Content-Disposition: form-data; name="timestamp"${CRLF}${CRLF}${timestamp}`,
-    `--${boundary}${CRLF}Content-Disposition: form-data; name="signature"${CRLF}${CRLF}${signature}`,
-    `--${boundary}${CRLF}Content-Disposition: form-data; name="folder"${CRLF}${CRLF}${folder}`,
-    `--${boundary}--`,
-  ];
-  const body = parts.join(CRLF);
-
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
     method: 'POST',
-    headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-    body,
+    body: params,
   });
-  const data = await res.json();
-  if (!data.secure_url) throw new Error(data.error?.message || 'Cloudinary upload failed');
+
+  const data = await response.json();
+
+  if (data.error) {
+    throw new Error(`Cloudinary Error: ${data.error.message}`);
+  }
+
   return { url: data.secure_url, publicId: data.public_id };
 };
 
