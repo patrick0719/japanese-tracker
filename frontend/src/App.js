@@ -2136,6 +2136,15 @@ function App() {
     if (selectedBatch?._id === updatedBatch._id) setSelectedBatch(updatedBatch);
   };
 
+  // Auto-resolve images whenever examDetail is shown or selectedExam.images changes
+  // Fixes: images stuck on "Loading..." when returning to exam or after upload
+  useEffect(() => {
+    if (view === 'examDetail' && selectedExam?.images?.length) {
+      resolveExamImages(selectedExam);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, selectedExam?.images?.join(',')]);
+
   // Resolve image IDs to displayable src — Cloudinary URL or legacy base64
   const resolveImage = async (idOrData) => {
     if (!idOrData) return null;
@@ -2156,13 +2165,13 @@ function App() {
     } catch { return null; }
   };
 
-  // Resolve all images for current exam — PARALLEL (Promise.all), not sequential
+  // Resolve all images for current exam — single bulk request (1 round-trip instead of N)
   const resolveExamImages = async (exam) => {
     if (!exam?.images?.length) return;
 
-    // Filter lang yung mga kailangan pang i-fetch (hindi pa nasa cache)
     const toFetch = exam.images.filter(
       idOrData =>
+        idOrData &&
         !idOrData.startsWith('data:') &&
         !idOrData.startsWith('http') &&
         !imageCache.current[idOrData]
@@ -2170,20 +2179,28 @@ function App() {
 
     if (!toFetch.length) return;
 
-    // I-fetch lahat sabay-sabay
-    const results = await Promise.all(
-      toFetch.map(async (idOrData) => {
-        const url = await resolveImage(idOrData);
-        return [idOrData, url];
-      })
-    );
-
-    // Isang setState call lang para sa lahat
-    const newEntries = Object.fromEntries(
-      results.filter(([, url]) => url != null)
-    );
-    if (Object.keys(newEntries).length > 0) {
-      setResolvedImages(prev => ({ ...prev, ...newEntries }));
+    try {
+      // Single round-trip: POST /api/images/bulk returns { id: url, ... }
+      const res = await fetch(`${API}/images/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: toFetch })
+      });
+      const map = await res.json();
+      Object.entries(map).forEach(([id, url]) => { if (url) imageCache.current[id] = url; });
+      const newEntries = Object.fromEntries(Object.entries(map).filter(([, url]) => url != null));
+      if (Object.keys(newEntries).length > 0) {
+        setResolvedImages(prev => ({ ...prev, ...newEntries }));
+      }
+    } catch {
+      // Fallback: resolve individually if bulk endpoint unavailable
+      const results = await Promise.all(
+        toFetch.map(async (idOrData) => [idOrData, await resolveImage(idOrData)])
+      );
+      const newEntries = Object.fromEntries(results.filter(([, url]) => url != null));
+      if (Object.keys(newEntries).length > 0) {
+        setResolvedImages(prev => ({ ...prev, ...newEntries }));
+      }
     }
   };
 
@@ -3458,9 +3475,12 @@ function App() {
     const rawImages = selectedExam.images?.length > 0
       ? selectedExam.images
       : selectedExam.image ? [selectedExam.image] : [];
-    const allImages = rawImages.map(idOrData =>
-      (idOrData.startsWith('data:') || idOrData.startsWith('http')) ? idOrData : (resolvedImages[idOrData] || null)
-    );
+    const resolveOne = (idOrData) => {
+      if (!idOrData) return null;
+      if (idOrData.startsWith('data:') || idOrData.startsWith('http')) return idOrData;
+      return resolvedImages[idOrData] || imageCache.current[idOrData] || null;
+    };
+    const allImages = rawImages.map(resolveOne);
     const score = selectedExam.score ?? 0;
     const total = selectedExam.totalScore ?? 100;
     const pct = Math.round((score / total) * 100);
@@ -3510,7 +3530,7 @@ function App() {
         ) : (
           <div className="exam-pages-grid">
             {rawImages.map((idOrData, idx) => {
-              const src = (idOrData.startsWith('data:') || idOrData.startsWith('http')) ? idOrData : resolvedImages[idOrData];
+              const src = resolveOne(idOrData);
               return (
                 <div key={idx} className="exam-page-card">
                   {/* Page number pill */}

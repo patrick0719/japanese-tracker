@@ -136,6 +136,19 @@ app.get('/api/images/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST bulk fetch images by IDs — returns { id: url } map in one round-trip
+app.post("/api/images/bulk", async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.json({});
+    const validIds = ids.filter(id => /^[a-f\d]{24}$/i.test(id));
+    const images = await Image.find({ _id: { $in: validIds } }).lean();
+    const map = {};
+    images.forEach(img => { map[img._id.toString()] = img.url; });
+    res.json(map);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // POST save image reference — browser uploads directly to Cloudinary,
 // then sends us just the URL + publicId to store
 app.post('/api/images', async (req, res) => {
