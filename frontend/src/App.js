@@ -420,7 +420,7 @@ function ProgressChart({ student, batch, onClose }) {
         <button onClick={onClose} style={{
           background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
           borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
-        }}>← 戻る</button>
+        }}>← Back</button>
         <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 進捗チャート</span>
         <div style={{ width: 72 }} />
       </div>
@@ -498,7 +498,7 @@ function ProgressChart({ student, batch, onClose }) {
                     sub: chartData.stats.recentTrendLabel,
                   }
                 : {
-                    label: '最新スコア',
+                    label: 'Latest Score',
                     value: chartData.stats.latestScore + '%',
                     icon: '🎯',
                     color: '#8B0000',
@@ -525,22 +525,22 @@ function ProgressChart({ student, batch, onClose }) {
 
           if (streak >= 3) {
             icon = '🔥'; bg = '#fff8e1'; color = '#e65100';
-            message = `${streak}回連続で成績アップ！この調子で頑張りましょう。`;
+            message = `On a ${streak}-exam winning streak! Keep it up.`;
           } else if (recentTrend !== null && recentTrend >= 5) {
             icon = '🚀'; bg = '#e8f5e9'; color = '#2e7d32';
-            message = `最近の成長が著しい — 直近の試験で${recentTrend}%アップしました。`;
+            message = `Strong recent momentum — up ${recentTrend}% in the last exams.`;
           } else if (recentTrend !== null && recentTrend <= -5) {
             icon = '⚠️'; bg = '#fff3e0'; color = '#e65100';
-            message = `最近${Math.abs(recentTrend)}%下がっています。復習が必要かもしれません。`;
+            message = `Recent dip of ${Math.abs(recentTrend)}%. May need extra review.`;
           } else if (consistency >= 70) {
             icon = '💪'; bg = '#e3f2fd'; color = '#1565c0';
-            message = `非常に安定しています — ${consistency}%の試験で平均以上の成績を出しています。`;
+            message = `Very consistent — ${consistency}% of exams at or above personal average.`;
           } else if (totalExams >= 5 && avgScore >= 80) {
             icon = '⭐'; bg = '#f3e5f5'; color = '#6a1b9a';
-            message = `${totalExams}回の試験で平均${avgScore}%という素晴らしい成績です。`;
+            message = `Excellent average of ${avgScore}% across ${totalExams} exams.`;
           } else {
             icon = '📌'; bg = '#f2f2f7'; color = '#8e8e93';
-            message = `安定率：${consistency}%の試験で自分の平均以上の点数を取っています。`;
+            message = `Consistency rate: ${consistency}% of exams at or above personal average.`;
           }
 
           return (
@@ -558,12 +558,12 @@ function ProgressChart({ student, batch, onClose }) {
           background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
         }}>
-          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>⏱️ 期間</p>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>⏱️ Time Range</p>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
-              { id: 'all', label: '全期間' },
-              { id: '3months', label: '3ヶ月' },
-              { id: '1month', label: '1ヶ月' }
+              { id: 'all', label: 'All Time' },
+              { id: '3months', label: '3 Months' },
+              { id: '1month', label: '1 Month' }
             ].map(opt => (
               <button key={opt.id} onClick={() => setTimeRange(opt.id)} style={{
                 flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none',
@@ -581,7 +581,7 @@ function ProgressChart({ student, batch, onClose }) {
             background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>📁 カテゴリー</p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>📁 Categories</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {chartData.categories.map(cat => {
                 const colors = {
@@ -605,7 +605,7 @@ function ProgressChart({ student, batch, onClose }) {
                   padding: '6px 14px', borderRadius: 20, border: '1.5px solid #8e8e93',
                   fontSize: 12, fontWeight: 500, background: '#fff',
                   color: '#8e8e93', cursor: 'pointer'
-                }}>クリア</button>
+                }}>Clear</button>
               )}
             </div>
           </div>
@@ -643,8 +643,8 @@ function ProgressChart({ student, batch, onClose }) {
           ) : chartData?.exams.length === 0 ? (
             <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8e8e93' }}>
               <span style={{ fontSize: 40, marginBottom: 10 }}>📊</span>
-              <p style={{ margin: 0, fontSize: 14 }}>試験データがありません</p>
-              <p style={{ margin: '4px 0 0', fontSize: 12 }}>日付付きの試験を追加して進捗を確認しましょう</p>
+              <p style={{ margin: 0, fontSize: 14 }}>No exam data available</p>
+              <p style={{ margin: '4px 0 0', fontSize: 12 }}>Add exams with dates to see progress</p>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -877,15 +877,15 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
         flexShrink: 0, zIndex: 10, position: 'relative'
       }}>
         <button onClick={onRetake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
-          ← 撮り直す
+          ← Retake
         </button>
-        <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>切り取り調整</span>
+        <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
         <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-          使用 ✓
+          Use ✓
         </button>
       </div>
       <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center', padding: '5px 0', flexShrink: 0 }}>
-        緑色のコーナーをドラッグして調整してください
+        Drag the green corners to adjust
       </div>
       {/* Wrapper gives the canvas measurable dimensions */}
       <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#000' }}>
@@ -908,10 +908,10 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
         display: 'flex', gap: 12
       }}>
         <button onClick={onRetake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer' }}>
-          ← 撮り直す
+          ← Retake
         </button>
         <button onClick={onConfirm} style={{ flex: 2, background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
-          ✓ このページを使用
+          ✓ Use This Page
         </button>
       </div>
     </div>
@@ -936,7 +936,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   // 4 draggable corners [TL, TR, BR, BL]
   const [corners, setCorners] = useState(null);
 
-  const [status, setStatus] = useState('カメラを起動中...');
+  const [status, setStatus] = useState('Initializing camera...');
   const [detected, setDetected] = useState(false);
   const capturingRef = useRef(false);
 
@@ -956,10 +956,10 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
-          setStatus('書類にカメラを向けてください');
+          setStatus('Point camera at document');
           animFrameRef.current = requestAnimationFrame(detectLoop);
         }
-      } catch { setStatus('カメラへのアクセスが拒否されました。'); }
+      } catch { setStatus('Camera access denied.'); }
     };
     startCamera();
     return () => {
@@ -1018,7 +1018,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     } else {
       lastCornersRef.current = null;
       setDetected(false);
-      setStatus('書類にカメラを向けてください');
+      setStatus('Point camera at document');
     }
     animFrameRef.current = requestAnimationFrame(detectLoop);
   };
@@ -1271,17 +1271,17 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
           paddingTop: 'env(safe-area-inset-top, 12px)'
         }}>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
-            キャンセル
+            Cancel
           </button>
           <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
-            {scannedPages.length} ページスキャン済み
+            {scannedPages.length} Page{scannedPages.length !== 1 ? 's' : ''} Scanned
           </span>
           <button
             onClick={finishBulkScan}
             disabled={bulkUploading || scannedPages.length === 0}
             style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}
           >
-            {bulkUploading ? '⏳ アップロード中…' : `✅ 完了 (${scannedPages.length})`}
+            {bulkUploading ? '⏳ Uploading…' : `✅ Done (${scannedPages.length})`}
           </button>
         </div>
 
@@ -1289,9 +1289,9 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
         <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, alignContent: 'start' }}>
           {scannedPages.map((url, idx) => (
             <div key={idx} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#222', aspectRatio: '3/4' }}>
-              <img src={url} alt={`${idx + 1}ページ`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={url} alt={`Page ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>
-                {idx + 1} ページ
+                Page {idx + 1}
               </div>
               <button
                 onClick={() => removeBulkPage(idx)}
@@ -1311,7 +1311,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
             onClick={scanNextPage}
             style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 48px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
           >
-            📸 次のページをスキャン
+            📸 Scan Next Page
           </button>
         </div>
       </div>
@@ -1341,7 +1341,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
         padding: '12px 16px'
       }}>
         <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 18px', fontSize: 15, cursor: 'pointer' }}>
-          キャンセル
+          Cancel
         </button>
         <div style={{
           background: detected ? 'rgba(0,160,70,0.92)' : 'rgba(60,60,60,0.9)',
@@ -1376,7 +1376,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
             border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 12, pointerEvents: 'none',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>書類をここに置いてください</span>
+            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Place document inside</span>
           </div>
         )}
       </div>
@@ -1476,7 +1476,7 @@ function SettingsPage({ batches, onClose, API }) {
         <button onClick={onClose} style={{
           background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
           borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
-        }}>← 戻る</button>
+        }}>← Back</button>
         <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>⚙️ Settings</span>
         <div style={{ width: 72 }} />
       </div>
@@ -1748,10 +1748,10 @@ function TeacherSelect({ onSelect }) {
   return (
     <div className="teacher-screen">
       <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" />
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>先生を選択</h2>
-      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>名前をタップして続けてください</p>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Select Teacher</h2>
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>Tap your name to continue</p>
       <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {loadingT && <p className="loading-text">読み込み中...</p>}
+        {loadingT && <p className="loading-text">Loading...</p>}
         {teachers.map(t => (
           <div key={t._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => onSelect(t)} className="teacher-card">
@@ -1769,8 +1769,8 @@ function TeacherSelect({ onSelect }) {
             </button>
             {deleteId === t._id ? (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => deleteTeacher(t._id)} className="btn-danger" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>削除</button>
-                <button onClick={() => setDeleteId(null)} className="btn-cancel" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>キャンセル</button>
+                <button onClick={() => deleteTeacher(t._id)} className="btn-danger" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Delete</button>
+                <button onClick={() => setDeleteId(null)} className="btn-cancel" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Cancel</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -1786,7 +1786,7 @@ function TeacherSelect({ onSelect }) {
         ))}
         {showAdd ? (
           <div className="login-card" style={{ padding: 16 }}>
-            <p className="section-title" style={{ marginTop: 0 }}>絵文字を選択</p>
+            <p className="section-title" style={{ marginTop: 0 }}>Choose emoji</p>
             <div className="emoji-row" style={{ marginBottom: 14 }}>
               {EMOJIS.map(e => (
                 <button key={e} onClick={() => setNewEmoji(e)} className={`emoji-btn${newEmoji === e ? ' selected' : ''}`}>{e}</button>
@@ -1794,18 +1794,18 @@ function TeacherSelect({ onSelect }) {
             </div>
             <div className="form-group">
               <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-                placeholder="先生の名前" autoFocus />
+                placeholder="Teacher name" autoFocus />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={addTeacher} disabled={saving || !newName.trim()} className="btn-primary" style={{ fontSize: 14 }}>
-                {saving ? '保存中...' : '先生を追加'}
+                {saving ? 'Saving...' : 'Add Teacher'}
               </button>
-              <button onClick={() => { setShowAdd(false); setNewName(''); }} className="btn-secondary" style={{ fontSize: 14 }}>キャンセル</button>
+              <button onClick={() => { setShowAdd(false); setNewName(''); }} className="btn-secondary" style={{ fontSize: 14 }}>Cancel</button>
             </div>
           </div>
         ) : (
           <button onClick={() => setShowAdd(true)} className="print-qr-button" style={{ marginTop: 0 }}>
-            + 先生を追加
+            + Add Teacher
           </button>
         )}
       </div>
@@ -1856,7 +1856,7 @@ function LoginScreen({ onLogin }) {
       safeLocalSet(ROLE_KEY, 'greenservices');
       onLogin('greenservices');
     } else {
-      setError('ユーザー名またはパスワードが正しくありません。');
+      setError('Invalid username or password.');
     }
   };
 
@@ -1864,25 +1864,25 @@ function LoginScreen({ onLogin }) {
     <div className="login-screen">
       <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" style={{ marginBottom: 32 }} />
       <div className="login-card">
-        <h2 className="login-title">おかえりなさい 👋</h2>
+        <h2 className="login-title">Welcome back 👋</h2>
         <div className="form-group">
-          <label>ユーザー名</label>
+          <label>Username</label>
           <input
             type="text"
             value={username}
             onChange={e => { setUsername(e.target.value); setError(''); }}
-            placeholder="ユーザー名を入力"
+            placeholder="Enter username"
           />
         </div>
         <div className="form-group">
-          <label>パスワード</label>
+          <label>Password</label>
           <div className="password-wrapper">
             <input
               type={showPass ? 'text' : 'password'}
               value={password}
               onChange={e => { setPassword(e.target.value); setError(''); }}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              placeholder="パスワードを入力"
+              placeholder="Enter password"
             />
             <button onClick={() => setShowPass(p => !p)} className="password-toggle">
               {showPass ? '🙈' : '👁️'}
@@ -1890,7 +1890,7 @@ function LoginScreen({ onLogin }) {
           </div>
         </div>
         {error && <p className="error-text">{error}</p>}
-        <button onClick={handleLogin} className="btn-primary" style={{ marginTop: 8 }}>ログイン</button>
+        <button onClick={handleLogin} className="btn-primary" style={{ marginTop: 8 }}>Login</button>
       </div>
     </div>
   );
@@ -2109,9 +2109,9 @@ function App() {
       } catch {}
     } catch (err) {
       if (err.name === 'AbortError') {
-        alert('接続がタイムアウトしました。もう一度お試しください。');
+        alert('Connection timed out. Please try again.');
       } else {
-        alert('サーバーに接続できません。インターネット接続を確認してください。');
+        alert('Cannot connect to server. Check your internet connection.');
       }
     } finally {
       setLoading(false);
@@ -2276,7 +2276,7 @@ function App() {
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       closeModal();
-    } catch { alert('研修生の更新中にエラーが発生しました。'); }
+    } catch { alert('Error updating student.'); }
     setSaving(false);
   };
 
@@ -2291,7 +2291,7 @@ function App() {
       const newBatch = await res.json();
       setBatches(prev => [newBatch, ...prev]);
       closeModal();
-    } catch { alert('バッチの保存中にエラーが発生しました。'); }
+    } catch { alert('Error saving batch.'); }
     setSaving(false);
   };
 
@@ -2306,7 +2306,7 @@ function App() {
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       closeModal();
-    } catch { alert('研修生の保存中にエラーが発生しました。'); }
+    } catch { alert('Error saving student.'); }
     setSaving(false);
   };
 
@@ -2323,7 +2323,7 @@ function App() {
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) setSelectedStudent(updatedStudent);
       closeModal();
-    } catch { alert('カテゴリーの保存中にエラーが発生しました。'); }
+    } catch { alert('Error saving category.'); }
     setSaving(false);
   };
 
@@ -2351,27 +2351,27 @@ function App() {
       setSelectedBatch(updatedBatch);
       setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
       closeModal();
-    } catch { alert('試験の保存中にエラーが発生しました。'); }
+    } catch { alert('Error saving exam.'); }
     setSaving(false);
   };
 
   const deleteBatch = async (id, e) => {
     e.stopPropagation();
-    if (!window.confirm('このバッチを削除しますか？')) return;
+    if (!window.confirm('Delete this batch?')) return;
     try {
       await fetch(`${API}/batches/${id}`, { method: 'DELETE' });
       setBatches(prev => prev.filter(b => b._id !== id));
-    } catch { alert('バッチの削除中にエラーが発生しました。'); }
+    } catch { alert('Error deleting batch.'); }
   };
 
   const deleteStudent = async (studentId, e) => {
     e.stopPropagation();
-    if (!window.confirm('この研修生を削除しますか？')) return;
+    if (!window.confirm('Delete this student?')) return;
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${studentId}`, { method: 'DELETE' });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
-    } catch { alert('研修生の削除中にエラーが発生しました。'); }
+    } catch { alert('Error deleting student.'); }
   };
 
   const toggleStudentStatus = async (student, e) => {
@@ -2384,7 +2384,7 @@ function App() {
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
-    } catch { alert('ステータスの更新中にエラーが発生しました。'); }
+    } catch { alert('Error updating status.'); }
   };
 
   const toggleArchiveStudent = async (student) => {
@@ -2400,24 +2400,24 @@ function App() {
       updateBatchInState(updatedBatch);
       const updatedStudent = updatedBatch.students.find(s => s._id === student._id);
       if (updatedStudent) setSelectedStudent(updatedStudent);
-    } catch { alert(`エラー：研修生を${label}できませんでした。`); }
+    } catch { alert(`Error: could not ${label} student.`); }
   };
 
   const deleteCategory = async (catId, e) => {
     if (e) e.stopPropagation();
-    if (!window.confirm('このカテゴリーとすべての試験を削除しますか？')) return;
+    if (!window.confirm('Delete this category and all its exams?')) return;
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${catId}`, { method: 'DELETE' });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) setSelectedStudent(updatedStudent);
-    } catch { alert('カテゴリーの削除中にエラーが発生しました。'); }
+    } catch { alert('Error deleting category.'); }
   };
 
   const deleteExamItem = async (itemId, e) => {
     if (e) e.stopPropagation();
-    if (!window.confirm('この試験を削除しますか？')) return;
+    if (!window.confirm('Delete this exam?')) return;
     try {
       await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${itemId}`, { method: 'DELETE' });
       const updatedCat = { ...selectedCategory, items: selectedCategory.items.filter(i => i._id !== itemId) };
@@ -2434,7 +2434,7 @@ function App() {
       setSelectedBatch(updatedBatch);
       setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
       if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
-    } catch { alert('試験の削除中にエラーが発生しました。'); }
+    } catch { alert('Error deleting exam.'); }
   };
 
   const deleteExam = deleteExamItem;
@@ -2454,17 +2454,17 @@ function App() {
       setEvaluations(prev => [...prev, newEval]);
       setEvalTitle(''); setEvalDate('');
       closeModal();
-    } catch { alert('評価の作成中にエラーが発生しました。'); }
+    } catch { alert('Error creating evaluation.'); }
     setSaving(false);
   };
 
   const deleteEvaluation = async (evalId, e) => {
     e.stopPropagation();
-    if (!window.confirm('この評価を削除しますか？')) return;
+    if (!window.confirm('Delete this evaluation?')) return;
     try {
       await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/evaluations/${evalId}`, { method: 'DELETE' });
       setEvaluations(prev => prev.filter(ev => ev._id !== evalId));
-    } catch { alert('評価の削除中にエラーが発生しました。'); }
+    } catch { alert('Error deleting evaluation.'); }
   };
 
   const saveEvaluationFields = async () => {
@@ -2478,12 +2478,12 @@ function App() {
       setSelectedEvaluation(updated);
       setEvaluations(prev => prev.map(ev => ev._id === updated._id ? updated : ev));
       alert('Saved!');
-    } catch { alert('評価の保存中にエラーが発生しました。'); }
+    } catch { alert('Error saving evaluation.'); }
     setEvalSaving(false);
   };
 
   const deleteImagePage = async (examId, index) => {
-    if (!window.confirm(`${index + 1}ページ目を削除しますか？`)) return;
+    if (!window.confirm(`Delete page ${index + 1}?`)) return;
     // Optimistic update — remove from UI immediately
     const updatedExam = { ...selectedExam, images: selectedExam.images.filter((_, i) => i !== index) };
     const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
@@ -2498,7 +2498,7 @@ function App() {
     fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/remove-image`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ index })
-    }).catch(() => alert('サーバーからページを削除中にエラーが発生しました。'));
+    }).catch(() => alert('Error deleting page from server.'));
   };
 
   const uploadImage = async (examId, imageData) => {
@@ -2550,7 +2550,7 @@ function App() {
       setSelectedStudent(updatedStudent);
       setSelectedBatch(updatedBatch);
       setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
-    } catch { alert('画像の保存中にエラーが発生しました。'); }
+    } catch { alert('Error saving image.'); }
   };
 
   const triggerFileInput = (examId) => {
@@ -2645,7 +2645,7 @@ function App() {
                   : c) }
               : s) }
           : b));
-      } catch { alert('スキャンしたページの保存中にエラーが発生しました。'); }
+      } catch { alert('Error saving one of the scanned pages.'); }
     }
   };
 
@@ -2682,8 +2682,8 @@ function App() {
   if (qrPasswordPrompt) return (
     <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
       <div style={{ fontSize: 56, marginBottom: 16 }}>🔒</div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1c1c1e', marginBottom: 6, textAlign: 'center' }}>アクセス確認</h2>
-      <p style={{ fontSize: 14, color: '#8e8e93', marginBottom: 28, textAlign: 'center' }}>この研修生の記録を閲覧するにはパスワードを入力してください。</p>
+      <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1c1c1e', marginBottom: 6, textAlign: 'center' }}>Access Required</h2>
+      <p style={{ fontSize: 14, color: '#8e8e93', marginBottom: 28, textAlign: 'center' }}>Enter the password to view this student's record.</p>
       <div style={{ width: '100%', maxWidth: 340, background: '#fff', borderRadius: 16, padding: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
         <input
           type="password"
@@ -2701,11 +2701,11 @@ function App() {
                 setQrPassInput('');
                 fetchBatches(null);
               } else {
-                setQrPassError('パスワードが間違っています。もう一度お試しください。');
+                setQrPassError('Incorrect password. Please try again.');
               }
             }
           }}
-          placeholder="パスワードを入力"
+          placeholder="Enter password"
           autoFocus
           style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${qrPassError ? '#ff3b30' : '#e5e5ea'}`, fontSize: 16, boxSizing: 'border-box', marginBottom: 10, outline: 'none' }}
         />
@@ -2722,11 +2722,11 @@ function App() {
               setQrPassInput('');
               fetchBatches(null);
             } else {
-              setQrPassError('パスワードが間違っています。もう一度お試しください。');
+              setQrPassError('Incorrect password. Please try again.');
             }
           }}
           style={{ width: '100%', background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
-          記録を閲覧
+          View Record
         </button>
       </div>
     </div>
@@ -2771,7 +2771,7 @@ function App() {
     allStudents.forEach(s => {
       const rawCompany = s.companyName;
       const isLegacyKumiai = rawCompany === 'Setouchi' || rawCompany === 'WBC';
-      const key = (!rawCompany || isLegacyKumiai) ? '（会社未設定）' : rawCompany;
+      const key = (!rawCompany || isLegacyKumiai) ? '(No Company Assigned)' : rawCompany;
       if (!groups[key]) groups[key] = [];
       groups[key].push(s);
     });
@@ -2903,7 +2903,7 @@ function App() {
             {isViewer && <span className="badge-view-only">閲覧のみ</span>}
             {!isViewer && (
               <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">
-                切替
+                Switch
               </button>
             )}
             {safeLocalGet(ROLE_KEY) === 'admin' && (
@@ -2917,7 +2917,7 @@ function App() {
           </div>
         </div>
       </div>
-      <h2 className="section-title">{isViewer ? '全バッチ一覧' : 'マイバッチ'}</h2>
+      <h2 className="section-title">{isViewer ? 'All Batches' : 'My Batches'}</h2>
       {(isViewer ? batches.filter(b => b.students.some(s => s.status === 'Selected')) : batches).map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
@@ -2925,15 +2925,15 @@ function App() {
               <h2 className="card-title">🎌 {batch.name}</h2>
               <p className="card-subtitle">
                 {isViewer
-                  ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} 名（選抜済み）`
-                  : `${batch.students.length} 名`}
+                  ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
+                  : `${batch.students.length} student${batch.students.length !== 1 ? 's' : ''}`}
               </p>
             </div>
             {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>}
           </div>
         </div>
       ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>+ 新しいバッチを追加</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>+ Add New Batch</button>}
     </>
   );
 
@@ -2972,7 +2972,7 @@ function App() {
                       fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
                       cursor: isViewer ? 'default' : 'pointer'
                     }}>
-                    {student.status === 'Selected' ? '選抜済み' : '一般'}
+                    {student.status === 'Selected' ? 'SELECTED' : 'REGULAR'}
                   </span>
                   {student.status === 'Selected' && student.kumiai && (
                     <span style={{
@@ -3003,9 +3003,9 @@ function App() {
           </div>
         </div>
       ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>+ 研修生を追加</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>+ Add Student</button>}
       {selectedBatch.students.length > 0 && (
-        <button className="print-qr-button" onClick={generateBatchQRs}>🖨 QRコードを印刷</button>
+        <button className="print-qr-button" onClick={generateBatchQRs}>🖨 Print QR Codes</button>
       )}
     </>
     );
@@ -3024,29 +3024,29 @@ function App() {
     <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
       <button
         onClick={async () => {
-          if (!window.confirm(`${selectedStudent.name}の全試験画像をアーカイブしますか？`)) return;
+          if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
           try {
             const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
             const data = await res.json();
-            if (data.success) alert(`✅ アーカイブ完了！${data.migrated}件の画像を移動、${data.skipped}件スキップしました。`);
-            else alert('エラー：' + (data.error || '不明'));
-          } catch (e) { alert('エラー：' + e.message); }
+            if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: 'transparent', color: '#8B2020', border: '1.5px solid #8B2020', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >📦 アーカイブ</button>
+      >📦 Archive</button>
 
       <button
         onClick={async () => {
-          if (!window.confirm(`${selectedStudent.name}の全画像をメインストレージに復元しますか？`)) return;
+          if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
           try {
             const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
             const data = await res.json();
-            if (data.success) alert(`✅ 復元完了！${data.migrated}件の画像を戻しました、${data.skipped}件スキップしました。`);
-            else alert('エラー：' + (data.error || '不明'));
-          } catch (e) { alert('エラー：' + e.message); }
+            if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: 'transparent', color: '#007AFF', border: '1.5px solid #007AFF', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >🔄 復元</button>
+      >🔄 Restore</button>
 
       <button
         onClick={() => toggleArchiveStudent(selectedStudent)}
@@ -3056,23 +3056,23 @@ function App() {
           border: '1.5px solid #555',
           borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer'
         }}
-      >{selectedStudent.isArchived ? '👁 アーカイブ解除' : '🚫 組合から非表示'}</button>
+      >{selectedStudent.isArchived ? '👁 Unarchive Student' : '🚫 Hide from Kumiai'}</button>
 
       <button
         onClick={async () => {
-          if (!window.confirm(`⚠️ 完全削除：${selectedStudent.name}の全画像と研修生データを削除します。この操作は取り消せません！`)) return;
-          if (!window.confirm(`本当によろしいですか？この操作は元に戻せません。`)) return;
+          if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
+          if (!window.confirm(`Are you sure? This is irreversible.`)) return;
           try {
             const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.success) {
-              alert(`🗑️ ${selectedStudent.name} を完全に削除しました。`);
+              alert(`🗑️ ${selectedStudent.name} permanently deleted.`);
               goBack();
-            } else alert('エラー：' + (data.error || '不明'));
-          } catch (e) { alert('エラー：' + e.message); }
+            } else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >🗑️ 削除</button>
+      >🗑️ Delete</button>
     </div>
   )}
 </div>
@@ -3099,7 +3099,7 @@ function App() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📁 試験カテゴリー</h2>
           {!isViewer && (
-            <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ 追加</button>
+            <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
         {(selectedStudent.categories || []).length === 0
@@ -3125,11 +3125,12 @@ function App() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📋 評価</h2>
           {!isViewer && (
-            <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ 追加</button>
+            <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
         <button onClick={goToEvaluations} style={{ width: '100%', background: '#f2f2f7', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: '#3a3a3c', cursor: 'pointer', fontWeight: 500 }}>
-          評価一覧を見る →        </button>
+          評価一覧を見る →
+        </button>
       </div>
     </>
   );
@@ -3151,7 +3152,7 @@ function App() {
           <div key={ev._id} className="card exam-card clickable" onClick={() => goToEvaluationDetail(ev)}>
             <div className="card-content">
               <div>
-                <h3 className="card-title">📋 第{ev.ordinal}回評価 — {ev.title}</h3>
+                <h3 className="card-title">📋 {ev.ordinal} Evaluation — {ev.title}</h3>
                 <p className="card-subtitle">📅 {ev.date}</p>
               </div>
               {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteEvaluation(ev._id, e)}>✕</button>}
@@ -3160,7 +3161,7 @@ function App() {
         ))
       }
       {!isViewer && (
-        <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>+ 評価を追加</button>
+        <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>+ Add Evaluation</button>
       )}
     </>
   );
@@ -3278,7 +3279,7 @@ function App() {
                       🇯🇵 日本語訳 {translating && '…'}
                     </span>
                     {translating
-                      ? <span style={{ color: '#8e8e93', fontStyle: 'italic' }}>翻訳中...</span>
+                      ? <span style={{ color: '#8e8e93', fontStyle: 'italic' }}>Translating...</span>
                       : <span>{remarksTranslation}</span>
                     }
                     {!translating && remarksTranslation && (
@@ -3293,7 +3294,7 @@ function App() {
                           padding: '6px 14px', fontSize: 13, fontWeight: 700,
                           cursor: 'pointer',
                         }}>
-                        ✓ 日本語を使用
+                        ✓ Use Japanese
                       </button>
                     )}
                   </div>
@@ -3328,7 +3329,7 @@ function App() {
         <div className="eval-hero">
           <div className="eval-hero-top">
             <div>
-              <p className="eval-ordinal">{selectedEvaluation?.ordinal} 回目の評価</p>
+              <p className="eval-ordinal">{selectedEvaluation?.ordinal} Evaluation</p>
               <h1 className="eval-title">{selectedEvaluation?.title}</h1>
               <p className="eval-date">📅 {selectedEvaluation?.date}</p>
             </div>
@@ -3350,8 +3351,8 @@ function App() {
         {/* Skills Rating */}
         <div className="section-box">
           <div className="section-box-header">
-            <span className="section-box-title">🎯 スキル評価</span>
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>スコア 0 – 10</span>
+            <span className="section-box-title">🎯 Skills Rating</span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>Score 0 – 10</span>
           </div>
           {ratingField('reading',   'READING',   '読むこと')}
           {ratingField('listening', 'LISTENING', '聞くこと')}
@@ -3361,18 +3362,18 @@ function App() {
         {/* Lesson Details */}
         <div className="section-box">
           <div className="section-box-header">
-            <span className="section-box-title">📖 レッスン詳細</span>
+            <span className="section-box-title">📖 Lesson Details</span>
           </div>
           <div className="eval-lesson-row">
             <div className="form-group" style={{ flex: 1 }}>
-              {textField('from', 'FROM（開始）', null, '例：第1課')}
+              {textField('from', 'FROM', null, 'e.g., Lesson 1')}
             </div>
             <div className="eval-lesson-arrow">→</div>
             <div className="form-group" style={{ flex: 1 }}>
-              {textField('to', 'TO（終了）', null, '例：第10課')}
+              {textField('to', 'TO', null, 'e.g., Lesson 10')}
             </div>
           </div>
-          {textField('currentLesson', '現在のレッスン', null, '例：第3章 - 挨拶')}
+          {textField('currentLesson', 'CURRENT LESSON', null, 'e.g., Chapter 3 - Greetings')}
         </div>
 
         {/* Remarks */}
@@ -3392,7 +3393,7 @@ function App() {
           return (
             <div className="section-box">
               <div className="section-box-header">
-                <span className="section-box-title">✍️ 担任の署名</span>
+                <span className="section-box-title">✍️ Teacher's Signature</span>
               </div>
               <div className="eval-signature-row">
                 <img
@@ -3402,7 +3403,7 @@ function App() {
                 />
                 <div>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{teacher.name}</p>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>担任教師</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>Class Teacher</p>
                 </div>
               </div>
             </div>
@@ -3411,7 +3412,7 @@ function App() {
 
         {!isViewer && (
           <button onClick={saveEvaluationFields} disabled={evalSaving} className="btn-primary" style={{ marginBottom: 24, opacity: evalSaving ? 0.7 : 1, cursor: evalSaving ? 'not-allowed' : 'pointer' }}>
-            {evalSaving ? '保存中...' : '💾 評価を保存'}
+            {evalSaving ? 'Saving...' : '💾 Save Evaluation'}
           </button>
         )}
       </>
@@ -3466,7 +3467,7 @@ function App() {
           })}
         </div>
       )}
-      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>+ 試験を追加</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>+ Add Exam</button>}
     </>
   );
 
@@ -3515,10 +3516,10 @@ function App() {
         {!isViewer && (
           <div className="exam-action-row">
             <button className="exam-action-btn scan" onClick={() => openScanner(selectedExam._id)}>
-              <span>📷</span> スキャン
+              <span>📷</span> Scan Page
             </button>
             <button className="exam-action-btn upload" onClick={() => triggerFileInput(selectedExam._id)}>
-              <span>🖼️</span> アップロード
+              <span>🖼️</span> Upload
             </button>
           </div>
         )}
@@ -3541,7 +3542,7 @@ function App() {
               return (
                 <div key={idx} className="exam-page-card">
                   {/* Page number pill */}
-                  <div className="exam-page-num-pill">{idx + 1} ページ</div>
+                  <div className="exam-page-num-pill">Page {idx + 1}</div>
 
                   {/* Delete button */}
                   {!isViewer && (
@@ -3562,7 +3563,7 @@ function App() {
                   ) : (
                     <div className="exam-page-loading">
                       <span>⏳</span>
-                      <p>読み込み中...</p>
+                      <p>Loading...</p>
                     </div>
                   )}
 
@@ -3581,7 +3582,7 @@ function App() {
         {!isViewer && (
           <button className="btn-danger" style={{ width: '100%', marginTop: 8 }}
             onClick={(e) => deleteExam(selectedExam._id, e)}>
-            🗑 試験を削除
+            🗑 Delete Exam
           </button>
         )}
 
@@ -3599,7 +3600,7 @@ function App() {
 
   const renderModal = () => {
     if (!showModal) return null;
-    const titles = { batch: '新しいバッチを追加', student: '新しい研修生を追加', editStudent: '研修生を編集', category: '試験カテゴリーを追加', exam: '新しい試験を追加', evaluation: '新しい評価' };
+    const titles = { batch: 'Add New Batch', student: 'Add New Student', editStudent: 'Edit Student', category: 'Add Exam Category', exam: 'Add New Exam', evaluation: 'New Evaluation' };
     return (
       <div className="modal-overlay">
         <div className="modal-sheet">
@@ -3608,60 +3609,60 @@ function App() {
           {modalType === 'evaluation' ? (
             <>
               <div className="form-group">
-                <label>評価タイトル：</label>
-                <input type="text" value={evalTitle} onChange={(e) => setEvalTitle(e.target.value)} placeholder="例：中間、期末、進捗確認" />
+                <label>Evaluation Title:</label>
+                <input type="text" value={evalTitle} onChange={(e) => setEvalTitle(e.target.value)} placeholder="e.g., Mid-term, Final, Progress Check" />
               </div>
               <div className="form-group">
-                <label>日付：</label>
+                <label>Date:</label>
                 <input type="date" value={evalDate} onChange={(e) => setEvalDate(e.target.value)} />
               </div>
               <p style={{ fontSize: 12, color: '#8e8e93', margin: '4px 0 0' }}>
-                This will be saved as the <strong>{['1回目','2回目','3回目','4回目','5回目','6回目','7回目','8回目','9回目','10回目'][evaluations.length] || `${evaluations.length+1}回目`}の評価</strong>として保存されます。
+                This will be saved as the <strong>{['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th'][evaluations.length] || `${evaluations.length+1}th`} Evaluation</strong>.
               </p>
             </>
           ) : modalType === 'category' ? (
             <div className="form-group">
-              <label>カテゴリー名：</label>
-              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="例：漢字、文法、語彙" />
+              <label>Category Name:</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Kanji, Grammar, Vocabulary" />
             </div>
           ) : modalType === 'exam' ? (
             <>
               <div className="form-group">
-                <label>試験名：</label>
-                <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder="例：クイズ1、中間試験、期末試験" />
+                <label>Exam Name:</label>
+                <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder="e.g., Quiz 1, Midterm, Finals" />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>スコア：</label>
-                  <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder="例：85" min="0" />
+                  <label>Score:</label>
+                  <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder="e.g., 85" min="0" />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>合計スコア：</label>
-                  <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder="例：100" min="1" />
+                  <label>Total Score:</label>
+                  <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder="e.g., 100" min="1" />
                 </div>
               </div>
             </>
           ) : modalType === 'student' || modalType === 'editStudent' ? (
             <>
               <div className="form-group">
-                <label>氏名：</label>
-                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="例：Juan Cruz" />
+                <label>Name:</label>
+                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Juan Cruz" />
               </div>
               <div className="form-group">
-                <label>ステータス：</label>
+                <label>Status:</label>
                 <select value={newStudentStatus} onChange={(e) => setNewStudentStatus(e.target.value)}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
-                  <option value="Regular">一般</option>
-                  <option value="Selected">選抜済み</option>
+                  <option value="Regular">Regular</option>
+                  <option value="Selected">Selected</option>
                 </select>
               </div>
               {newStudentStatus === 'Selected' && (
                 <>
                   <div className="form-group">
-                    <label>組合（KUMIAI）：</label>
+                    <label>KUMIAI:</label>
                     <select value={newKumiai} onChange={(e) => setNewKumiai(e.target.value)}
                       style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
-                      <option value="">— 組合を選択 —</option>
+                      <option value="">— Select KUMIAI —</option>
                       <option value="Setouchi">Setouchi</option>
                       <option value="WBC">WBC</option>
                       <option value="Gyoumusuishin">Gyoumusuishin</option>
@@ -3669,18 +3670,18 @@ function App() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>会社名：</label>
+                    <label>Company Name:</label>
                     <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
-                      placeholder="例：Sunrise、Toyota..." />
+                      placeholder="e.g., Sunrise, Toyota..." />
                   </div>
                 </>
               )}
               <div className="form-group">
-                <label>写真（任意）：</label>
+                <label>Photo (optional):</label>
                 <div className="student-photo-upload" onClick={() => studentPhotoInputRef.current.click()}>
                   {newStudentPhoto
                     ? <img src={newStudentPhoto} alt="Preview" className="student-photo-preview" />
-                    : <><span className="upload-icon" style={{ fontSize: 28 }}>👤</span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>タップして写真をアップロード</p></>
+                    : <><span className="upload-icon" style={{ fontSize: 28 }}>👤</span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>Tap to upload photo</p></>
                   }
                 </div>
                 <input
@@ -3700,15 +3701,15 @@ function App() {
             </>
           ) : (
             <div className="form-group">
-              <label>名前：</label>
-              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="例：N5 土曜日 14:00" />
+              <label>Name:</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., N5 Saturday 2PM" />
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            <button className="btn-secondary" onClick={closeModal} disabled={saving} style={{ flex: 1 }}>キャンセル</button>
+            <button className="btn-secondary" onClick={closeModal} disabled={saving} style={{ flex: 1 }}>Cancel</button>
             <button className="btn-primary" disabled={saving} style={{ flex: 2 }}
               onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
-              {saving ? '保存中...' : '保存'}
+              {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
         </div>
@@ -3851,8 +3852,8 @@ function App() {
       </head>
       <body>
         <div class="top-bar no-print">
-          <button class="back-btn" onclick="window.close()">← 戻る</button>
-          <span style="font-size:14px;color:#666;">QRコードプレビュー — 「戻る」またはこのタブを閉じて戻ってください</span>
+          <button class="back-btn" onclick="window.close()">← Back</button>
+          <span style="font-size:14px;color:#666;">QR Codes Preview — click Back or close this tab to return</span>
         </div>
         ${pagesHtml}
         <script>
@@ -3871,9 +3872,9 @@ function App() {
         <div className="print-toolbar no-print">
           <span className="print-toolbar-title">QR Codes — {selectedBatch.name}</span>
           <div className="print-toolbar-actions">
-            <button className="print-go-btn" onClick={() => handlePrint('portrait')} style={{ marginRight: 6 }}>🖨 縦向き（6枚/ページ）</button>
-            <button className="print-go-btn" onClick={() => handlePrint('landscape')}>🖨 横向き（10枚/ページ）</button>
-            <button className="print-close-btn" onClick={() => setPrintQRs(null)}>✕ 閉じる</button>
+            <button className="print-go-btn" onClick={() => handlePrint('portrait')} style={{ marginRight: 6 }}>🖨 Portrait (6/page)</button>
+            <button className="print-go-btn" onClick={() => handlePrint('landscape')}>🖨 Landscape (10/page)</button>
+            <button className="print-close-btn" onClick={() => setPrintQRs(null)}>✕ Close</button>
           </div>
         </div>
         <div className="print-sheet">
