@@ -3489,10 +3489,6 @@ function App() {
   
       // Filter(Boolean) ensures we don't map over nulls which cause the "Loading" box
       const allImages = (rawImages || []).map(resolveOne).filter(Boolean);
-  
-      // Filter out nulls to prevent empty slots in the grid
-      const allImages = (rawImages || []).map(resolveOne).filter(Boolean);
-    const allImages = rawImages.map(resolveOne);
     const score = selectedExam.score ?? 0;
     const total = selectedExam.totalScore ?? 100;
     const pct = Math.round((score / total) * 100);
