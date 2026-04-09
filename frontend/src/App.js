@@ -1713,49 +1713,110 @@ useEffect(() => {
               const mem = serverStats.memory;
               const memPct = Math.round((mem.used / mem.total) * 100);
               const memColor = memPct > 85 ? '#ff3b30' : memPct > 65 ? '#ff9500' : '#34C759';
-              const renderPct = serverStats.render.percentUsed;
+              const r = serverStats.render;
+              const renderPct = r.percentUsed;
               const renderColor = renderPct > 90 ? '#ff3b30' : renderPct > 70 ? '#ff9500' : '#34C759';
-              const fmt = (b) => b < 1024*1024 ? (b/1024).toFixed(0)+'KB' : (b/(1024*1024)).toFixed(1)+'MB';
+              const fmtBytes = (b) => {
+                if (!b) return '0 B';
+                if (b < 1024) return b + ' B';
+                if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+                if (b < 1024*1024*1024) return (b/(1024*1024)).toFixed(1) + ' MB';
+                return (b/(1024*1024*1024)).toFixed(2) + ' GB';
+              };
+              const bwPct = r.bandwidthLimitBytes ? Math.min((r.bandwidthUsedBytes / r.bandwidthLimitBytes) * 100, 100) : 0;
+              const bwColor = bwPct > 85 ? '#ff3b30' : bwPct > 65 ? '#ff9500' : '#34C759';
+
               return (
                 <>
-                  {/* Render Hours */}
-                  <div style={{ background: serverStats.render.willSuspend ? '#fff3f3' : '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>
-                      ⏱️ Render Free Hours
-                      {serverStats.render.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px' }}>⚠️ Low</span>}
+                  {/* API source badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: r.apiAvailable ? '#f0fff4' : '#fffbe6', borderRadius: 10, fontSize: 12 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.apiAvailable ? '#34C759' : '#ff9500' }} />
+                    <span style={{ color: r.apiAvailable ? '#1a7f37' : '#856404', fontWeight: 600 }}>
+                      {r.apiAvailable ? '✅ Live data mula sa Render API' : '⚠️ Estimated data (walang API key)'}
+                    </span>
+                  </div>
+
+                  {/* Instance Hours Card */}
+                  <div style={{ background: r.willSuspend ? '#fff3f3' : '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>
+                      ⏱️ Instance Hours
+                      {r.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px' }}>⚠️ Malapit maubos!</span>}
                     </div>
+                    <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included Usage — resets every 1st of month</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{serverStats.render.hoursUsed}h</div>
-                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>used this month</div>
+                        <div style={{ fontSize: 32, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{r.hoursUsed}h</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>nagamit ngayong buwan</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: renderColor, lineHeight: 1 }}>{serverStats.render.hoursLeft}h</div>
-                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>remaining of {serverStats.render.limitHours}h</div>
+                        <div style={{ fontSize: 32, fontWeight: 800, color: renderColor, lineHeight: 1 }}>{r.hoursLeft}h</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>natitira sa {r.limitHours}h</div>
                       </div>
                     </div>
-                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden', marginBottom: 8 }}>
-                      <div style={{ height: '100%', width: `${renderPct}%`, background: renderPct > 90 ? 'linear-gradient(90deg,#ff9500,#ff3b30)' : renderPct > 70 ? 'linear-gradient(90deg,#34C759,#ff9500)' : 'linear-gradient(90deg,#34C759,#30d158)', borderRadius: 99, transition: 'width 0.6s' }} />
+                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 12, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ height: '100%', width: `${renderPct}%`, background: renderPct > 90 ? 'linear-gradient(90deg,#ff9500,#ff3b30)' : renderPct > 70 ? 'linear-gradient(90deg,#34C759,#ff9500)' : 'linear-gradient(90deg,#34C759,#30d158)', borderRadius: 99, transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)' }} />
                     </div>
-                    <div style={{ fontSize: 12, color: '#8e8e93' }}>{renderPct}% ng monthly limit ang nagamit</div>
-                    {serverStats.render.willSuspend && (
-                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 500 }}>
-                        ⚠️ Bababa sa 50 hours na lang. Mag-upgrade o mag-migrate bago ma-suspend ang app!
+                    <div style={{ fontSize: 12, color: '#8e8e93' }}>{renderPct}% ng 750h monthly limit</div>
+                    {r.willSuspend && (
+                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 600 }}>
+                        🚨 Bababa na sa 50 hours! Mag-migrate na o mag-upgrade bago ma-suspend ang app.
                       </div>
                     )}
                   </div>
+
+                  {/* Bandwidth Card */}
+                  {r.bandwidthUsedBytes !== undefined && (
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>🌐 Outbound Bandwidth</div>
+                      <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included: 100 GB</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{fmtBytes(r.bandwidthUsedBytes)}</div>
+                          <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>nagamit</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: bwColor, lineHeight: 1 }}>{bwPct.toFixed(1)}%</div>
+                          <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>ng 100 GB</div>
+                        </div>
+                      </div>
+                      <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${bwPct}%`, background: bwColor, borderRadius: 99, transition: 'width 0.6s' }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Services List */}
+                  {r.services && r.services.length > 0 && (
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🚀 Render Services</div>
+                      {r.services.map((svc, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < r.services.length - 1 ? '1px solid #f2f2f7' : 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 9, height: 9, borderRadius: '50%', background: svc.status === 'not_suspended' ? '#34C759' : '#ff3b30', boxShadow: svc.status === 'not_suspended' ? '0 0 5px #34C759' : 'none', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1c1c1e' }}>{svc.name}</div>
+                              <div style={{ fontSize: 11, color: '#8e8e93' }}>{svc.plan} · {svc.region}</div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: svc.status === 'not_suspended' ? '#1a7f37' : '#c0392b', background: svc.status === 'not_suspended' ? '#f0fff4' : '#fff3f3', borderRadius: 6, padding: '3px 8px' }}>
+                            {svc.status === 'not_suspended' ? 'Running' : 'Suspended'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Memory */}
                   <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🧠 Memory Usage</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div>
-                        <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{fmt(mem.used)}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{fmtBytes(mem.used)}</div>
                         <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>heap used</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: 24, fontWeight: 800, color: memColor, lineHeight: 1 }}>{memPct}%</div>
-                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>of {fmt(mem.total)}</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>of {fmtBytes(mem.total)}</div>
                       </div>
                     </div>
                     <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden', marginBottom: 8 }}>
@@ -1764,11 +1825,11 @@ useEffect(() => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
                       <div style={{ background: '#f9f9f9', borderRadius: 10, padding: '8px 12px' }}>
                         <div style={{ fontSize: 11, color: '#8e8e93' }}>RSS (total process)</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{fmt(mem.rss)}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{fmtBytes(mem.rss)}</div>
                       </div>
                       <div style={{ background: '#f9f9f9', borderRadius: 10, padding: '8px 12px' }}>
                         <div style={{ fontSize: 11, color: '#8e8e93' }}>External</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{fmt(mem.external)}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{fmtBytes(mem.external)}</div>
                       </div>
                     </div>
                   </div>
@@ -1807,7 +1868,7 @@ useEffect(() => {
                     </div>
                   </div>
 
-                  {/* Node info */}
+                  {/* Footer */}
                   <div style={{ background: '#f9f9f9', borderRadius: 14, padding: '12px 16px', fontSize: 12, color: '#8e8e93' }}>
                     Node {serverStats.node.version} · {serverStats.node.platform} · {serverStats.node.env} · Last checked: {new Date(serverStats.timestamp).toLocaleTimeString()}
                   </div>
