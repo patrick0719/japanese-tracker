@@ -1439,27 +1439,27 @@ function SettingsPage({ batches, onClose, API }) {
     fetchStorage();
   }, [API]);
   const [serverStats, setServerStats] = useState(null);
-  const [serverLoading, setServerLoading] = useState(false);
-  const [serverError, setServerError] = useState(null);
+const [serverLoading, setServerLoading] = useState(false);
+const [serverError, setServerError] = useState(null);
 
-  const fetchServerStats = async () => {
-    setServerLoading(true);
-    setServerError(null);
-    try {
-      const res = await fetch(`${API}/admin/server-stats`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setServerStats(data);
-    } catch (e) {
-      setServerError(e.message);
-    } finally {
-      setServerLoading(false);
-    }
-  };
+const fetchServerStats = async () => {
+  setServerLoading(true);
+  setServerError(null);
+  try {
+    const res = await fetch(`${API}/admin/server-stats`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    setServerStats(data);
+  } catch (e) {
+    setServerError(e.message);
+  } finally {
+    setServerLoading(false);
+  }
+};
 
-  useEffect(() => {
-    if (activeSection === 'server') fetchServerStats();
-  }, [activeSection]);
+useEffect(() => {
+  if (activeSection === 'server') fetchServerStats();
+}, [activeSection]);
 
   const formatBytes = (bytes) => {
     if (bytes == null) return '—';
@@ -1683,145 +1683,146 @@ function SettingsPage({ batches, onClose, API }) {
                   </div>
                 );
               })}
-              {/* ── SERVER MONITOR TAB ── */}
-{activeSection === 'server' && (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-    {/* Refresh button */}
-    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <button onClick={fetchServerStats} disabled={serverLoading} style={{
-        background: serverLoading ? '#e5e5ea' : '#8B0000',
-        color: serverLoading ? '#8e8e93' : '#fff',
-        border: 'none', borderRadius: 10, padding: '8px 18px',
-        fontSize: 13, fontWeight: 600, cursor: serverLoading ? 'default' : 'pointer'
-      }}>
-        {serverLoading ? '⏳ Loading…' : '🔄 Refresh'}
-      </button>
-    </div>
-
-    {serverError && (
-      <div style={{ background: '#fff3f3', borderRadius: 14, padding: 16, color: '#c0392b', fontSize: 13 }}>
-        ⚠️ {serverError}
-      </div>
-    )}
-
-    {serverStats && (() => {
-      const mem = serverStats.memory;
-      const memPct = Math.round((mem.used / mem.total) * 100);
-      const memColor = memPct > 85 ? '#ff3b30' : memPct > 65 ? '#ff9500' : '#34C759';
-      const renderPct = serverStats.render.percentUsed;
-      const renderColor = renderPct > 90 ? '#ff3b30' : renderPct > 70 ? '#ff9500' : '#34C759';
-      const formatBytes = (b) => b < 1024*1024 ? (b/1024).toFixed(0)+'KB' : (b/(1024*1024)).toFixed(1)+'MB';
-
-      return (
-        <>
-          {/* Render Hours Card */}
-          <div style={{ background: serverStats.render.willSuspend ? '#fff3f3' : '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>
-              ⏱️ Render Free Hours
-              {serverStats.render.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px' }}>⚠️ Low</span>}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{serverStats.render.hoursUsed}h</div>
-                <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>used this month</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: renderColor, lineHeight: 1 }}>{serverStats.render.hoursLeft}h</div>
-                <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>remaining of {serverStats.render.limitHours}h</div>
-              </div>
-            </div>
-            <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden', marginBottom: 8 }}>
-              <div style={{ height: '100%', width: `${renderPct}%`, background: renderPct > 90 ? 'linear-gradient(90deg,#ff9500,#ff3b30)' : renderPct > 70 ? 'linear-gradient(90deg,#34C759,#ff9500)' : 'linear-gradient(90deg,#34C759,#30d158)', borderRadius: 99, transition: 'width 0.6s' }} />
-            </div>
-            <div style={{ fontSize: 12, color: '#8e8e93' }}>{renderPct}% ng monthly limit ang nagamit</div>
-            {serverStats.render.willSuspend && (
-              <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 500 }}>
-                ⚠️ Bababa sa 50 hours na lang. Mag-upgrade o mag-migrate bago ma-suspend ang app!
-              </div>
-            )}
-          </div>
-
-          {/* Memory Card */}
-          <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🧠 Memory Usage</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{formatBytes(mem.used)}</div>
-                <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>heap used</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: memColor, lineHeight: 1 }}>{memPct}%</div>
-                <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>of {formatBytes(mem.total)}</div>
-              </div>
-            </div>
-            <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden', marginBottom: 8 }}>
-              <div style={{ height: '100%', width: `${memPct}%`, background: memColor, borderRadius: 99, transition: 'width 0.6s' }} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
-              <div style={{ background: '#f9f9f9', borderRadius: 10, padding: '8px 12px' }}>
-                <div style={{ fontSize: 11, color: '#8e8e93' }}>RSS (total process)</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{formatBytes(mem.rss)}</div>
-              </div>
-              <div style={{ background: '#f9f9f9', borderRadius: 10, padding: '8px 12px' }}>
-                <div style={{ fontSize: 11, color: '#8e8e93' }}>External</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{formatBytes(mem.external)}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Uptime + Requests */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>⏰ Uptime</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{serverStats.uptime}</div>
-            </div>
-            <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>📡 Requests</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{serverStats.requests.total.toLocaleString()}</div>
-              <div style={{ fontSize: 11, color: '#8e8e93' }}>{serverStats.requests.thisHour} this hour</div>
-            </div>
-          </div>
-
-          {/* DB Status */}
-          <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🗄️ Database</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: serverStats.database.status === 'connected' ? '#34C759' : '#ff3b30', boxShadow: serverStats.database.status === 'connected' ? '0 0 6px #34C759' : 'none' }} />
-              <span style={{ fontSize: 14, fontWeight: 600, color: '#3a3a3c', textTransform: 'capitalize' }}>{serverStats.database.status}</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              {[
-                { label: 'Batches', value: serverStats.database.batches },
-                { label: 'Images', value: serverStats.database.images },
-                { label: 'Teachers', value: serverStats.database.teachers },
-              ].map((item, i) => (
-                <div key={i} style={{ background: '#f9f9f9', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{item.value}</div>
-                  <div style={{ fontSize: 11, color: '#8e8e93' }}>{item.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Node info */}
-          <div style={{ background: '#f9f9f9', borderRadius: 14, padding: '12px 16px', fontSize: 12, color: '#8e8e93' }}>
-            Node {serverStats.node.version} · {serverStats.node.platform} · {serverStats.node.env} · Last checked: {new Date(serverStats.timestamp).toLocaleTimeString()}
-          </div>
-        </>
-      );
-    })()}
-
-    {!serverStats && !serverLoading && !serverError && (
-      <div style={{ textAlign: 'center', padding: 40, color: '#8e8e93', fontSize: 14 }}>
-        I-tap ang Refresh para makita ang server stats.
-      </div>
-    )}
-  </div>
-)}
             </div>
           </div>
         )}
+
+        {/* ── SERVER MONITOR TAB ── */}
+        {activeSection === 'server' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={fetchServerStats} disabled={serverLoading} style={{
+                background: serverLoading ? '#e5e5ea' : '#8B0000',
+                color: serverLoading ? '#8e8e93' : '#fff',
+                border: 'none', borderRadius: 10, padding: '8px 18px',
+                fontSize: 13, fontWeight: 600, cursor: serverLoading ? 'default' : 'pointer'
+              }}>
+                {serverLoading ? '⏳ Loading…' : '🔄 Refresh'}
+              </button>
+            </div>
+
+            {serverError && (
+              <div style={{ background: '#fff3f3', borderRadius: 14, padding: 16, color: '#c0392b', fontSize: 13 }}>
+                ⚠️ {serverError}
+              </div>
+            )}
+
+            {serverStats && (() => {
+              const mem = serverStats.memory;
+              const memPct = Math.round((mem.used / mem.total) * 100);
+              const memColor = memPct > 85 ? '#ff3b30' : memPct > 65 ? '#ff9500' : '#34C759';
+              const renderPct = serverStats.render.percentUsed;
+              const renderColor = renderPct > 90 ? '#ff3b30' : renderPct > 70 ? '#ff9500' : '#34C759';
+              const fmt = (b) => b < 1024*1024 ? (b/1024).toFixed(0)+'KB' : (b/(1024*1024)).toFixed(1)+'MB';
+              return (
+                <>
+                  {/* Render Hours */}
+                  <div style={{ background: serverStats.render.willSuspend ? '#fff3f3' : '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>
+                      ⏱️ Render Free Hours
+                      {serverStats.render.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px' }}>⚠️ Low</span>}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{serverStats.render.hoursUsed}h</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>used this month</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: renderColor, lineHeight: 1 }}>{serverStats.render.hoursLeft}h</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>remaining of {serverStats.render.limitHours}h</div>
+                      </div>
+                    </div>
+                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ height: '100%', width: `${renderPct}%`, background: renderPct > 90 ? 'linear-gradient(90deg,#ff9500,#ff3b30)' : renderPct > 70 ? 'linear-gradient(90deg,#34C759,#ff9500)' : 'linear-gradient(90deg,#34C759,#30d158)', borderRadius: 99, transition: 'width 0.6s' }} />
+                    </div>
+                    <div style={{ fontSize: 12, color: '#8e8e93' }}>{renderPct}% ng monthly limit ang nagamit</div>
+                    {serverStats.render.willSuspend && (
+                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 500 }}>
+                        ⚠️ Bababa sa 50 hours na lang. Mag-upgrade o mag-migrate bago ma-suspend ang app!
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Memory */}
+                  <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🧠 Memory Usage</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{fmt(mem.used)}</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>heap used</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: memColor, lineHeight: 1 }}>{memPct}%</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>of {fmt(mem.total)}</div>
+                      </div>
+                    </div>
+                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ height: '100%', width: `${memPct}%`, background: memColor, borderRadius: 99, transition: 'width 0.6s' }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
+                      <div style={{ background: '#f9f9f9', borderRadius: 10, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 11, color: '#8e8e93' }}>RSS (total process)</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{fmt(mem.rss)}</div>
+                      </div>
+                      <div style={{ background: '#f9f9f9', borderRadius: 10, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 11, color: '#8e8e93' }}>External</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{fmt(mem.external)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Uptime + Requests */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>⏰ Uptime</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{serverStats.uptime}</div>
+                    </div>
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>📡 Requests</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{serverStats.requests.total.toLocaleString()}</div>
+                      <div style={{ fontSize: 11, color: '#8e8e93' }}>{serverStats.requests.thisHour} this hour</div>
+                    </div>
+                  </div>
+
+                  {/* DB Status */}
+                  <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🗄️ Database</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: serverStats.database.status === 'connected' ? '#34C759' : '#ff3b30', boxShadow: serverStats.database.status === 'connected' ? '0 0 6px #34C759' : 'none' }} />
+                      <span style={{ fontSize: 14, fontWeight: 600, color: '#3a3a3c', textTransform: 'capitalize' }}>{serverStats.database.status}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                      {[
+                        { label: 'Batches', value: serverStats.database.batches },
+                        { label: 'Images', value: serverStats.database.images },
+                        { label: 'Teachers', value: serverStats.database.teachers },
+                      ].map((item, i) => (
+                        <div key={i} style={{ background: '#f9f9f9', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{item.value}</div>
+                          <div style={{ fontSize: 11, color: '#8e8e93' }}>{item.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Node info */}
+                  <div style={{ background: '#f9f9f9', borderRadius: 14, padding: '12px 16px', fontSize: 12, color: '#8e8e93' }}>
+                    Node {serverStats.node.version} · {serverStats.node.platform} · {serverStats.node.env} · Last checked: {new Date(serverStats.timestamp).toLocaleTimeString()}
+                  </div>
+                </>
+              );
+            })()}
+
+            {!serverStats && !serverLoading && !serverError && (
+              <div style={{ textAlign: 'center', padding: 40, color: '#8e8e93', fontSize: 14 }}>
+                I-tap ang Refresh para makita ang server stats.
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
       <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
     </div>
