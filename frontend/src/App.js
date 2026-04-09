@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 import './index.css';
 
-const API = 'https://japanese-tracker-production.up.railway.app/api';
+const API = 'https://japanese-tracker.onrender.com';
 // TODO: set REACT_APP_CLOUDINARY_CLOUD and REACT_APP_CLOUDINARY_PRESET in your .env file
 const CLOUDINARY_CLOUD = process.env.REACT_APP_CLOUDINARY_CLOUD || 'daofbq9wz';
 const CLOUDINARY_PRESET = process.env.REACT_APP_CLOUDINARY_PRESET || 'cnbztuzc';
