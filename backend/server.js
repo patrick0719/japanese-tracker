@@ -733,7 +733,86 @@ app.get('/api/admin/storage-usage', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ── SERVER MONITOR ────────────────────────────────────────────────────────────
+// Tracks request counts since server started
+let requestCount = 0;
+let requestCountThisHour = 0;
+let hourStart = Date.now();
 
+app.use((req, res, next) => {
+  requestCount++;
+  // Reset hourly counter every 60 minutes
+  if (Date.now() - hourStart > 60 * 60 * 1000) {
+    requestCountThisHour = 0;
+    hourStart = Date.now();
+  }
+  requestCountThisHour++;
+  next();
+});
+
+app.get('/api/admin/server-stats', async (req, res) => {
+  try {
+    const memUsage = process.memoryUsage();
+    const uptimeSeconds = process.uptime();
+
+    const hours = Math.floor(uptimeSeconds / 3600);
+    const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+    const seconds = Math.floor(uptimeSeconds % 60);
+    const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
+
+    // Render free tier: 750 hours/month
+    const RENDER_MONTHLY_LIMIT_HOURS = 750;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const hoursThisMonth = (Date.now() - startOfMonth.getTime()) / (1000 * 60 * 60);
+    const renderHoursUsed = Math.min(hoursThisMonth, RENDER_MONTHLY_LIMIT_HOURS);
+    const renderHoursLeft = Math.max(RENDER_MONTHLY_LIMIT_HOURS - renderHoursUsed, 0);
+    const renderPct = (renderHoursUsed / RENDER_MONTHLY_LIMIT_HOURS) * 100;
+
+    // DB stats
+    const dbState = mongoose.connection.readyState;
+    const dbStateLabel = ['disconnected', 'connected', 'connecting', 'disconnecting'][dbState] || 'unknown';
+    const batchCount = await Batch.countDocuments();
+    const imageCount = await Image.countDocuments();
+    const teacherCount = await Teacher.countDocuments();
+
+    res.json({
+      uptime: uptimeStr,
+      uptimeSeconds,
+      memory: {
+        used: memUsage.heapUsed,
+        total: memUsage.heapTotal,
+        rss: memUsage.rss,
+        external: memUsage.external,
+      },
+      requests: {
+        total: requestCount,
+        thisHour: requestCountThisHour,
+      },
+      render: {
+        hoursUsed: parseFloat(renderHoursUsed.toFixed(1)),
+        hoursLeft: parseFloat(renderHoursLeft.toFixed(1)),
+        limitHours: RENDER_MONTHLY_LIMIT_HOURS,
+        percentUsed: parseFloat(renderPct.toFixed(1)),
+        willSuspend: renderHoursLeft < 50,
+      },
+      database: {
+        status: dbStateLabel,
+        batches: batchCount,
+        images: imageCount,
+        teachers: teacherCount,
+      },
+      node: {
+        version: process.version,
+        platform: process.platform,
+        env: process.env.NODE_ENV || 'development',
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));
 
