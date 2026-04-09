@@ -1439,27 +1439,27 @@ function SettingsPage({ batches, onClose, API }) {
     fetchStorage();
   }, [API]);
   const [serverStats, setServerStats] = useState(null);
-const [serverLoading, setServerLoading] = useState(false);
-const [serverError, setServerError] = useState(null);
+  const [serverLoading, setServerLoading] = useState(false);
+  const [serverError, setServerError] = useState(null);
 
-const fetchServerStats = async () => {
-  setServerLoading(true);
-  setServerError(null);
-  try {
-    const res = await fetch(`${API}/admin/server-stats`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    setServerStats(data);
-  } catch (e) {
-    setServerError(e.message);
-  } finally {
-    setServerLoading(false);
-  }
-};
+  const fetchServerStats = async () => {
+    setServerLoading(true);
+    setServerError(null);
+    try {
+      const res = await fetch(`${API}/admin/server-stats`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setServerStats(data);
+    } catch (e) {
+      setServerError(e.message);
+    } finally {
+      setServerLoading(false);
+    }
+  };
 
-useEffect(() => {
-  if (activeSection === 'server') fetchServerStats();
-}, [activeSection]);
+  useEffect(() => {
+    if (activeSection === 'server') fetchServerStats();
+  }, [activeSection]);
 
   const formatBytes = (bytes) => {
     if (bytes == null) return '—';
