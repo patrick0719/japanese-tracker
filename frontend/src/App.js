@@ -420,8 +420,8 @@ function ProgressChart({ student, batch, onClose }) {
         <button onClick={onClose} style={{
           background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
           borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
-        }}>← Back</button>
-        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 Progress Chart</span>
+        }}>← 戻る</button>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 進捗チャート</span>
         <div style={{ width: 72 }} />
       </div>
 
@@ -486,19 +486,19 @@ function ProgressChart({ student, batch, onClose }) {
         {!loading && chartData && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
-              { label: 'Total Exams', value: chartData.stats.totalExams, icon: '📝', color: '#007AFF', sub: null },
-              { label: 'Average Score', value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759', sub: null },
-              { label: 'Best Score', value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
+              { label: '試験数', value: chartData.stats.totalExams, icon: '📝', color: '#007AFF', sub: null },
+              { label: '平均点', value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759', sub: null },
+              { label: '最高点', value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
               chartData.stats.recentTrend !== null
                 ? {
-                    label: 'Improvement',
+                    label: '上達度',
                     value: (chartData.stats.recentTrend > 0 ? '+' : '') + chartData.stats.recentTrend + '%',
                     icon: chartData.stats.recentTrend > 0 ? '📈' : chartData.stats.recentTrend < 0 ? '📉' : '➡️',
                     color: chartData.stats.recentTrend > 0 ? '#34C759' : chartData.stats.recentTrend < 0 ? '#FF3B30' : '#8e8e93',
                     sub: chartData.stats.recentTrendLabel,
                   }
                 : {
-                    label: 'Latest Score',
+                    label: '最新点',
                     value: chartData.stats.latestScore + '%',
                     icon: '🎯',
                     color: '#8B0000',
@@ -525,22 +525,22 @@ function ProgressChart({ student, batch, onClose }) {
 
           if (streak >= 3) {
             icon = '🔥'; bg = '#fff8e1'; color = '#e65100';
-            message = `On a ${streak}-exam winning streak! Keep it up.`;
+            message = `${streak}回連続で上昇中！この調子で続けよう。`;
           } else if (recentTrend !== null && recentTrend >= 5) {
             icon = '🚀'; bg = '#e8f5e9'; color = '#2e7d32';
-            message = `Strong recent momentum — up ${recentTrend}% in the last exams.`;
+            message = `直近の試験で${recentTrend}%アップ！勢いがあります。`;
           } else if (recentTrend !== null && recentTrend <= -5) {
             icon = '⚠️'; bg = '#fff3e0'; color = '#e65100';
-            message = `Recent dip of ${Math.abs(recentTrend)}%. May need extra review.`;
+            message = `直近${Math.abs(recentTrend)}%の下降。復習が必要かもしれません。`;
           } else if (consistency >= 70) {
             icon = '💪'; bg = '#e3f2fd'; color = '#1565c0';
-            message = `Very consistent — ${consistency}% of exams at or above personal average.`;
+            message = `安定しています — ${consistency}%の試験で平均以上を達成。`;
           } else if (totalExams >= 5 && avgScore >= 80) {
             icon = '⭐'; bg = '#f3e5f5'; color = '#6a1b9a';
-            message = `Excellent average of ${avgScore}% across ${totalExams} exams.`;
+            message = `${totalExams}回の試験で平均${avgScore}%！素晴らしい成績です。`;
           } else {
             icon = '📌'; bg = '#f2f2f7'; color = '#8e8e93';
-            message = `Consistency rate: ${consistency}% of exams at or above personal average.`;
+            message = `安定率：${consistency}%の試験で自己平均以上を達成。`;
           }
 
           return (
@@ -558,12 +558,12 @@ function ProgressChart({ student, batch, onClose }) {
           background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
         }}>
-          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>⏱️ Time Range</p>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>⏱️ 期間</p>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
-              { id: 'all', label: 'All Time' },
-              { id: '3months', label: '3 Months' },
-              { id: '1month', label: '1 Month' }
+              { id: 'all', label: '全期間' },
+              { id: '3months', label: '3ヶ月' },
+              { id: '1month', label: '1ヶ月' }
             ].map(opt => (
               <button key={opt.id} onClick={() => setTimeRange(opt.id)} style={{
                 flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none',
@@ -581,7 +581,7 @@ function ProgressChart({ student, batch, onClose }) {
             background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>📁 Categories</p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>📁 カテゴリー</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {chartData.categories.map(cat => {
                 const colors = {
@@ -605,7 +605,7 @@ function ProgressChart({ student, batch, onClose }) {
                   padding: '6px 14px', borderRadius: 20, border: '1.5px solid #8e8e93',
                   fontSize: 12, fontWeight: 500, background: '#fff',
                   color: '#8e8e93', cursor: 'pointer'
-                }}>Clear</button>
+                }}>クリア</button>
               )}
             </div>
           </div>
@@ -616,15 +616,15 @@ function ProgressChart({ student, batch, onClose }) {
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📈 Score Trend</h3>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📈 スコア推移</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 12, height: 3, background: '#007AFF', borderRadius: 2 }} />
-                Actual
+                実績
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 12, height: 3, background: '#8B0000', borderRadius: 2, opacity: 0.6 }} />
-                Trend
+                傾向
               </span>
             </div>
           </div>
@@ -643,8 +643,8 @@ function ProgressChart({ student, batch, onClose }) {
           ) : chartData?.exams.length === 0 ? (
             <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8e8e93' }}>
               <span style={{ fontSize: 40, marginBottom: 10 }}>📊</span>
-              <p style={{ margin: 0, fontSize: 14 }}>No exam data available</p>
-              <p style={{ margin: '4px 0 0', fontSize: 12 }}>Add exams with dates to see progress</p>
+              <p style={{ margin: 0, fontSize: 14 }}>試験データがありません</p>
+              <p style={{ margin: '4px 0 0', fontSize: 12 }}>日付付きの試験を追加して進捗を確認しましょう</p>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -658,7 +658,7 @@ function ProgressChart({ student, batch, onClose }) {
             background: '#fff', borderRadius: 16, padding: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📝 Recent Exams</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📝 直近の試験</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {chartData.exams.slice(-5).reverse().map((exam, i) => (
                 <div key={i} style={{
@@ -3008,7 +3008,7 @@ function App() {
           <div className="header-with-back">
             <h1 className="title">🏢 {selectedCompany.name}</h1>
           </div>
-          <h2 className="section-title">{students.length} Student{students.length !== 1 ? 's' : ''}</h2>
+          <h2 className="section-title">{students.length} 名の研修生</h2>
           {students.map(student => (
           <div key={student._id} className="card student-card clickable"
             onClick={() => { setSelectedBatch(student.batch); goToCategories(student); }}>
@@ -3032,7 +3032,7 @@ function App() {
                     fontWeight: 600, cursor: 'pointer', flexShrink: 0
                   }}
                 >
-                  📈 Progress
+                  📈 進捗
                 </button>
                 <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
               </div>
@@ -3049,26 +3049,26 @@ function App() {
         <div className="header-banner">
           <div className="top-row">
             <div>
-              <p className="logged-in-label">Logged in as</p>
+              <p className="logged-in-label">ログイン中</p>
               <h1 className="title">{kumiai}</h1>
             </div>
             <div className="top-row-actions">
-              <span className="badge-view-only">VIEW ONLY</span>
+              <span className="badge-view-only">閲覧のみ</span>
               <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
-                Logout
+                ログアウト
               </button>
             </div>
           </div>
         </div>
 
         <h2 className="section-title">
-          Companies ({groupKeys.length})
+          企業 ({groupKeys.length})
         </h2>
 
         {groupKeys.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
             <div style={{ fontSize: 40, marginBottom: 10 }}>👥</div>
-            <p>No students found.</p>
+            <p>研修生が見つかりません。</p>
           </div>
         )}
 
@@ -3082,7 +3082,7 @@ function App() {
                   <span style={{ fontSize: 32 }}>🏢</span>
                   <div>
                     <h2 className="card-title">{groupKey}</h2>
-                    <p className="card-subtitle">{students.length} student{students.length !== 1 ? 's' : ''}</p>
+                    <p className="card-subtitle">{students.length} 名</p>
                   </div>
                 </div>
                 <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
@@ -3108,7 +3108,7 @@ function App() {
               <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji}</span>
             )}
             <div>
-              <p className="logged-in-label">Logged in as</p>
+              <p className="logged-in-label">{isViewer ? 'ログイン中' : 'Logged in as'}</p>
               <h1 className="title">
                 {isViewer
                   ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
@@ -3121,7 +3121,7 @@ function App() {
             </div>
           </div>
           <div className="top-row-actions">
-            {isViewer && <span className="badge-view-only">VIEW ONLY</span>}
+            {isViewer && <span className="badge-view-only">{['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? '閲覧のみ' : 'VIEW ONLY'}</span>}
             {!isViewer && (
               <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">
                 Switch
@@ -3133,12 +3133,12 @@ function App() {
               </button>
             )}
             <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
-              Logout
+              {isViewer && ['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? 'ログアウト' : 'Logout'}
             </button>
           </div>
         </div>
       </div>
-      <h2 className="section-title">{isViewer ? 'All Batches' : 'My Batches'}</h2>
+      <h2 className="section-title">{isViewer ? (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? 'バッチ一覧' : 'All Batches') : 'My Batches'}</h2>
       {(isViewer ? batches.filter(b => b.students.some(s => s.status === 'Selected')) : batches).map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
@@ -3146,7 +3146,9 @@ function App() {
               <h2 className="card-title">🎌 {batch.name}</h2>
               <p className="card-subtitle">
                 {isViewer
-                  ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
+                  ? (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY))
+                      ? `選定済み ${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} 名`
+                      : `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`)
                   : `${batch.students.length} student${batch.students.length !== 1 ? 's' : ''}`}
               </p>
             </div>
@@ -3173,7 +3175,7 @@ function App() {
       <div className="header-with-back">
         <h1 className="title">{selectedBatch.name}</h1>
       </div>
-      <h2 className="section-title">Students</h2>
+      <h2 className="section-title">{isViewer ? '研修生一覧' : 'Students'}</h2>
       {visibleStudents.map(student => (
         <div key={student._id} className="card student-card clickable" onClick={() => goToCategories(student)}>
           <div className="card-content">
@@ -3193,7 +3195,7 @@ function App() {
                       fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
                       cursor: isViewer ? 'default' : 'pointer'
                     }}>
-                    {student.status === 'Selected' ? 'SELECTED' : 'REGULAR'}
+                    {student.status === 'Selected' ? '選定済み' : '通常'}
                   </span>
                   {student.status === 'Selected' && student.kumiai && (
                     <span style={{
@@ -3212,7 +3214,7 @@ function App() {
                     </span>
                   )}
                 </div>
-                <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
+                <p className="card-subtitle">{student.categories?.length || 0} カテゴリー</p>
               </div>
             </div>
             {!isViewer && (
@@ -3311,26 +3313,26 @@ function App() {
     }}
   >
     <span style={{ fontSize: 20 }}>📈</span>
-    View Progress Chart
+    📈 進捗チャートを見る
   </button>
 )}
 
       {/* ── Exam Categories Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📁 Exam Categories</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📁 試験カテゴリー</h2>
           {!isViewer && (
             <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
         {(selectedStudent.categories || []).length === 0
-          ? <p style={{ fontSize: 13, color: '#8e8e93', margin: 0, textAlign: 'center', padding: '12px 0' }}>No exam categories yet.</p>
+          ? <p style={{ fontSize: 13, color: '#8e8e93', margin: 0, textAlign: 'center', padding: '12px 0' }}>試験カテゴリーがまだありません。</p>
           : (selectedStudent.categories || []).map(cat => (
             <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
               <div className="card-content">
                 <div>
                   <h3 className="card-title">📁 {cat.name}</h3>
-                  <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
+                  <p className="card-subtitle">{cat.items?.length || 0} 試験</p>
                 </div>
                 <div className="exam-right">
                   {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>}
@@ -3344,13 +3346,13 @@ function App() {
       {/* ── Evaluations Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📋 Evaluations</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📋 評価一覧</h2>
           {!isViewer && (
-            <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
+            <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ 追加</button>
           )}
         </div>
         <button onClick={goToEvaluations} style={{ width: '100%', background: '#f2f2f7', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: '#3a3a3c', cursor: 'pointer', fontWeight: 500 }}>
-          View all evaluations →
+          すべての評価を見る →
         </button>
       </div>
     </>
@@ -3366,9 +3368,9 @@ function App() {
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
       </div>
-      <h2 className="section-title">Evaluations</h2>
+      <h2 className="section-title">評価一覧</h2>
       {evaluations.length === 0
-        ? <p style={{ fontSize: 14, color: '#8e8e93', textAlign: 'center', marginTop: 32 }}>No evaluations yet.</p>
+        ? <p style={{ fontSize: 14, color: '#8e8e93', textAlign: 'center', marginTop: 32 }}>評価がまだありません。</p>
         : evaluations.map(ev => (
           <div key={ev._id} className="card exam-card clickable" onClick={() => goToEvaluationDetail(ev)}>
             <div className="card-content">
@@ -3550,7 +3552,7 @@ function App() {
         <div className="eval-hero">
           <div className="eval-hero-top">
             <div>
-              <p className="eval-ordinal">{selectedEvaluation?.ordinal} Evaluation</p>
+              <p className="eval-ordinal">{selectedEvaluation?.ordinal} 回目の評価</p>
               <h1 className="eval-title">{selectedEvaluation?.title}</h1>
               <p className="eval-date">📅 {selectedEvaluation?.date}</p>
             </div>
@@ -3572,8 +3574,8 @@ function App() {
         {/* Skills Rating */}
         <div className="section-box">
           <div className="section-box-header">
-            <span className="section-box-title">🎯 Skills Rating</span>
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>Score 0 – 10</span>
+            <span className="section-box-title">🎯 スキル評価</span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>スコア 0 〜 10</span>
           </div>
           {ratingField('reading',   'READING',   '読むこと')}
           {ratingField('listening', 'LISTENING', '聞くこと')}
@@ -3583,24 +3585,24 @@ function App() {
         {/* Lesson Details */}
         <div className="section-box">
           <div className="section-box-header">
-            <span className="section-box-title">📖 Lesson Details</span>
+            <span className="section-box-title">📖 レッスン詳細</span>
           </div>
           <div className="eval-lesson-row">
             <div className="form-group" style={{ flex: 1 }}>
-              {textField('from', 'FROM', null, 'e.g., Lesson 1')}
+              {textField('from', '開始', null, '例：レッスン1')}
             </div>
             <div className="eval-lesson-arrow">→</div>
             <div className="form-group" style={{ flex: 1 }}>
-              {textField('to', 'TO', null, 'e.g., Lesson 10')}
+              {textField('to', '終了', null, '例：レッスン10')}
             </div>
           </div>
-          {textField('currentLesson', 'CURRENT LESSON', null, 'e.g., Chapter 3 - Greetings')}
+          {textField('currentLesson', '現在のレッスン', null, '例：第3章 - あいさつ')}
         </div>
 
         {/* Remarks */}
         <div className="section-box">
           <div className="section-box-header">
-            <span className="section-box-title">💬 Remarks</span>
+            <span className="section-box-title">💬 コメント</span>
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>備考</span>
           </div>
           {textField('remarks', null, null, 'コメントを入力してください...')}
@@ -3614,7 +3616,7 @@ function App() {
           return (
             <div className="section-box">
               <div className="section-box-header">
-                <span className="section-box-title">✍️ Teacher's Signature</span>
+                <span className="section-box-title">✍️ 担当教師のサイン</span>
               </div>
               <div className="eval-signature-row">
                 <img
@@ -3624,7 +3626,7 @@ function App() {
                 />
                 <div>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{teacher.name}</p>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>Class Teacher</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>担当教師</p>
                 </div>
               </div>
             </div>
@@ -3646,12 +3648,12 @@ function App() {
       <div className="header-with-back">
         <h1 className="title">📁 {selectedCategory?.name}</h1>
       </div>
-      <h2 className="section-title">Exams</h2>
+      <h2 className="section-title">試験一覧</h2>
       {(selectedCategory?.items || []).length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">📝</div>
-          <p className="empty-state-text">No exams yet</p>
-          <p className="empty-state-sub">Add an exam to start tracking scores</p>
+          <p className="empty-state-text">試験がまだありません</p>
+          <p className="empty-state-sub">試験を追加してスコアを記録しましょう</p>
         </div>
       ) : (
         <div className="exam-list">
@@ -3673,7 +3675,7 @@ function App() {
                   <p className="exam-list-name">{item.name}</p>
                   <p className="exam-list-meta">{item.date}</p>
                   {item.images?.length > 0 && (
-                    <span className="exam-photo-chip">📷 {item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
+                    <span className="exam-photo-chip">📷 {item.images.length} ページ</span>
                   )}
                 </div>
                 {/* Pct pill */}
@@ -3747,14 +3749,14 @@ function App() {
 
         {/* Pages */}
         <h2 className="section-title">
-          Exam Pages {rawImages.length > 0 && `· ${rawImages.length} page${rawImages.length !== 1 ? 's' : ''}`}
+          試験ページ {rawImages.length > 0 && `· ${rawImages.length} ページ`}
         </h2>
 
         {rawImages.length === 0 ? (
           <div className="exam-empty-pages">
             <div style={{ fontSize: 52, marginBottom: 14 }}>📄</div>
-            <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>No pages yet</p>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Scan or upload exam pages to get started</p>
+            <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>ページがまだありません</p>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>試験ページをスキャンまたはアップロードしてください</p>
           </div>
         ) : (
           <div className="exam-pages-grid">
@@ -3763,7 +3765,7 @@ function App() {
               return (
                 <div key={idx} className="exam-page-card">
                   {/* Page number pill */}
-                  <div className="exam-page-num-pill">Page {idx + 1}</div>
+                  <div className="exam-page-num-pill">ページ {idx + 1}</div>
 
                   {/* Delete button */}
                   {!isViewer && (
@@ -3784,13 +3786,13 @@ function App() {
                   ) : (
                     <div className="exam-page-loading">
                       <span>⏳</span>
-                      <p>Loading...</p>
+                      <p>読み込み中...</p>
                     </div>
                   )}
 
                   {/* Tap to view hint */}
                   {src && (
-                    <div className="exam-page-tap-hint">Tap to view</div>
+                    <div className="exam-page-tap-hint">タップして表示</div>
                   )}
                 </div>
               );
