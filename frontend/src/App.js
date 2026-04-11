@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 import './index.css';
+import { t } from './translations';
 
 const API = 'https://japanese-tracker.onrender.com/api';
 // TODO: set REACT_APP_CLOUDINARY_CLOUD and REACT_APP_CLOUDINARY_PRESET in your .env file
@@ -420,8 +421,8 @@ function ProgressChart({ student, batch, onClose }) {
         <button onClick={onClose} style={{
           background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
           borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
-        }}>← Back</button>
-        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 Progress Chart</span>
+        }}>{t('back')}</button>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 {t('progressChart')}</span>
         <div style={{ width: 72 }} />
       </div>
 
@@ -486,9 +487,9 @@ function ProgressChart({ student, batch, onClose }) {
         {!loading && chartData && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
-              { label: 'Total Exams', value: chartData.stats.totalExams, icon: '📝', color: '#007AFF', sub: null },
-              { label: 'Average Score', value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759', sub: null },
-              { label: 'Best Score', value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
+              { label: t('totalExams'), value: chartData.stats.totalExams, icon: '📝', color: '#007AFF', sub: null },
+              { label: t('averageScore'), value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759', sub: null },
+              { label: t('bestScore'), value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
               chartData.stats.recentTrend !== null
                 ? {
                     label: 'Improvement',
@@ -498,7 +499,7 @@ function ProgressChart({ student, batch, onClose }) {
                     sub: chartData.stats.recentTrendLabel,
                   }
                 : {
-                    label: 'Latest Score',
+                    label: t('latestScore'),
                     value: chartData.stats.latestScore + '%',
                     icon: '🎯',
                     color: '#8B0000',
@@ -1475,10 +1476,10 @@ useEffect(() => {
   const barColor = usedPct > 85 ? '#ff3b30' : usedPct > 65 ? '#ff9500' : '#34C759';
 
   const navItems = [
-    { id: 'storage', label: '🗄️ Storage' },
-    { id: 'stats', label: '📊 App Info' },
-    { id: 'server', label: '🖥️ Server' },
-    { id: 'manage', label: '🖼️ Manage' },
+    { id: 'storage', label: t('storageTab') },
+    { id: 'stats', label: t('appInfoTab') },
+    { id: 'server', label: t('serverTab') },
+    { id: 'manage', label: t('manageTab') },
   ];
 
   return (
@@ -1499,8 +1500,8 @@ useEffect(() => {
         <button onClick={onClose} style={{
           background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
           borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
-        }}>← Back</button>
-        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>⚙️ Settings</span>
+        }}>{t('back')}</button>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>{t('settings')}</span>
         <div style={{ width: 72 }} />
       </div>
 
@@ -1618,10 +1619,10 @@ useEffect(() => {
             </div>
 
             {[
-              { icon: '🗂️', label: 'Total Batches', value: totalBatches },
-              { icon: '👥', label: 'Total Students', value: totalStudents.toLocaleString() },
-              { icon: '📝', label: 'Total Exams', value: totalExams.toLocaleString() },
-              { icon: '🖼️', label: 'Total Images', value: totalImages.toLocaleString() },
+              { icon: '🗂️', label: t('totalBatches'), value: totalBatches },
+              { icon: '👥', label: t('totalStudents'), value: totalStudents.toLocaleString() },
+              { icon: '📝', label: t('totalExams'), value: totalExams.toLocaleString() },
+              { icon: '🖼️', label: t('totalImages'), value: totalImages.toLocaleString() },
             ].map((stat, i) => (
               <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 16 }}>
                 <span style={{ fontSize: 28 }}>{stat.icon}</span>
@@ -1699,7 +1700,7 @@ useEffect(() => {
                 border: 'none', borderRadius: 10, padding: '8px 18px',
                 fontSize: 13, fontWeight: 600, cursor: serverLoading ? 'default' : 'pointer'
               }}>
-                {serverLoading ? '⏳ Loading…' : '🔄 Refresh'}
+                {serverLoading ? '⏳ ' + t('loading') : t('refresh')}
               </button>
             </div>
 
@@ -1878,7 +1879,7 @@ useEffect(() => {
 
             {!serverStats && !serverLoading && !serverError && (
               <div style={{ textAlign: 'center', padding: 40, color: '#8e8e93', fontSize: 14 }}>
-                I-tap ang Refresh para makita ang server stats.
+                {t('tapRefreshHint')}
               </div>
             )}
           </div>
@@ -1969,10 +1970,10 @@ function TeacherSelect({ onSelect }) {
   return (
     <div className="teacher-screen">
       <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" />
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Select Teacher</h2>
-      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>Tap your name to continue</p>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('selectTeacher')}</h2>
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>{t('tapNameToContinue')}</p>
       <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {loadingT && <p className="loading-text">Loading...</p>}
+        {loadingT && <p className="loading-text">{t('loading')}</p>}
         {teachers.map(t => (
           <div key={t._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => onSelect(t)} className="teacher-card">
@@ -1991,7 +1992,7 @@ function TeacherSelect({ onSelect }) {
             {deleteId === t._id ? (
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => deleteTeacher(t._id)} className="btn-danger" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Delete</button>
-                <button onClick={() => setDeleteId(null)} className="btn-cancel" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Cancel</button>
+                <button onClick={() => setDeleteId(null)} className="btn-cancel" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>{t('cancel')}</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -2007,7 +2008,7 @@ function TeacherSelect({ onSelect }) {
         ))}
         {showAdd ? (
           <div className="login-card" style={{ padding: 16 }}>
-            <p className="section-title" style={{ marginTop: 0 }}>Choose emoji</p>
+            <p className="section-title" style={{ marginTop: 0 }}>{t('chooseEmoji')}</p>
             <div className="emoji-row" style={{ marginBottom: 14 }}>
               {EMOJIS.map(e => (
                 <button key={e} onClick={() => setNewEmoji(e)} className={`emoji-btn${newEmoji === e ? ' selected' : ''}`}>{e}</button>
@@ -2015,24 +2016,24 @@ function TeacherSelect({ onSelect }) {
             </div>
             <div className="form-group">
               <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-                placeholder="Teacher name" autoFocus />
+                placeholder={t('teacherName')} autoFocus />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={addTeacher} disabled={saving || !newName.trim()} className="btn-primary" style={{ fontSize: 14 }}>
-                {saving ? 'Saving...' : 'Add Teacher'}
+                {saving ? t('saving') : t('addTeacherLabel')}
               </button>
-              <button onClick={() => { setShowAdd(false); setNewName(''); }} className="btn-secondary" style={{ fontSize: 14 }}>Cancel</button>
+              <button onClick={() => { setShowAdd(false); setNewName(''); }} className="btn-secondary" style={{ fontSize: 14 }}>{t('cancel')}</button>
             </div>
           </div>
         ) : (
           <button onClick={() => setShowAdd(true)} className="print-qr-button" style={{ marginTop: 0 }}>
-            + Add Teacher
+            {t('addTeacher')}
           </button>
         )}
       </div>
       <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(TEACHER_KEY); window.location.reload(); }}
         className="btn-logout" style={{ marginTop: 36 }}>
-        Logout
+        {t('logout')}
       </button>
       {showProgressChart && progressChartStudent && (
         <ProgressChart
@@ -2085,9 +2086,9 @@ function LoginScreen({ onLogin }) {
     <div className="login-screen">
       <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" style={{ marginBottom: 32 }} />
       <div className="login-card">
-        <h2 className="login-title">Welcome back 👋</h2>
+        <h2 className="login-title">{t('welcomeBack')}</h2>
         <div className="form-group">
-          <label>Username</label>
+          <label>{t('username')}</label>
           <input
             type="text"
             value={username}
@@ -2096,7 +2097,7 @@ function LoginScreen({ onLogin }) {
           />
         </div>
         <div className="form-group">
-          <label>Password</label>
+          <label>{t('password')}</label>
           <div className="password-wrapper">
             <input
               type={showPass ? 'text' : 'password'}
@@ -2110,8 +2111,8 @@ function LoginScreen({ onLogin }) {
             </button>
           </div>
         </div>
-        {error && <p className="error-text">{error}</p>}
-        <button onClick={handleLogin} className="btn-primary" style={{ marginTop: 8 }}>Login</button>
+        {error && <p className="error-text">{t('invalidCredentials')}</p>}
+        <button onClick={handleLogin} className="btn-primary" style={{ marginTop: 8 }}>{t('login')}</button>
       </div>
     </div>
   );
@@ -2992,7 +2993,7 @@ function App() {
     allStudents.forEach(s => {
       const rawCompany = s.companyName;
       const isLegacyKumiai = rawCompany === 'Setouchi' || rawCompany === 'WBC';
-      const key = (!rawCompany || isLegacyKumiai) ? '(No Company Assigned)' : rawCompany;
+      const key = (!rawCompany || isLegacyKumiai) ? t('noCompany') : rawCompany;
       if (!groups[key]) groups[key] = [];
       groups[key].push(s);
     });
@@ -3049,26 +3050,26 @@ function App() {
         <div className="header-banner">
           <div className="top-row">
             <div>
-              <p className="logged-in-label">Logged in as</p>
+              <p className="logged-in-label">{t('loggedInAs')}</p>
               <h1 className="title">{kumiai}</h1>
             </div>
             <div className="top-row-actions">
-              <span className="badge-view-only">VIEW ONLY</span>
+              <span className="badge-view-only">{t('viewOnly')}</span>
               <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
-                Logout
+                {t('logout')}
               </button>
             </div>
           </div>
         </div>
 
         <h2 className="section-title">
-          Companies ({groupKeys.length})
+          {t('companies')} ({groupKeys.length})
         </h2>
 
         {groupKeys.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
             <div style={{ fontSize: 40, marginBottom: 10 }}>👥</div>
-            <p>No students found.</p>
+            <p>{t('noStudentsFound')}</p>
           </div>
         )}
 
@@ -3082,7 +3083,7 @@ function App() {
                   <span style={{ fontSize: 32 }}>🏢</span>
                   <div>
                     <h2 className="card-title">{groupKey}</h2>
-                    <p className="card-subtitle">{students.length} student{students.length !== 1 ? 's' : ''}</p>
+                    <p className="card-subtitle">{students.length} {t('studentPlural')}</p>
                   </div>
                 </div>
                 <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
@@ -3108,7 +3109,7 @@ function App() {
               <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji}</span>
             )}
             <div>
-              <p className="logged-in-label">Logged in as</p>
+              <p className="logged-in-label">{t('loggedInAs')}</p>
               <h1 className="title">
                 {isViewer
                   ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
@@ -3121,11 +3122,9 @@ function App() {
             </div>
           </div>
           <div className="top-row-actions">
-            {isViewer && <span className="badge-view-only">VIEW ONLY</span>}
+            {isViewer && <span className="badge-view-only">{t('viewOnly')}</span>}
             {!isViewer && (
-              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">
-                Switch
-              </button>
+              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">{t('switch')}</button>
             )}
             {safeLocalGet(ROLE_KEY) === 'admin' && (
               <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
@@ -3133,12 +3132,12 @@ function App() {
               </button>
             )}
             <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
-              Logout
+              {t('logout')}
             </button>
           </div>
         </div>
       </div>
-      <h2 className="section-title">{isViewer ? 'All Batches' : 'My Batches'}</h2>
+      <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
       {(isViewer ? batches.filter(b => b.students.some(s => s.status === 'Selected')) : batches).map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
@@ -3154,7 +3153,7 @@ function App() {
           </div>
         </div>
       ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>+ Add New Batch</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
     </>
   );
 
@@ -3173,7 +3172,7 @@ function App() {
       <div className="header-with-back">
         <h1 className="title">{selectedBatch.name}</h1>
       </div>
-      <h2 className="section-title">Students</h2>
+      <h2 className="section-title">{t('students')}</h2>
       {visibleStudents.map(student => (
         <div key={student._id} className="card student-card clickable" onClick={() => goToCategories(student)}>
           <div className="card-content">
@@ -3193,7 +3192,7 @@ function App() {
                       fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
                       cursor: isViewer ? 'default' : 'pointer'
                     }}>
-                    {student.status === 'Selected' ? 'SELECTED' : 'REGULAR'}
+                    {student.status === 'Selected' ? t('statusSelected') : t('statusRegular')}
                   </span>
                   {student.status === 'Selected' && student.kumiai && (
                     <span style={{
@@ -3224,9 +3223,9 @@ function App() {
           </div>
         </div>
       ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>+ Add Student</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>{t('addStudent')}</button>}
       {selectedBatch.students.length > 0 && (
-        <button className="print-qr-button" onClick={generateBatchQRs}>🖨 Print QR Codes</button>
+        <button className="print-qr-button" onClick={generateBatchQRs}>{t('printQrCodes')}</button>
       )}
     </>
     );
@@ -3254,7 +3253,7 @@ function App() {
           } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: 'transparent', color: '#8B2020', border: '1.5px solid #8B2020', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >📦 Archive</button>
+      >{t('archiveImages')}</button>
 
       <button
         onClick={async () => {
@@ -3267,7 +3266,7 @@ function App() {
           } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: 'transparent', color: '#007AFF', border: '1.5px solid #007AFF', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >🔄 Restore</button>
+      >{t('restoreImages')}</button>
 
       <button
         onClick={() => toggleArchiveStudent(selectedStudent)}
@@ -3277,7 +3276,7 @@ function App() {
           border: '1.5px solid #555',
           borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer'
         }}
-      >{selectedStudent.isArchived ? '👁 Unarchive Student' : '🚫 Hide from Kumiai'}</button>
+      >{selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}</button>
 
       <button
         onClick={async () => {
@@ -3293,7 +3292,7 @@ function App() {
           } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >🗑️ Delete</button>
+      >{t('deleteStudent')}</button>
     </div>
   )}
 </div>
@@ -3311,20 +3310,20 @@ function App() {
     }}
   >
     <span style={{ fontSize: 20 }}>📈</span>
-    View Progress Chart
+    {t('viewProgressChart')}
   </button>
 )}
 
       {/* ── Exam Categories Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📁 Exam Categories</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('examCategoriesTitle')}</h2>
           {!isViewer && (
             <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
         {(selectedStudent.categories || []).length === 0
-          ? <p style={{ fontSize: 13, color: '#8e8e93', margin: 0, textAlign: 'center', padding: '12px 0' }}>No exam categories yet.</p>
+          ? <p style={{ fontSize: 13, color: '#8e8e93', margin: 0, textAlign: 'center', padding: '12px 0' }}>{t('noExamCategories')}</p>
           : (selectedStudent.categories || []).map(cat => (
             <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
               <div className="card-content">
@@ -3344,13 +3343,13 @@ function App() {
       {/* ── Evaluations Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📋 Evaluations</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('evaluationsTitle')}</h2>
           {!isViewer && (
             <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
         <button onClick={goToEvaluations} style={{ width: '100%', background: '#f2f2f7', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: '#3a3a3c', cursor: 'pointer', fontWeight: 500 }}>
-          View all evaluations →
+          {t('viewAllEvaluations')}
         </button>
       </div>
     </>
@@ -3366,9 +3365,9 @@ function App() {
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
       </div>
-      <h2 className="section-title">Evaluations</h2>
+      <h2 className="section-title">{t('evaluations')}</h2>
       {evaluations.length === 0
-        ? <p style={{ fontSize: 14, color: '#8e8e93', textAlign: 'center', marginTop: 32 }}>No evaluations yet.</p>
+        ? <p style={{ fontSize: 14, color: '#8e8e93', textAlign: 'center', marginTop: 32 }}>{t('noEvaluationsYet')}</p>
         : evaluations.map(ev => (
           <div key={ev._id} className="card exam-card clickable" onClick={() => goToEvaluationDetail(ev)}>
             <div className="card-content">
@@ -3382,7 +3381,7 @@ function App() {
         ))
       }
       {!isViewer && (
-        <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>+ Add Evaluation</button>
+        <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>{t('addEvaluation')}</button>
       )}
     </>
   );
@@ -3633,7 +3632,7 @@ function App() {
 
         {!isViewer && (
           <button onClick={saveEvaluationFields} disabled={evalSaving} className="btn-primary" style={{ marginBottom: 24, opacity: evalSaving ? 0.7 : 1, cursor: evalSaving ? 'not-allowed' : 'pointer' }}>
-            {evalSaving ? 'Saving...' : '💾 Save Evaluation'}
+            {evalSaving ? t('saving') : t('saveEvaluation')}
           </button>
         )}
       </>
@@ -3646,12 +3645,12 @@ function App() {
       <div className="header-with-back">
         <h1 className="title">📁 {selectedCategory?.name}</h1>
       </div>
-      <h2 className="section-title">Exams</h2>
+      <h2 className="section-title">{t('exams')}</h2>
       {(selectedCategory?.items || []).length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">📝</div>
-          <p className="empty-state-text">No exams yet</p>
-          <p className="empty-state-sub">Add an exam to start tracking scores</p>
+          <p className="empty-state-text">{t('noExamsYet')}</p>
+          <p className="empty-state-sub">{t('addExamHint')}</p>
         </div>
       ) : (
         <div className="exam-list">
@@ -3688,7 +3687,7 @@ function App() {
           })}
         </div>
       )}
-      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>+ Add Exam</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
     </>
   );
 
@@ -3737,24 +3736,24 @@ function App() {
         {!isViewer && (
           <div className="exam-action-row">
             <button className="exam-action-btn scan" onClick={() => openScanner(selectedExam._id)}>
-              <span>📷</span> Scan Page
+              <span>📷</span> {t('scanPage')}
             </button>
             <button className="exam-action-btn upload" onClick={() => triggerFileInput(selectedExam._id)}>
-              <span>🖼️</span> Upload
+              <span>🖼️</span> {t('upload')}
             </button>
           </div>
         )}
 
         {/* Pages */}
         <h2 className="section-title">
-          Exam Pages {rawImages.length > 0 && `· ${rawImages.length} page${rawImages.length !== 1 ? 's' : ''}`}
+          {t('examPages')} {rawImages.length > 0 && `· ${rawImages.length} page${rawImages.length !== 1 ? 's' : ''}`}
         </h2>
 
         {rawImages.length === 0 ? (
           <div className="exam-empty-pages">
             <div style={{ fontSize: 52, marginBottom: 14 }}>📄</div>
-            <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>No pages yet</p>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Scan or upload exam pages to get started</p>
+            <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>{t('noPagesYet')}</p>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>{t('scanOrUpload')}</p>
           </div>
         ) : (
           <div className="exam-pages-grid">
@@ -3784,13 +3783,13 @@ function App() {
                   ) : (
                     <div className="exam-page-loading">
                       <span>⏳</span>
-                      <p>Loading...</p>
+                      <p>{t('loading')}</p>
                     </div>
                   )}
 
-                  {/* Tap to view hint */}
+                  {/* {t('tapToView')} hint */}
                   {src && (
-                    <div className="exam-page-tap-hint">Tap to view</div>
+                    <div className="exam-page-tap-hint">{t('tapToView')}</div>
                   )}
                 </div>
               );
@@ -3803,7 +3802,7 @@ function App() {
         {!isViewer && (
           <button className="btn-danger" style={{ width: '100%', marginTop: 8 }}
             onClick={(e) => deleteExam(selectedExam._id, e)}>
-            🗑 Delete Exam
+            {t('deleteExam')}
           </button>
         )}
 
@@ -3821,7 +3820,7 @@ function App() {
 
   const renderModal = () => {
     if (!showModal) return null;
-    const titles = { batch: 'Add New Batch', student: 'Add New Student', editStudent: 'Edit Student', category: 'Add Exam Category', exam: 'Add New Exam', evaluation: 'New Evaluation' };
+    const titles = { batch: t('addNewBatchModal'), student: t('addNewStudentModal'), editStudent: t('editStudentModal'), category: t('addExamCategory'), exam: t('addNewExam'), evaluation: t('newEvaluation') };
     return (
       <div className="modal-overlay">
         <div className="modal-sheet">
@@ -3830,11 +3829,11 @@ function App() {
           {modalType === 'evaluation' ? (
             <>
               <div className="form-group">
-                <label>Evaluation Title:</label>
+                <label>{t('evaluationTitle')}</label>
                 <input type="text" value={evalTitle} onChange={(e) => setEvalTitle(e.target.value)} placeholder="e.g., Mid-term, Final, Progress Check" />
               </div>
               <div className="form-group">
-                <label>Date:</label>
+                <label>{t('date')}</label>
                 <input type="date" value={evalDate} onChange={(e) => setEvalDate(e.target.value)} />
               </div>
               <p style={{ fontSize: 12, color: '#8e8e93', margin: '4px 0 0' }}>
@@ -3843,47 +3842,47 @@ function App() {
             </>
           ) : modalType === 'category' ? (
             <div className="form-group">
-              <label>Category Name:</label>
-              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Kanji, Grammar, Vocabulary" />
+              <label>{t('categoryName')}</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('categoryPlaceholder')} />
             </div>
           ) : modalType === 'exam' ? (
             <>
               <div className="form-group">
-                <label>Exam Name:</label>
-                <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder="e.g., Quiz 1, Midterm, Finals" />
+                <label>{t('examName')}</label>
+                <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder={t('examNamePlaceholder')} />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Score:</label>
-                  <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder="e.g., 85" min="0" />
+                  <label>{t('score')}</label>
+                  <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder={t('scorePlaceholder')} min="0" />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Total Score:</label>
-                  <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder="e.g., 100" min="1" />
+                  <label>{t('totalScore')}</label>
+                  <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder={t('totalScorePlaceholder')} min="1" />
                 </div>
               </div>
             </>
           ) : modalType === 'student' || modalType === 'editStudent' ? (
             <>
               <div className="form-group">
-                <label>Name:</label>
-                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Juan Cruz" />
+                <label>{t('name')}</label>
+                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('namePlaceholder')} />
               </div>
               <div className="form-group">
-                <label>Status:</label>
+                <label>{t('status')}</label>
                 <select value={newStudentStatus} onChange={(e) => setNewStudentStatus(e.target.value)}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
-                  <option value="Regular">Regular</option>
-                  <option value="Selected">Selected</option>
+                  <option value="Regular">{t('statusRegularOption')}</option>
+                  <option value="Selected">{t('statusSelectedOption')}</option>
                 </select>
               </div>
               {newStudentStatus === 'Selected' && (
                 <>
                   <div className="form-group">
-                    <label>KUMIAI:</label>
+                    <label>{t('kumiai')}</label>
                     <select value={newKumiai} onChange={(e) => setNewKumiai(e.target.value)}
                       style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
-                      <option value="">— Select KUMIAI —</option>
+                      <option value="">— {t('selectKumiai')} —</option>
                       <option value="Setouchi">Setouchi</option>
                       <option value="WBC">WBC</option>
                       <option value="Gyoumusuishin">Gyoumusuishin</option>
@@ -3891,18 +3890,18 @@ function App() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Company Name:</label>
+                    <label>{t('companyName')}</label>
                     <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
-                      placeholder="e.g., Sunrise, Toyota..." />
+                      placeholder={t('companyPlaceholder')} />
                   </div>
                 </>
               )}
               <div className="form-group">
-                <label>Photo (optional):</label>
+                <label>{t('photoOptional')}</label>
                 <div className="student-photo-upload" onClick={() => studentPhotoInputRef.current.click()}>
                   {newStudentPhoto
                     ? <img src={newStudentPhoto} alt="Preview" className="student-photo-preview" />
-                    : <><span className="upload-icon" style={{ fontSize: 28 }}>👤</span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>Tap to upload photo</p></>
+                    : <><span className="upload-icon" style={{ fontSize: 28 }}>👤</span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>{t('tapToUploadPhoto')}</p></>
                   }
                 </div>
                 <input
@@ -3922,15 +3921,15 @@ function App() {
             </>
           ) : (
             <div className="form-group">
-              <label>Name:</label>
-              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., N5 Saturday 2PM" />
+              <label>{t('name')}</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('batchNamePlaceholder')} />
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            <button className="btn-secondary" onClick={closeModal} disabled={saving} style={{ flex: 1 }}>Cancel</button>
+            <button className="btn-secondary" onClick={closeModal} disabled={saving} style={{ flex: 1 }}>{t('cancel')}</button>
             <button className="btn-primary" disabled={saving} style={{ flex: 2 }}
               onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? t('saving') : t('save')}
             </button>
           </div>
         </div>
