@@ -3,6 +3,17 @@ import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
 
+// Returns the correct name based on logged-in role
+// Admin/PHGIC → English name, Kumiai → Japanese name (fallback to English)
+function displayName(item) {
+  try {
+    const role = localStorage.getItem('sage_role') || 'admin';
+    const jaRoles = ['setouchi','wbc','gyoumusuishin','greenservices'];
+    if (jaRoles.includes(role) && item?.name_ja) return item.name_ja;
+  } catch {}
+  return item?.name || '';
+}
+
 const API = 'https://japanese-tracker.onrender.com/api';
 // TODO: set REACT_APP_CLOUDINARY_CLOUD and REACT_APP_CLOUDINARY_PRESET in your .env file
 const CLOUDINARY_CLOUD = process.env.REACT_APP_CLOUDINARY_CLOUD || 'daofbq9wz';
@@ -2208,6 +2219,7 @@ function App() {
   const [newStudentStatus, setNewStudentStatus] = useState('Regular');
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newKumiai, setNewKumiai] = useState('');
+  const [newNameJa, setNewNameJa] = useState('');
   const [saving, setSaving] = useState(false);
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
@@ -2468,7 +2480,7 @@ function App() {
 
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewCompanyName('');
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewCompanyName(''); setNewNameJa('');
   };
   const openEditStudent = (student, e) => {
     e.stopPropagation();
@@ -2484,7 +2496,7 @@ function App() {
   const closeModal = () => {
     setShowModal(false);
     setEditingStudent(null);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai('');
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai(''); setNewNameJa('');
   };
 
   const updateStudent = async () => {
@@ -2508,7 +2520,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, teacherId: selectedTeacher?._id || null })
+        body: JSON.stringify({ name: newName, name_ja: newNameJa, teacherId: selectedTeacher?._id || null })
       });
       const newBatch = await res.json();
       setBatches(prev => [newBatch, ...prev]);
@@ -2538,7 +2550,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName })
+        body: JSON.stringify({ name: newName, name_ja: newNameJa })
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
@@ -2555,7 +2567,7 @@ function App() {
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newExamName, score: parseInt(newScore), totalScore: parseInt(newTotalScore) })
+        body: JSON.stringify({ name: newExamName, name_ja: newNameJa, score: parseInt(newScore), totalScore: parseInt(newTotalScore) })
       });
       const newItem = await res.json();
       // Update state locally — no need to reload the whole batch
@@ -3142,7 +3154,7 @@ function App() {
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
             <div>
-              <h2 className="card-title">🎌 {batch.name}</h2>
+              <h2 className="card-title">🎌 {displayName(batch)}</h2>
               <p className="card-subtitle">
                 {isViewer
                   ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
@@ -3170,7 +3182,7 @@ function App() {
     <>
       <button className="back-btn" onClick={goBack}>←</button>
       <div className="header-with-back">
-        <h1 className="title">{selectedBatch.name}</h1>
+        <h1 className="title">{displayName(selectedBatch)}</h1>
       </div>
       <h2 className="section-title">{t('students')}</h2>
       {visibleStudents.map(student => (
@@ -3328,7 +3340,7 @@ function App() {
             <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
               <div className="card-content">
                 <div>
-                  <h3 className="card-title">📁 {cat.name}</h3>
+                  <h3 className="card-title">📁 {displayName(cat)}</h3>
                   <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="exam-right">
@@ -3643,7 +3655,7 @@ function App() {
     <>
       <button className="back-btn" onClick={goBack}>←</button>
       <div className="header-with-back">
-        <h1 className="title">📁 {selectedCategory?.name}</h1>
+        <h1 className="title">📁 {displayName(selectedCategory)}</h1>
       </div>
       <h2 className="section-title">{t('exams')}</h2>
       {(selectedCategory?.items || []).length === 0 ? (
@@ -3669,7 +3681,7 @@ function App() {
                 </div>
                 {/* Info */}
                 <div className="exam-list-info">
-                  <p className="exam-list-name">{item.name}</p>
+                  <p className="exam-list-name">{displayName(item)}</p>
                   <p className="exam-list-meta">{item.date}</p>
                   {item.images?.length > 0 && (
                     <span className="exam-photo-chip">📷 {item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
@@ -3722,7 +3734,7 @@ function App() {
         {/* Hero score card */}
         <div className="exam-detail-hero">
           <div className="exam-detail-hero-left">
-            <h1 className="exam-detail-title">{selectedExam.name}</h1>
+            <h1 className="exam-detail-title">{displayName(selectedExam)}</h1>
             <p className="exam-detail-date">📅 {selectedExam.date}</p>
           </div>
           <div className="exam-detail-score-ring" style={{ background: pctBg, borderColor: pctColor }}>
@@ -3844,12 +3856,16 @@ function App() {
             <div className="form-group">
               <label>{t('categoryName')}</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('categoryPlaceholder')} />
+              <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
+              <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：漢字、文法、語彙" />
             </div>
           ) : modalType === 'exam' ? (
             <>
               <div className="form-group">
                 <label>{t('examName')}</label>
                 <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder={t('examNamePlaceholder')} />
+                <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
+                <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：小テスト１、中間試験、期末試験" />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <div className="form-group" style={{ flex: 1 }}>
@@ -3923,6 +3939,8 @@ function App() {
             <div className="form-group">
               <label>{t('name')}</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('batchNamePlaceholder')} />
+              <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
+              <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：N5 土曜日 14:00" />
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>

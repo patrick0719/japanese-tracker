@@ -86,6 +86,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 const batchSchema = new mongoose.Schema({
   name: String,
+  name_ja: { type: String, default: '' },
   teacherId: { type: String, default: null },
   students: [{
     name: String,
@@ -96,8 +97,10 @@ const batchSchema = new mongoose.Schema({
     kumiai: { type: String, default: '' },
     categories: [{
       name: String,
+      name_ja: { type: String, default: '' },
       items: [{
         name: String,
+        name_ja: { type: String, default: '' },
         date: String,
         score: Number,
         totalScore: { type: Number, default: 100 },
@@ -223,7 +226,7 @@ app.get('/api/batches', async (req, res) => {
 });
 
 app.post('/api/batches', async (req, res) => {
-  try { const b = new Batch({ name: req.body.name, teacherId: req.body.teacherId || null, students: [] }); await b.save(); res.json(b); } catch (err) { res.status(500).json({ error: err.message }); }
+  try { const b = new Batch({ name: req.body.name, name_ja: req.body.name_ja || '', teacherId: req.body.teacherId || null, students: [] }); await b.save(); res.json(b); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/batches/:batchId', async (req, res) => {
@@ -285,7 +288,7 @@ app.post('/api/batches/:batchId/students/:studentId/categories', async (req, res
   try {
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
-    student.categories.push({ name: req.body.name, items: [] });
+    student.categories.push({ name: req.body.name, name_ja: req.body.name_ja || '', items: [] });
     await batch.save(); res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -305,7 +308,7 @@ app.post('/api/batches/:batchId/students/:studentId/categories/:catId/items', as
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     const cat = student.categories.id(req.params.catId);
-    const newItem = { name: req.body.name, date: new Date().toISOString().split('T')[0], score: req.body.score, totalScore: req.body.totalScore || 100, images: [] };
+    const newItem = { name: req.body.name, name_ja: req.body.name_ja || '', date: new Date().toISOString().split('T')[0], score: req.body.score, totalScore: req.body.totalScore || 100, images: [] };
     cat.items.push(newItem);
     await batch.save();
     res.json(cat.items[cat.items.length - 1]);
