@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
 
-// Returns correct name based on logged-in role
+// Returns correct name based on role — JA for kumiai, EN for admin/PHGIC
 function displayName(item) {
   try {
     const role = localStorage.getItem('sage_role') || 'admin';
@@ -12,14 +12,10 @@ function displayName(item) {
   return item?.name || '';
 }
 
-// Inject dark mode CSS variables into :root
+// Apply or remove dark mode on <html>
 function applyDarkMode(dark) {
-  const root = document.documentElement;
-  if (dark) {
-    root.setAttribute('data-theme', 'dark');
-  } else {
-    root.removeAttribute('data-theme');
-  }
+  if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
 }
 
 const API = 'https://japanese-tracker.onrender.com/api';
@@ -2229,6 +2225,8 @@ function App() {
   const [newKumiai, setNewKumiai] = useState('');
   const [newNameJa, setNewNameJa] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
+  const [editingExam, setEditingExam] = useState(null);
+  const [newExamDate, setNewExamDate] = useState('');
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem('sage_dark') === 'true'; } catch { return false; }
   });
@@ -2331,7 +2329,6 @@ function App() {
     }
   }, []);
 
-  // Apply dark mode on mount and whenever it changes
   useEffect(() => {
     applyDarkMode(darkMode);
     try { localStorage.setItem('sage_dark', darkMode); } catch {}
@@ -2498,7 +2495,7 @@ function App() {
 
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewCompanyName(''); setNewNameJa(''); setEditingCategory(null);
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewCompanyName(''); setNewNameJa(''); setEditingCategory(null); setEditingExam(null); setNewExamDate('');
   };
   const openEditStudent = (student, e) => {
     e.stopPropagation();
@@ -2515,7 +2512,8 @@ function App() {
     setShowModal(false);
     setEditingStudent(null);
     setEditingCategory(null);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai(''); setNewNameJa('');
+    setEditingExam(null);
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai(''); setNewNameJa(''); setNewExamDate('');
   };
 
   const updateStudent = async () => {
@@ -2682,6 +2680,27 @@ function App() {
       if (updatedStudent) setSelectedStudent(updatedStudent);
       closeModal();
     } catch { alert('Error updating category.'); }
+    setSaving(false);
+  };
+
+  const updateExamItem = async () => {
+    if (!newExamName || !editingExam) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${editingExam._id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newExamName, name_ja: newNameJa, score: parseInt(newScore), totalScore: parseInt(newTotalScore), date: newExamDate })
+      });
+      const updatedItem = await res.json();
+      const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(i => i._id === editingExam._id ? { ...i, ...updatedItem } : i) };
+      const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
+      const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
+      setSelectedCategory(updatedCat);
+      setSelectedStudent(updatedStudent);
+      setSelectedBatch(updatedBatch);
+      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
+      closeModal();
+    } catch { alert('Error updating exam.'); }
     setSaving(false);
   };
 
@@ -3736,7 +3755,11 @@ function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
                   <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
                   {!isViewer && (
-                    <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
+                        onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}>✎</button>
+                      <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -3877,7 +3900,7 @@ function App() {
 
   const renderModal = () => {
     if (!showModal) return null;
-    const titles = { batch: t('addNewBatchModal'), student: t('addNewStudentModal'), editStudent: t('editStudentModal'), category: t('addExamCategory'), editCategory: t('editCategoryModal'), exam: t('addNewExam'), evaluation: t('newEvaluation') };
+    const titles = { batch: t('addNewBatchModal'), student: t('addNewStudentModal'), editStudent: t('editStudentModal'), category: t('addExamCategory'), editCategory: t('editCategoryModal'), exam: t('addNewExam'), editExam: t('editExamModal'), evaluation: t('newEvaluation') };
     return (
       <div className="modal-overlay">
         <div className="modal-sheet">
@@ -3904,7 +3927,7 @@ function App() {
               <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
               <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：漢字、文法、語彙" />
             </div>
-          ) : modalType === 'exam' ? (
+          ) : modalType === 'exam' || modalType === 'editExam' ? (
             <>
               <div className="form-group">
                 <label>{t('examName')}</label>
@@ -3921,6 +3944,10 @@ function App() {
                   <label>{t('totalScore')}</label>
                   <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder={t('totalScorePlaceholder')} min="1" />
                 </div>
+              </div>
+              <div className="form-group">
+                <label>{t('date')}</label>
+                <input type="date" value={newExamDate} onChange={(e) => setNewExamDate(e.target.value)} />
               </div>
             </>
           ) : modalType === 'student' || modalType === 'editStudent' ? (
@@ -3991,7 +4018,7 @@ function App() {
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
             <button className="btn-secondary" onClick={closeModal} disabled={saving} style={{ flex: 1 }}>{t('cancel')}</button>
             <button className="btn-primary" disabled={saving} style={{ flex: 2 }}
-              onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'editCategory' ? updateCategory : modalType === 'category' ? saveCategory : saveExamItem}>
+              onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'editCategory' ? updateCategory : modalType === 'editExam' ? updateExamItem : modalType === 'category' ? saveCategory : saveExamItem}>
               {saving ? t('saving') : t('save')}
             </button>
           </div>
@@ -4289,7 +4316,6 @@ function App() {
       onTouchEnd={onTouchEnd}
       style={{ position: 'relative' }}
     >
-      {/* ── Dark mode global styles ── */}
       <style>{`
         :root {
           --bg-primary: #f2f2f7;
@@ -4300,7 +4326,6 @@ function App() {
           --text-secondary: #3a3a3c;
           --text-tertiary: #8e8e93;
           --border-color: #e5e5ea;
-          --header-bg: linear-gradient(135deg, #8B0000, #c0392b);
           --accent: #8B0000;
           --green: #34C759;
           --green-soft: #e8f5e9;
@@ -4308,7 +4333,6 @@ function App() {
           --amber-soft: #fff8e1;
           --red: #ff3b30;
           --red-soft: #ffebee;
-          --shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
         [data-theme="dark"] {
           --bg-primary: #1c1c1e;
@@ -4316,34 +4340,25 @@ function App() {
           --bg-card2: #3a3a3c;
           --bg-input: #3a3a3c;
           --text-primary: #ffffff;
-          --text-secondary: #ebebf5cc;
-          --text-tertiary: #ebebf599;
+          --text-secondary: rgba(235,235,245,0.8);
+          --text-tertiary: rgba(235,235,245,0.6);
           --border-color: #48484a;
-          --header-bg: linear-gradient(135deg, #6b0000, #922b21);
           --accent: #ff6b6b;
           --green: #30d158;
-          --green-soft: #1a2e1a;
+          --green-soft: #0d2b0d;
           --amber: #ffd60a;
-          --amber-soft: #2e2a1a;
+          --amber-soft: #2b2200;
           --red: #ff453a;
-          --red-soft: #2e1a1a;
-          --shadow: 0 2px 8px rgba(0,0,0,0.3);
+          --red-soft: #2b0a0a;
         }
         [data-theme="dark"] body,
-        [data-theme="dark"] #root {
-          background: var(--bg-primary) !important;
-          color: var(--text-primary) !important;
-        }
+        [data-theme="dark"] #root { background: var(--bg-primary) !important; color: var(--text-primary) !important; }
         [data-theme="dark"] .card,
         [data-theme="dark"] .login-card,
         [data-theme="dark"] .modal-sheet,
         [data-theme="dark"] .teacher-card,
         [data-theme="dark"] .section-box,
-        [data-theme="dark"] .eval-hero {
-          background: var(--bg-card) !important;
-          border-color: var(--border-color) !important;
-          color: var(--text-primary) !important;
-        }
+        [data-theme="dark"] .eval-hero { background: var(--bg-card) !important; border-color: var(--border-color) !important; }
         [data-theme="dark"] .card-title,
         [data-theme="dark"] .card-subtitle,
         [data-theme="dark"] .section-title,
@@ -4351,44 +4366,23 @@ function App() {
         [data-theme="dark"] .exam-list-name,
         [data-theme="dark"] .exam-detail-title,
         [data-theme="dark"] .student-profile-name,
-        [data-theme="dark"] .title {
-          color: var(--text-primary) !important;
-        }
+        [data-theme="dark"] .title,
+        [data-theme="dark"] .logged-in-label { color: var(--text-primary) !important; }
         [data-theme="dark"] input,
         [data-theme="dark"] textarea,
-        [data-theme="dark"] select {
-          background: var(--bg-input) !important;
-          color: var(--text-primary) !important;
-          border-color: var(--border-color) !important;
-        }
+        [data-theme="dark"] select { background: var(--bg-input) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
         [data-theme="dark"] .add-button,
-        [data-theme="dark"] .print-qr-button {
-          background: var(--bg-card) !important;
-          color: var(--accent) !important;
-          border-color: var(--accent) !important;
-        }
+        [data-theme="dark"] .print-qr-button { background: var(--bg-card) !important; color: var(--accent) !important; border-color: var(--accent) !important; }
         [data-theme="dark"] .exam-list-card,
-        [data-theme="dark"] .exam-page-card {
-          background: var(--bg-card) !important;
-          border-color: var(--border-color) !important;
-        }
-        [data-theme="dark"] .modal-overlay {
-          background: rgba(0,0,0,0.75) !important;
-        }
-        [data-theme="dark"] .logged-in-label {
-          color: rgba(255,255,255,0.7) !important;
-        }
-        [data-theme="dark"] .badge-view-only {
-          background: rgba(255,255,255,0.15) !important;
-          color: #fff !important;
-        }
-        [data-theme="dark"] .form-group label {
-          color: var(--text-secondary) !important;
-        }
+        [data-theme="dark"] .exam-page-card { background: var(--bg-card) !important; border-color: var(--border-color) !important; }
+        [data-theme="dark"] .modal-overlay { background: rgba(0,0,0,0.75) !important; }
+        [data-theme="dark"] .badge-view-only { background: rgba(255,255,255,0.15) !important; color: #fff !important; }
+        [data-theme="dark"] .form-group label { color: var(--text-secondary) !important; }
         [data-theme="dark"] .teacher-screen,
-        [data-theme="dark"] .login-screen {
-          background: var(--bg-primary) !important;
-        }
+        [data-theme="dark"] .login-screen { background: var(--bg-primary) !important; }
+        [data-theme="dark"] .section-box-title { color: var(--text-primary) !important; }
+        [data-theme="dark"] .eval-hero { color: var(--text-primary) !important; }
+        [data-theme="dark"] .header-banner { background: linear-gradient(135deg, #6b0000, #922b21) !important; }
       `}</style>
       {/* ── Pull-to-refresh indicator ── */}
       {(pullDistance > 0 || pullRefreshing) && (() => {
