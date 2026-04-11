@@ -1,9 +1,23 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
+import './index.css';
+import { t } from './translations';
 
 const API = 'https://japanese-tracker.onrender.com/api';
-const CLOUDINARY_CLOUD = 'daofbq9wz';
-const CLOUDINARY_PRESET = 'cnbztuzc';
+// TODO: set REACT_APP_CLOUDINARY_CLOUD and REACT_APP_CLOUDINARY_PRESET in your .env file
+const CLOUDINARY_CLOUD = process.env.REACT_APP_CLOUDINARY_CLOUD || 'daofbq9wz';
+const CLOUDINARY_PRESET = process.env.REACT_APP_CLOUDINARY_PRESET || 'cnbztuzc';
+
+// Safe localStorage helper — returns null on SecurityError (e.g. private/incognito mode)
+function safeLocalGet(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function safeLocalSet(key, value) {
+  try { localStorage.setItem(key, value); } catch {}
+}
+function safeLocalRemove(key) {
+  try { localStorage.removeItem(key); } catch {}
+}
 
 
 // Compress image before sending to backend
@@ -48,16 +62,21 @@ function ImageViewer({ images, startIndex, onClose }) {
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
-      display: 'flex', flexDirection: 'column'
-    }}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Image viewer, ${images.length} pages`}
+      style={{
+        position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
+        display: 'flex', flexDirection: 'column'
+      }}
+    >
       {/* Top bar */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '12px 20px', background: 'rgba(0,0,0,0.8)'
       }}>
-        <button onClick={onClose} style={{
+        <button onClick={onClose} aria-label="Close image viewer" style={{
           background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1
         }}>✕</button>
         <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
@@ -74,7 +93,7 @@ function ImageViewer({ images, startIndex, onClose }) {
       >
         <img
           src={images[current]}
-          alt={`Page ${current + 1}`}
+          alt={`Page ${current + 1} of ${images.length}`}
           style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
         />
       </div>
@@ -84,29 +103,596 @@ function ImageViewer({ images, startIndex, onClose }) {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '16px 24px', background: 'rgba(0,0,0,0.8)'
       }}>
-        <button onClick={prev} disabled={current === 0} style={{
-          background: current === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
-          color: '#fff', border: 'none', borderRadius: 10,
-          padding: '10px 24px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer'
-        }}>‹</button>
+        <button
+          onClick={prev}
+          disabled={current === 0}
+          aria-label="Previous page"
+          style={{
+            background: current === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
+            color: '#fff', border: 'none', borderRadius: 10,
+            padding: '10px 24px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer'
+          }}>‹</button>
 
         {/* Dot indicators */}
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div role="tablist" aria-label="Page navigation" style={{ display: 'flex', gap: 6 }}>
           {images.map((_, i) => (
-            <div key={i} onClick={() => setCurrent(i)} style={{
-              width: i === current ? 20 : 8, height: 8,
-              borderRadius: 4, background: i === current ? '#fff' : 'rgba(255,255,255,0.4)',
-              cursor: 'pointer', transition: 'all 0.2s'
-            }} />
+            <div
+              key={i}
+              role="tab"
+              aria-selected={i === current}
+              aria-label={`Go to page ${i + 1}`}
+              tabIndex={0}
+              onClick={() => setCurrent(i)}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setCurrent(i)}
+              style={{
+                width: i === current ? 20 : 8, height: 8,
+                borderRadius: 4, background: i === current ? '#fff' : 'rgba(255,255,255,0.4)',
+                cursor: 'pointer', transition: 'all 0.2s'
+              }} />
           ))}
         </div>
 
-        <button onClick={next} disabled={current === images.length - 1} style={{
-          background: current === images.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
-          color: '#fff', border: 'none', borderRadius: 10,
-          padding: '10px 24px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer'
-        }}>›</button>
+        <button
+          onClick={next}
+          disabled={current === images.length - 1}
+          aria-label="Next page"
+          style={{
+            background: current === images.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
+            color: '#fff', border: 'none', borderRadius: 10,
+            padding: '10px 24px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer'
+          }}>›</button>
       </div>
+    </div>
+  );
+}
+// ── PROGRESS CHART COMPONENT ─────────────────────────────────────────────────
+function ProgressChart({ student, batch, onClose }) {
+  const [chartData, setChartData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState('all');
+  const [selectedCategories, setSelectedCategories] = useState([]);
+
+  const processChartData = useCallback(() => {
+    setLoading(true);
+    
+    const allExams = [];
+    const categories = new Set();
+
+    // Compute cutoff dates ONCE — avoid mutating `now` across multiple calls
+    const now = new Date();
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+    const oneMonthAgo   = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    
+    (student.categories || []).forEach(cat => {
+      categories.add(cat.name);
+      (cat.items || []).forEach(item => {
+        if (item.date && item.score != null && item.totalScore) {
+          const date = new Date(item.date);
+          const pct = (item.score / item.totalScore) * 100;
+          
+          let include = true;
+          if (timeRange === '3months') {
+            include = date >= threeMonthsAgo;
+          } else if (timeRange === '1month') {
+            include = date >= oneMonthAgo;
+          }
+          
+          if (include && (selectedCategories.length === 0 || selectedCategories.includes(cat.name))) {
+            allExams.push({
+              date,
+              dateStr: item.date,
+              score: item.score,
+              total: item.totalScore,
+              percentage: Math.round(pct),
+              category: cat.name,
+              examName: item.name
+            });
+          }
+        }
+      });
+    });
+    
+    allExams.sort((a, b) => a.date - b.date);
+    
+    const calculateTrend = (points) => {
+      if (points.length < 2) return null;
+      const n = points.length;
+      const sumX = points.reduce((s, p, i) => s + i, 0);
+      const sumY = points.reduce((s, p) => s + p.percentage, 0);
+      const sumXY = points.reduce((s, p, i) => s + i * p.percentage, 0);
+      const sumXX = points.reduce((s, p, i) => s + i * i, 0);
+      
+      const denom = n * sumXX - sumX * sumX;
+      if (denom === 0) return null;
+      const slope = (n * sumXY - sumX * sumY) / denom;
+      const intercept = (sumY - slope * sumX) / n;
+      
+      return points.map((_, i) => slope * i + intercept);
+    };
+    
+    const trend = calculateTrend(allExams);
+    
+    // ── Smart stats ──────────────────────────────────────────────────
+    const n = allExams.length;
+    const avg = n > 0 ? Math.round(allExams.reduce((s, e) => s + e.percentage, 0) / n) : 0;
+
+    // Recent trend: avg of last 3 exams vs avg of previous 3 exams
+    // More accurate than first-vs-last because it smooths outliers
+    let recentTrend = null;
+    let recentTrendLabel = '';
+    if (n >= 2) {
+      const window = Math.min(3, Math.floor(n / 2));
+      const recentAvg = Math.round(
+        allExams.slice(-window).reduce((s, e) => s + e.percentage, 0) / window
+      );
+      const prevAvg = Math.round(
+        allExams.slice(-(window * 2), -window).reduce((s, e) => s + e.percentage, 0) / window
+      );
+      recentTrend = recentAvg - prevAvg;
+      recentTrendLabel = `Last ${window} vs prev ${window}`;
+    }
+
+    // Improving streak: how many consecutive exams (from latest) have been going up
+    let streak = 0;
+    for (let i = n - 1; i > 0; i--) {
+      if (allExams[i].percentage > allExams[i - 1].percentage) streak++;
+      else break;
+    }
+
+    // Consistency: % of exams at or above the student's own average
+    const consistency = n > 0
+      ? Math.round((allExams.filter(e => e.percentage >= avg).length / n) * 100)
+      : 0;
+
+    const stats = {
+      totalExams: n,
+      avgScore: avg,
+      bestScore: n > 0 ? Math.max(...allExams.map(e => e.percentage)) : 0,
+      latestScore: n > 0 ? allExams[n - 1].percentage : 0,
+      // Keep raw improvement for backward compat
+      improvement: n > 1 ? allExams[n - 1].percentage - allExams[0].percentage : 0,
+      // Smart metrics
+      recentTrend,
+      recentTrendLabel,
+      streak,
+      consistency,
+    };
+    
+    setChartData({ exams: allExams, categories: Array.from(categories), trend, stats });
+    setLoading(false);
+  }, [student, timeRange, selectedCategories]);
+
+  useEffect(() => {
+    processChartData();
+  }, [processChartData]);
+
+  const renderChart = () => {
+    if (!chartData || chartData.exams.length === 0) return null;
+    
+    const width = 340;
+    const height = 220;
+    const padding = { top: 20, right: 20, bottom: 40, left: 40 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    
+    const exams = chartData.exams;
+    // When there's only 1 exam, centre it instead of pinning to x=0
+    const scaleX = (i) => exams.length === 1
+      ? padding.left + chartWidth / 2
+      : padding.left + (i / (exams.length - 1)) * chartWidth;
+    const scaleY = (val) => padding.top + chartHeight - (val / 100) * chartHeight;
+    
+    const scorePath = exams.map((e, i) => {
+      const x = scaleX(i);
+      const y = scaleY(e.percentage);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
+    
+    const trendPath = chartData.trend?.map((t, i) => {
+      const x = scaleX(i);
+      const y = scaleY(t);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ') || '';
+    
+    const gridLines = [0, 25, 50, 75, 100].map(val => ({
+      y: scaleY(val),
+      label: val + '%'
+    }));
+
+    return (
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ maxWidth: 400 }}>
+        <rect x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} fill="#f8f9fa" rx={4} />
+        
+        {gridLines.map((line, i) => (
+          <g key={i}>
+            <line x1={padding.left} y1={line.y} x2={width - padding.right} y2={line.y} 
+              stroke="#e5e5ea" strokeWidth={1} strokeDasharray="4,4" />
+            <text x={padding.left - 8} y={line.y + 4} textAnchor="end" fontSize={10} fill="#8e8e93">{line.label}</text>
+          </g>
+        ))}
+        
+        {trendPath && (
+          <path d={trendPath} fill="none" stroke="#8B0000" strokeWidth={2} strokeDasharray="6,4" opacity={0.6} />
+        )}
+        
+        <path d={scorePath} fill="none" stroke="#007AFF" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        
+        <defs>
+          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#007AFF" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="#007AFF" stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
+        <path 
+          d={`${scorePath} L ${scaleX(exams.length - 1)} ${scaleY(0)} L ${scaleX(0)} ${scaleY(0)} Z`}
+          fill="url(#areaGradient)"
+        />
+        
+        {exams.map((e, i) => (
+          <g key={i}>
+            <circle cx={scaleX(i)} cy={scaleY(e.percentage)} r={5} fill="#fff" stroke="#007AFF" strokeWidth={2} />
+            <title>{`${e.examName}\n${e.category}: ${e.score}/${e.total} (${e.percentage}%)\n${e.dateStr}`}</title>
+          </g>
+        ))}
+        
+        {exams.length <= 8 ? exams.map((e, i) => (
+          <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
+            {e.dateStr.slice(5)}
+          </text>
+        )) : (() => {
+          const step = Math.ceil(exams.length / 6);
+          return exams
+            .map((e, i) => ({ e, i }))
+            .filter(({ i }) => i % step === 0)
+            .map(({ e, i }) => (
+              <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
+                {e.dateStr.slice(5)}
+              </text>
+            ));
+        })()}
+      </svg>
+    );
+  };
+
+  const [ptrDist, setPtrDist] = useState(0);
+  const [ptrTriggered, setPtrTriggered] = useState(false);
+  const [ptrRefreshing, setPtrRefreshing] = useState(false);
+  const ptrDistRef = useRef(0);
+  const ptrTriggeredRef = useRef(false);
+  const ptrRefreshingRef = useRef(false);
+  const ptrStartY = useRef(null);
+  const ptrScrollRef = useRef(null);
+  const PTR_THRESHOLD = 80;
+
+  const ptrTouchStart = (e) => {
+    if (ptrRefreshingRef.current) return;
+    if ((ptrScrollRef.current?.scrollTop ?? 0) > 0) { ptrStartY.current = null; return; }
+    ptrStartY.current = e.touches[0].clientY;
+  };
+  const ptrTouchMove = (e) => {
+    if (ptrStartY.current === null) return;
+    if ((ptrScrollRef.current?.scrollTop ?? 0) > 0) {
+      ptrStartY.current = null;
+      setPtrDist(0); ptrDistRef.current = 0;
+      setPtrTriggered(false); ptrTriggeredRef.current = false;
+      return;
+    }
+    const dy = e.touches[0].clientY - ptrStartY.current;
+    if (dy <= 0) { setPtrDist(0); ptrDistRef.current = 0; setPtrTriggered(false); ptrTriggeredRef.current = false; return; }
+    const dist = Math.min(dy * 0.45, 120);
+    setPtrDist(dist); ptrDistRef.current = dist;
+    if (dist >= PTR_THRESHOLD && !ptrTriggeredRef.current) { setPtrTriggered(true); ptrTriggeredRef.current = true; }
+    else if (dist < PTR_THRESHOLD && ptrTriggeredRef.current) { setPtrTriggered(false); ptrTriggeredRef.current = false; }
+  };
+  const ptrTouchEnd = () => {
+    if (ptrDistRef.current >= PTR_THRESHOLD && !ptrRefreshingRef.current) {
+      ptrStartY.current = null;
+      setPtrDist(0); ptrDistRef.current = 0;
+      setPtrTriggered(false); ptrTriggeredRef.current = false;
+      setPtrRefreshing(true); ptrRefreshingRef.current = true;
+      // re-process chart data (simulates refresh)
+      setTimeout(() => { processChartData(); setPtrRefreshing(false); ptrRefreshingRef.current = false; }, 800);
+    } else {
+      ptrStartY.current = null;
+      setPtrDist(0); ptrDistRef.current = 0;
+      setPtrTriggered(false); ptrTriggeredRef.current = false;
+    }
+  };
+
+  const toggleCategory = (cat) => {
+    setSelectedCategories(prev => 
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: '#f2f2f7', zIndex: 9999,
+      display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif'
+    }}>
+      <div style={{
+        background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+        padding: '16px 20px',
+        paddingTop: 'env(safe-area-inset-top, 16px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0,
+        boxShadow: '0 2px 12px rgba(139,0,0,0.3)'
+      }}>
+        <button onClick={onClose} style={{
+          background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
+          borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
+        }}>{t('back')}</button>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 {t('progressChart')}</span>
+        <div style={{ width: 72 }} />
+      </div>
+
+      <div style={{
+        background: '#fff', padding: '16px 20px', borderBottom: '1px solid #e5e5ea',
+        display: 'flex', alignItems: 'center', gap: 14
+      }}>
+        {student.photo ? (
+          <img src={student.photo} alt={student.name} style={{
+            width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid #8B0000'
+          }} />
+        ) : (
+          <span style={{ fontSize: 40 }}>👤</span>
+        )}
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1c1c1e' }}>{student.name}</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#8e8e93' }}>{batch?.name}</p>
+          {student.companyName && (
+            <span style={{
+              display: 'inline-block', marginTop: 4,
+              background: '#e8f5e9', color: '#2e7d32',
+              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12
+            }}>🏢 {student.companyName}</span>
+          )}
+        </div>
+      </div>
+
+      <div
+        ref={ptrScrollRef}
+        onTouchStart={ptrTouchStart}
+        onTouchMove={ptrTouchMove}
+        onTouchEnd={ptrTouchEnd}
+        style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', position: 'relative' }}
+      >
+        {/* PTR indicator */}
+        {(ptrDist > 0 || ptrRefreshing) && (() => {
+          const progress = Math.min(ptrDist / PTR_THRESHOLD, 1);
+          const circleSize = 44; const radius = 16;
+          const circumference = 2 * Math.PI * radius;
+          const dashOffset = circumference * (1 - (ptrTriggered ? 1 : progress));
+          return (
+            <div style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 99, display: 'flex', justifyContent: 'center', paddingTop: 6, paddingBottom: 6, pointerEvents: 'none', marginTop: -20, marginBottom: 8 }}>
+              <div style={{ width: circleSize, height: circleSize, borderRadius: '50%', background: ptrTriggered || ptrRefreshing ? 'linear-gradient(135deg,#8B0000,#c0392b)' : 'rgba(255,255,255,0.97)', boxShadow: ptrTriggered || ptrRefreshing ? '0 4px 20px rgba(139,0,0,0.4)' : '0 2px 14px rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `scale(${0.65 + progress * 0.35})`, transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s' }}>
+                {ptrRefreshing ? (
+                  <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute', animation: 'ptr-spin 0.75s linear infinite' }}>
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" />
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="#fff" strokeWidth="2.5" strokeDasharray={circumference} strokeDashoffset={circumference * 0.72} strokeLinecap="round" transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} />
+                  </svg>
+                ) : (
+                  <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute' }}>
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="rgba(139,0,0,0.12)" strokeWidth="2.5" />
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke={ptrTriggered ? '#fff' : '#8B0000'} strokeWidth="2.5" strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} style={{ transition: 'stroke-dashoffset 0.06s, stroke 0.2s' }} />
+                  </svg>
+                )}
+                <svg width="16" height="16" viewBox="0 0 16 16" style={{ position: 'relative', zIndex: 1, transform: `rotate(${ptrTriggered || ptrRefreshing ? 180 : progress * 200}deg)`, transition: ptrTriggered ? 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1)' : 'transform 0.1s' }}>
+                  <path d="M8 2 L8 11 M4 7 L8 11 L12 7" stroke={ptrTriggered || ptrRefreshing ? '#fff' : '#8B0000'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" style={{ transition: 'stroke 0.2s' }} />
+                </svg>
+              </div>
+            </div>
+          );
+        })()}
+        {!loading && chartData && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
+            {[
+              { label: t('totalExams'), value: chartData.stats.totalExams, icon: '📝', color: '#007AFF', sub: null },
+              { label: t('averageScore'), value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759', sub: null },
+              { label: t('bestScore'), value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
+              chartData.stats.recentTrend !== null
+                ? {
+                    label: 'Improvement',
+                    value: (chartData.stats.recentTrend > 0 ? '+' : '') + chartData.stats.recentTrend + '%',
+                    icon: chartData.stats.recentTrend > 0 ? '📈' : chartData.stats.recentTrend < 0 ? '📉' : '➡️',
+                    color: chartData.stats.recentTrend > 0 ? '#34C759' : chartData.stats.recentTrend < 0 ? '#FF3B30' : '#8e8e93',
+                    sub: chartData.stats.recentTrendLabel,
+                  }
+                : {
+                    label: t('latestScore'),
+                    value: chartData.stats.latestScore + '%',
+                    icon: '🎯',
+                    color: '#8B0000',
+                    sub: null,
+                  },
+            ].map((stat, i) => (
+              <div key={i} style={{
+                background: '#fff', borderRadius: 14, padding: '16px 14px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)', textAlign: 'center'
+              }}>
+                <div style={{ fontSize: 24, marginBottom: 6 }}>{stat.icon}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
+                {stat.sub && <div style={{ fontSize: 10, color: '#c7c7cc', marginTop: 2 }}>{stat.sub}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Smart insight banner ── */}
+        {!loading && chartData && chartData.stats.totalExams >= 2 && (() => {
+          const { streak, consistency, recentTrend, avgScore, totalExams } = chartData.stats;
+          let icon, color, bg, message;
+
+          if (streak >= 3) {
+            icon = '🔥'; bg = '#fff8e1'; color = '#e65100';
+            message = `On a ${streak}-exam winning streak! Keep it up.`;
+          } else if (recentTrend !== null && recentTrend >= 5) {
+            icon = '🚀'; bg = '#e8f5e9'; color = '#2e7d32';
+            message = `Strong recent momentum — up ${recentTrend}% in the last exams.`;
+          } else if (recentTrend !== null && recentTrend <= -5) {
+            icon = '⚠️'; bg = '#fff3e0'; color = '#e65100';
+            message = `Recent dip of ${Math.abs(recentTrend)}%. May need extra review.`;
+          } else if (consistency >= 70) {
+            icon = '💪'; bg = '#e3f2fd'; color = '#1565c0';
+            message = `Very consistent — ${consistency}% of exams at or above personal average.`;
+          } else if (totalExams >= 5 && avgScore >= 80) {
+            icon = '⭐'; bg = '#f3e5f5'; color = '#6a1b9a';
+            message = `Excellent average of ${avgScore}% across ${totalExams} exams.`;
+          } else {
+            icon = '📌'; bg = '#f2f2f7'; color = '#8e8e93';
+            message = `Consistency rate: ${consistency}% of exams at or above personal average.`;
+          }
+
+          return (
+            <div style={{
+              background: bg, borderRadius: 12, padding: '12px 14px',
+              marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 10
+            }}>
+              <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
+              <p style={{ margin: 0, fontSize: 13, color, fontWeight: 500, lineHeight: 1.4 }}>{message}</p>
+            </div>
+          );
+        })()}
+
+        <div style={{
+          background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+        }}>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>⏱️ Time Range</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { id: 'all', label: 'All Time' },
+              { id: '3months', label: '3 Months' },
+              { id: '1month', label: '1 Month' }
+            ].map(opt => (
+              <button key={opt.id} onClick={() => setTimeRange(opt.id)} style={{
+                flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none',
+                fontSize: 13, fontWeight: timeRange === opt.id ? 700 : 500,
+                background: timeRange === opt.id ? '#8B0000' : '#f2f2f7',
+                color: timeRange === opt.id ? '#fff' : '#3a3a3c',
+                cursor: 'pointer', transition: 'all 0.2s'
+              }}>{opt.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {!loading && chartData && chartData.categories.length > 0 && (
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+          }}>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>📁 Categories</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {chartData.categories.map(cat => {
+                const colors = {
+                  'Kanji': '#FF6B6B', 'Grammar': '#4ECDC4', 'Vocabulary': '#45B7D1',
+                  'Reading': '#96CEB4', 'Listening': '#FFEAA7', 'Speaking': '#DDA0DD'
+                };
+                const color = colors[cat] || '#8B0000';
+                const isSelected = selectedCategories.includes(cat);
+                return (
+                  <button key={cat} onClick={() => toggleCategory(cat)} style={{
+                    padding: '6px 14px', borderRadius: 20, border: 'none',
+                    fontSize: 12, fontWeight: isSelected ? 700 : 500,
+                    background: isSelected ? color : '#f2f2f7',
+                    color: isSelected ? '#fff' : '#3a3a3c',
+                    cursor: 'pointer', transition: 'all 0.2s'
+                  }}>{cat}</button>
+                );
+              })}
+              {selectedCategories.length > 0 && (
+                <button onClick={() => setSelectedCategories([])} style={{
+                  padding: '6px 14px', borderRadius: 20, border: '1.5px solid #8e8e93',
+                  fontSize: 12, fontWeight: 500, background: '#fff',
+                  color: '#8e8e93', cursor: 'pointer'
+                }}>Clear</button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div style={{
+          background: '#fff', borderRadius: 16, padding: '20px 16px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📈 Score Trend</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 12, height: 3, background: '#007AFF', borderRadius: 2 }} />
+                Actual
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 12, height: 3, background: '#8B0000', borderRadius: 2, opacity: 0.6 }} />
+                Trend
+              </span>
+            </div>
+          </div>
+          
+          {loading ? (
+            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{
+                    width: 8, height: 8, borderRadius: '50%', background: '#8B0000',
+                    animation: `dotPulse 1.1s ease-in-out ${i*0.18}s infinite`
+                  }} />
+                ))}
+              </div>
+            </div>
+          ) : chartData?.exams.length === 0 ? (
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8e8e93' }}>
+              <span style={{ fontSize: 40, marginBottom: 10 }}>📊</span>
+              <p style={{ margin: 0, fontSize: 14 }}>No exam data available</p>
+              <p style={{ margin: '4px 0 0', fontSize: 12 }}>Add exams with dates to see progress</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              {renderChart()}
+            </div>
+          )}
+        </div>
+
+        {!loading && chartData && chartData.exams.length > 0 && (
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: 16,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+          }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📝 Recent Exams</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {chartData.exams.slice(-5).reverse().map((exam, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 14px', background: '#f9f9f9', borderRadius: 10
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{
+                      width: 36, height: 36, borderRadius: '50%',
+                      background: exam.percentage >= 80 ? '#e8f5e9' : exam.percentage >= 60 ? '#fff8e1' : '#ffebee',
+                      color: exam.percentage >= 80 ? '#2e7d32' : exam.percentage >= 60 ? '#f57c00' : '#c62828',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 13, fontWeight: 700
+                    }}>{exam.percentage}%</span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1c1c1e' }}>{exam.examName}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#8e8e93' }}>{exam.category} • {exam.dateStr}</p>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: 13, fontWeight: 700, color: '#3a3a3c',
+                    background: '#f2f2f7', padding: '4px 10px', borderRadius: 8
+                  }}>{exam.score}/{exam.total}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ height: 20 }} />
+      </div>
+
+      <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
     </div>
   );
 }
@@ -126,11 +712,9 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   const draw = useCallback((img, crns) => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
-    console.log('[draw] canvas:', canvas ? 'ok' : 'NULL', 'container:', container ? 'ok' : 'NULL');
     if (!canvas || !container) return;
     const cW = container.offsetWidth;
     const cH = container.offsetHeight;
-    console.log('[draw] container size:', cW, 'x', cH, 'imgW:', imgW, 'imgH:', imgH, 'img:', img ? img.naturalWidth+'x'+img.naturalHeight : 'NULL');
     if (!cW || !cH || !imgW || !imgH) return;
 
     canvas.width = cW;
@@ -196,24 +780,19 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
 
   // Load image then draw — runs once on mount
   useEffect(() => {
-    console.log('[CropScreen] mounted, dataUrl length:', dataUrl ? dataUrl.length : 0);
-    console.log('[CropScreen] imgW:', imgW, 'imgH:', imgH);
-    console.log('[CropScreen] corners:', corners);
     const img = new Image();
     img.onload = () => {
-      console.log('[CropScreen] image loaded:', img.naturalWidth, img.naturalHeight);
       loadedImgRef.current = img;
       setTimeout(() => {
-        const container = containerRef.current;
-        const canvas = canvasRef.current;
-        console.log('[CropScreen] container:', container ? container.offsetWidth + 'x' + container.offsetHeight : 'NULL');
-        console.log('[CropScreen] canvas:', canvas ? 'exists' : 'NULL');
         draw(img, cornersRef.current);
       }, 50);
     };
-    img.onerror = (e) => console.error('[CropScreen] image FAILED to load', e);
+    img.onerror = (e) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[CropScreen] image failed to load', e);
+      }
+    };
     img.src = dataUrl;
-    console.log('[CropScreen] set img.src, type:', dataUrl ? dataUrl.substring(0, 30) : 'empty');
   }, []); // eslint-disable-line
 
   // Redraw whenever corners change (dragging)
@@ -292,16 +871,21 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
-      <div style={{ background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, zIndex: 10, position: 'relative' }}>
+      <div style={{
+        background: '#000', padding: '12px 20px',
+        paddingTop: 'env(safe-area-inset-top, 12px)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexShrink: 0, zIndex: 10, position: 'relative'
+      }}>
         <button onClick={onRetake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
           ← Retake
         </button>
         <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
-        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
           Use ✓
         </button>
       </div>
-      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center', padding: '6px 0', flexShrink: 0 }}>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center', padding: '5px 0', flexShrink: 0 }}>
         Drag the green corners to adjust
       </div>
       {/* Wrapper gives the canvas measurable dimensions */}
@@ -318,12 +902,25 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
           onTouchEnd={onPointerUp}
         />
       </div>
+      {/* Bottom confirm button — always reachable even if top bar is under notch */}
+      <div style={{
+        flexShrink: 0, background: '#000', padding: '14px 24px',
+        paddingBottom: 'env(safe-area-inset-bottom, 14px)',
+        display: 'flex', gap: 12
+      }}>
+        <button onClick={onRetake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer' }}>
+          ← Retake
+        </button>
+        <button onClick={onConfirm} style={{ flex: 2, background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+          ✓ Use This Page
+        </button>
+      </div>
     </div>
   );
 }
 
 // ── DOCUMENT SCANNER COMPONENT (CamScanner-style) ──────────────────────────
-function DocumentScanner({ onCapture, onClose }) {
+function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const overlayCanvasRef = useRef(null);
@@ -332,7 +929,7 @@ function DocumentScanner({ onCapture, onClose }) {
   const stableCountRef = useRef(0);
   const lastCornersRef = useRef(null);
 
-  // phase: 'camera' | 'crop'
+  // phase: 'camera' | 'crop' | 'review' (bulk only)
   const [phase, setPhase] = useState('camera');
   const [capturedDataUrl, setCapturedDataUrl] = useState(null);
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 });
@@ -343,6 +940,10 @@ function DocumentScanner({ onCapture, onClose }) {
   const [status, setStatus] = useState('Initializing camera...');
   const [detected, setDetected] = useState(false);
   const capturingRef = useRef(false);
+
+  // Bulk scan pages accumulator
+  const [scannedPages, setScannedPages] = useState([]);
+  const [bulkUploading, setBulkUploading] = useState(false);
 
   // ── CAMERA PHASE ─────────────────────────────────────────────────
   useEffect(() => {
@@ -621,12 +1222,19 @@ function DocumentScanner({ onCapture, onClose }) {
         }
       }
       dst.getContext('2d').putImageData(outData, 0, 0);
-      onCapture(dst.toDataURL('image/jpeg', 0.92));
+      const croppedUrl = dst.toDataURL('image/jpeg', 0.92);
+      if (bulkMode) {
+        setScannedPages(prev => [...prev, croppedUrl]);
+        setPhase('review');
+      } else {
+        onCapture(croppedUrl);
+      }
     };
     img.src = capturedDataUrl;
   };
 
-  const retake = () => {
+  // Shared reset — used by both "Retake" and "Scan Next Page"
+  const resetToCamera = () => {
     capturingRef.current = false;
     setCapturedDataUrl(null);
     setCorners(null);
@@ -635,6 +1243,81 @@ function DocumentScanner({ onCapture, onClose }) {
     setDetected(false);
     setPhase('camera');
   };
+
+  const retake = resetToCamera;
+
+  // Bulk: go back to camera to scan next page
+  const scanNextPage = resetToCamera;
+
+  // Bulk: upload all scanned pages
+  const finishBulkScan = async () => {
+    if (scannedPages.length === 0) return;
+    setBulkUploading(true);
+    await onCapture(scannedPages);
+    setBulkUploading(false);
+  };
+
+  // Bulk: remove a page from the list
+  const removeBulkPage = (idx) => {
+    setScannedPages(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // ── BULK REVIEW PHASE ─────────────────────────────────────────────
+  if (bulkMode && phase === 'review') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+        {/* Top bar */}
+        <div style={{
+          background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
+          paddingTop: 'env(safe-area-inset-top, 12px)'
+        }}>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
+            Cancel
+          </button>
+          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
+            {scannedPages.length} Page{scannedPages.length !== 1 ? 's' : ''} Scanned
+          </span>
+          <button
+            onClick={finishBulkScan}
+            disabled={bulkUploading || scannedPages.length === 0}
+            style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}
+          >
+            {bulkUploading ? '⏳ Uploading…' : `✅ Done (${scannedPages.length})`}
+          </button>
+        </div>
+
+        {/* Scrollable pages grid — takes remaining space above bottom bar */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, alignContent: 'start' }}>
+          {scannedPages.map((url, idx) => (
+            <div key={idx} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#222', aspectRatio: '3/4' }}>
+              <img src={url} alt={`Page ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>
+                Page {idx + 1}
+              </div>
+              <button
+                onClick={() => removeBulkPage(idx)}
+                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+              >✕</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom bar — always visible, never scrolled away */}
+        <div style={{
+          flexShrink: 0, background: '#000', padding: '14px 24px',
+          paddingBottom: 'env(safe-area-inset-bottom, 14px)',
+          display: 'flex', justifyContent: 'center'
+        }}>
+          <button
+            onClick={scanNextPage}
+            style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 48px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+          >
+            📸 Scan Next Page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ── CROP RENDER ──────────────────────────────────────────────────
   if (phase === 'crop' && capturedDataUrl && corners) {
@@ -652,49 +1335,561 @@ function DocumentScanner({ onCapture, onClose }) {
   // Camera phase
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+      {/* Status bar at top */}
+      <div style={{
+        flexShrink: 0, paddingTop: 'env(safe-area-inset-top, 12px)',
+        background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 16px'
+      }}>
+        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 18px', fontSize: 15, cursor: 'pointer' }}>
+          Cancel
+        </button>
+        <div style={{
+          background: detected ? 'rgba(0,160,70,0.92)' : 'rgba(60,60,60,0.9)',
+          color: '#fff', padding: '6px 16px', borderRadius: 20,
+          fontSize: 13, fontWeight: 600
+        }}>
+          {detected ? '🟢 ' + status : '🔍 ' + status}
+        </div>
+        {/* Page counter / review shortcut */}
+        {bulkMode && scannedPages.length > 0 ? (
+          <button
+            onClick={() => setPhase('review')}
+            style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', minWidth: 60, textAlign: 'center' }}
+          >
+            {scannedPages.length}p ›
+          </button>
+        ) : (
+          <div style={{ width: 70 }} />
+        )}
+      </div>
+
+      {/* Camera viewfinder */}
       <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
         <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
         <canvas ref={overlayCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-        <div style={{
-          position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)',
-          background: detected ? 'rgba(0,160,70,0.92)' : 'rgba(0,0,0,0.72)',
-          color: '#fff', padding: '8px 20px', borderRadius: 20,
-          fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap'
-        }}>
-          {detected ? '🟢 ' + status : '🔍 ' + status}
-        </div>
-
         {/* Dotted guide when nothing detected */}
         {!detected && (
           <div style={{
-            position: 'absolute', top: '8%', left: '5%', right: '5%', bottom: '18%',
-            border: '2px dashed rgba(255,255,255,0.4)', borderRadius: 12, pointerEvents: 'none',
+            position: 'absolute', top: '6%', left: '5%', right: '5%', bottom: '6%',
+            border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 12, pointerEvents: 'none',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>Place document inside</span>
+            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Place document inside</span>
           </div>
         )}
       </div>
 
-      <div style={{ background: '#111', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 15, cursor: 'pointer' }}>
-          Cancel
-        </button>
+      {/* Bottom shutter bar - always visible, fixed height */}
+      <div style={{
+        flexShrink: 0, background: '#111',
+        paddingBottom: 'env(safe-area-inset-bottom, 12px)',
+        height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}>
         <button onClick={takePhoto} style={{
           background: '#fff', color: '#000', border: 'none', borderRadius: 50,
-          width: 64, height: 64, fontSize: 26, fontWeight: 700, cursor: 'pointer',
-          boxShadow: '0 0 0 4px rgba(255,255,255,0.3)'
+          width: 72, height: 72, fontSize: 28, fontWeight: 700, cursor: 'pointer',
+          boxShadow: '0 0 0 5px rgba(255,255,255,0.25), 0 0 0 8px rgba(255,255,255,0.1)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0
         }}>
           📸
         </button>
-        <div style={{ width: 80 }} />
       </div>
     </div>
   );
 }
 
+
+// ── SETTINGS PAGE ────────────────────────────────────────────────────────────
+function SettingsPage({ batches, onClose, API }) {
+  const [storage, setStorage] = useState(null);
+  const [storageLoading, setStorageLoading] = useState(true);
+  const [storageError, setStorageError] = useState(null);
+  const [clearLoading, setClearLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState('storage');
+
+  // Compute app stats from batches
+  const totalStudents = batches.reduce((s, b) => s + b.students.length, 0);
+  const totalExams = batches.reduce((s, b) =>
+    s + b.students.reduce((ss, st) =>
+      ss + (st.categories || []).reduce((sss, c) => sss + (c.items || []).length, 0), 0), 0);
+  const totalImages = batches.reduce((s, b) =>
+    s + b.students.reduce((ss, st) =>
+      ss + (st.categories || []).reduce((sss, c) =>
+        sss + (c.items || []).reduce((si, i) => si + (i.images || []).length, 0), 0), 0), 0);
+  const totalBatches = batches.length;
+  const APP_VERSION = '2.4.0';
+
+  useEffect(() => {
+    const fetchStorage = async () => {
+      setStorageLoading(true);
+      try {
+        const res = await fetch(`${API}/admin/storage-usage`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        setStorage(data);
+      } catch (e) {
+        setStorageError(e.message);
+      } finally {
+        setStorageLoading(false);
+      }
+    };
+    fetchStorage();
+  }, [API]);
+  const [serverStats, setServerStats] = useState(null);
+const [serverLoading, setServerLoading] = useState(false);
+const [serverError, setServerError] = useState(null);
+
+const fetchServerStats = async () => {
+  setServerLoading(true);
+  setServerError(null);
+  try {
+    const res = await fetch(`${API}/admin/server-stats`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    setServerStats(data);
+  } catch (e) {
+    setServerError(e.message);
+  } finally {
+    setServerLoading(false);
+  }
+};
+
+useEffect(() => {
+  if (activeSection === 'server') fetchServerStats();
+}, [activeSection]);
+
+  const formatBytes = (bytes) => {
+    if (bytes == null) return '—';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  };
+
+  const usedBytes = storage?.used_bytes ?? 0;
+  const limitBytes = storage?.limit_bytes ?? (25 * 1024 * 1024 * 1024); // 25GB Cloudinary free
+  const usedPct = Math.min((usedBytes / limitBytes) * 100, 100);
+  const barColor = usedPct > 85 ? '#ff3b30' : usedPct > 65 ? '#ff9500' : '#34C759';
+
+  const navItems = [
+    { id: 'storage', label: t('storageTab') },
+    { id: 'stats', label: t('appInfoTab') },
+    { id: 'server', label: t('serverTab') },
+    { id: 'manage', label: t('manageTab') },
+  ];
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10000,
+      background: '#f2f2f7', display: 'flex', flexDirection: 'column',
+      fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+    }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+        padding: '16px 20px',
+        paddingTop: 'env(safe-area-inset-top, 16px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0,
+        boxShadow: '0 2px 12px rgba(139,0,0,0.3)',
+      }}>
+        <button onClick={onClose} style={{
+          background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
+          borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
+        }}>{t('back')}</button>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>{t('settings')}</span>
+        <div style={{ width: 72 }} />
+      </div>
+
+      {/* Tab Nav */}
+      <div style={{
+        display: 'flex', background: '#fff',
+        borderBottom: '1px solid #e5e5ea', flexShrink: 0,
+      }}>
+        {navItems.map(n => (
+          <button key={n.id} onClick={() => setActiveSection(n.id)} style={{
+            flex: 1, padding: '12px 4px', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 12, fontWeight: activeSection === n.id ? 700 : 500,
+            color: activeSection === n.id ? '#8B0000' : '#8e8e93',
+            borderBottom: activeSection === n.id ? '2.5px solid #8B0000' : '2.5px solid transparent',
+            transition: 'all 0.18s',
+          }}>{n.label}</button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', paddingBottom: 32 }}>
+
+        {/* ── STORAGE TAB ── */}
+        {activeSection === 'storage' && (
+          <div>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>☁️ Cloudinary Storage</span>
+                {storageLoading && <span style={{ fontSize: 12, color: '#8e8e93' }}>Loading…</span>}
+                {storageError && <span style={{ fontSize: 12, color: '#ff3b30' }}>⚠ Error</span>}
+              </div>
+
+              {storageLoading ? (
+                <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[0,1,2].map(i => (
+                      <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: '#8B0000', animation: `dotPulse 1.1s ease-in-out ${i*0.18}s infinite` }} />
+                    ))}
+                  </div>
+                </div>
+              ) : storageError ? (
+                <div style={{ textAlign: 'center', padding: '16px 0', color: '#ff3b30', fontSize: 13 }}>
+                  {storageError}<br />
+                  <span style={{ color: '#8e8e93', fontSize: 12 }}>Check CLOUDINARY_API_KEY & CLOUDINARY_API_SECRET in server env.</span>
+                </div>
+              ) : (
+                <>
+                  {/* Big usage numbers */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{formatBytes(usedBytes)}</div>
+                      <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 2 }}>used of {formatBytes(limitBytes)}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: barColor, lineHeight: 1 }}>{usedPct.toFixed(1)}%</div>
+                      <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 2 }}>{formatBytes(limitBytes - usedBytes)} free</div>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ background: '#f2f2f7', borderRadius: 99, height: 12, overflow: 'hidden', marginBottom: 16 }}>
+                    <div style={{
+                      height: '100%', width: `${usedPct}%`,
+                      background: usedPct > 85
+                        ? 'linear-gradient(90deg, #ff9500, #ff3b30)'
+                        : usedPct > 65
+                        ? 'linear-gradient(90deg, #34C759, #ff9500)'
+                        : 'linear-gradient(90deg, #34C759, #30d158)',
+                      borderRadius: 99,
+                      transition: 'width 0.6s cubic-bezier(0.34,1.56,0.64,1)',
+                    }} />
+                  </div>
+
+                  {/* Resource breakdown */}
+                  {storage?.resources && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      {[
+                        { label: '🖼 Images', count: storage.resources.image_count, size: storage.resources.image_size },
+                        { label: '📄 Raw files', count: storage.resources.raw_count, size: storage.resources.raw_size },
+                      ].map((r, i) => (
+                        <div key={i} style={{ background: '#f9f9f9', borderRadius: 12, padding: '12px 14px' }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#1c1c1e', marginBottom: 2 }}>{r.label}</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: '#3a3a3c' }}>{(r.count || 0).toLocaleString()}</div>
+                          <div style={{ fontSize: 11, color: '#8e8e93' }}>{formatBytes(r.size)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {usedPct > 80 && (
+                    <div style={{ marginTop: 14, background: '#fff3cd', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#856404', fontWeight: 500 }}>
+                      ⚠️ Storage is getting full. Consider archiving old images.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 13, color: '#8e8e93', lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 600, color: '#3a3a3c' }}>Plan: </span>Cloudinary Free Tier — 25 GB storage, 25 GB bandwidth/month.
+                Images are stored in the <code style={{ background: '#f2f2f7', padding: '1px 5px', borderRadius: 4 }}>sage-bulacan</code> folder.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── APP INFO TAB ── */}
+        {activeSection === 'stats' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: 'linear-gradient(135deg, #8B0000, #c0392b)', borderRadius: 16, padding: 20, color: '#fff' }}>
+              <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 4 }}>App Version</div>
+              <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: -1 }}>v{APP_VERSION}</div>
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Sage Asian Japanese Tracker</div>
+            </div>
+
+            {[
+              { icon: '🗂️', label: t('totalBatches'), value: totalBatches },
+              { icon: '👥', label: t('totalStudents'), value: totalStudents.toLocaleString() },
+              { icon: '📝', label: t('totalExams'), value: totalExams.toLocaleString() },
+              { icon: '🖼️', label: t('totalImages'), value: totalImages.toLocaleString() },
+            ].map((stat, i) => (
+              <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <span style={{ fontSize: 28 }}>{stat.icon}</span>
+                <div>
+                  <div style={{ fontSize: 13, color: '#8e8e93' }}>{stat.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1.2 }}>{stat.value}</div>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>Backend</div>
+              <div style={{ fontSize: 13, color: '#3a3a3c', fontWeight: 500 }}>Railway · MongoDB Atlas · Cloudinary CDN</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── MANAGE TAB ── */}
+        {activeSection === 'manage' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>🖼️ Image Storage</div>
+              <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                To free up Cloudinary storage, use the <strong>📦 Archive</strong> feature per student to move old exam images to the archive folder. Archived images are still accessible but won't count against your active quota in most plans.
+              </p>
+              <div style={{ background: '#f2f2f7', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#3a3a3c' }}>
+                <strong>How to archive:</strong><br />
+                Student → Categories screen → tap <strong>📦 Archive</strong>
+              </div>
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>🗑️ Permanent Delete</div>
+              <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                To permanently delete a student and all their images from Cloudinary and the database, use the <strong>🗑️ Delete</strong> button on the student's Categories screen. This <strong>cannot be undone</strong>.
+              </p>
+              <div style={{ background: '#fff3f3', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#c0392b', fontWeight: 500 }}>
+                ⚠️ Permanent delete removes all data from Cloudinary and MongoDB.
+              </div>
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>📊 Storage by Batch</div>
+              <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 12px 0' }}>Estimated image count per batch:</p>
+              {batches.map(b => {
+                const imgCount = b.students.reduce((s, st) =>
+                  s + (st.categories || []).reduce((ss, c) =>
+                    ss + (c.items || []).reduce((si, i) => si + (i.images || []).length, 0), 0), 0);
+                const pct = totalImages > 0 ? (imgCount / totalImages) * 100 : 0;
+                return (
+                  <div key={b._id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>🎌 {b.name}</span>
+                      <span style={{ fontSize: 12, color: '#8e8e93' }}>{imgCount} images</span>
+                    </div>
+                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #8B0000, #c0392b)', borderRadius: 99 }} />
+                    </div>
+                  </div>
+                );
+              })}
+
+            </div>
+          </div>
+        )}
+
+        {/* ── SERVER MONITOR TAB ── */}
+        {activeSection === 'server' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={fetchServerStats} disabled={serverLoading} style={{
+                background: serverLoading ? '#e5e5ea' : '#8B0000',
+                color: serverLoading ? '#8e8e93' : '#fff',
+                border: 'none', borderRadius: 10, padding: '8px 18px',
+                fontSize: 13, fontWeight: 600, cursor: serverLoading ? 'default' : 'pointer'
+              }}>
+                {serverLoading ? '⏳ ' + t('loading') : t('refresh')}
+              </button>
+            </div>
+
+            {serverError && (
+              <div style={{ background: '#fff3f3', borderRadius: 14, padding: 16, color: '#c0392b', fontSize: 13 }}>
+                ⚠️ {serverError}
+              </div>
+            )}
+
+            {serverStats && (() => {
+              const mem = serverStats.memory;
+              const memPct = Math.round((mem.used / mem.total) * 100);
+              const memColor = memPct > 85 ? '#ff3b30' : memPct > 65 ? '#ff9500' : '#34C759';
+              const r = serverStats.render;
+              const renderPct = r.percentUsed;
+              const renderColor = renderPct > 90 ? '#ff3b30' : renderPct > 70 ? '#ff9500' : '#34C759';
+              const fmtBytes = (b) => {
+                if (!b) return '0 B';
+                if (b < 1024) return b + ' B';
+                if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+                if (b < 1024*1024*1024) return (b/(1024*1024)).toFixed(1) + ' MB';
+                return (b/(1024*1024*1024)).toFixed(2) + ' GB';
+              };
+              const bwPct = r.bandwidthLimitBytes ? Math.min((r.bandwidthUsedBytes / r.bandwidthLimitBytes) * 100, 100) : 0;
+              const bwColor = bwPct > 85 ? '#ff3b30' : bwPct > 65 ? '#ff9500' : '#34C759';
+
+              return (
+                <>
+                  {/* API source badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: r.apiAvailable ? '#f0fff4' : '#fffbe6', borderRadius: 10, fontSize: 12 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.apiAvailable ? '#34C759' : '#ff9500' }} />
+                    <span style={{ color: r.apiAvailable ? '#1a7f37' : '#856404', fontWeight: 600 }}>
+                      {r.apiAvailable ? '✅ Live data mula sa Render API' : '⚠️ Estimated data (walang API key)'}
+                    </span>
+                  </div>
+
+                  {/* Instance Hours Card */}
+                  <div style={{ background: r.willSuspend ? '#fff3f3' : '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>
+                      ⏱️ Instance Hours
+                      {r.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px' }}>⚠️ Malapit maubos!</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included Usage — resets every 1st of month</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 32, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{r.hoursUsed}h</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>nagamit ngayong buwan</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 32, fontWeight: 800, color: renderColor, lineHeight: 1 }}>{r.hoursLeft}h</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>natitira sa {r.limitHours}h</div>
+                      </div>
+                    </div>
+                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 12, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ height: '100%', width: `${renderPct}%`, background: renderPct > 90 ? 'linear-gradient(90deg,#ff9500,#ff3b30)' : renderPct > 70 ? 'linear-gradient(90deg,#34C759,#ff9500)' : 'linear-gradient(90deg,#34C759,#30d158)', borderRadius: 99, transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)' }} />
+                    </div>
+                    <div style={{ fontSize: 12, color: '#8e8e93' }}>{renderPct}% ng 750h monthly limit</div>
+                    {r.willSuspend && (
+                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 600 }}>
+                        🚨 Bababa na sa 50 hours! Mag-migrate na o mag-upgrade bago ma-suspend ang app.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bandwidth Card */}
+                  {r.bandwidthUsedBytes !== undefined && (
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>🌐 Outbound Bandwidth</div>
+                      <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included: 100 GB</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{fmtBytes(r.bandwidthUsedBytes)}</div>
+                          <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>nagamit</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: bwColor, lineHeight: 1 }}>{bwPct.toFixed(1)}%</div>
+                          <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>ng 100 GB</div>
+                        </div>
+                      </div>
+                      <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${bwPct}%`, background: bwColor, borderRadius: 99, transition: 'width 0.6s' }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Services List */}
+                  {r.services && r.services.length > 0 && (
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🚀 Render Services</div>
+                      {r.services.map((svc, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < r.services.length - 1 ? '1px solid #f2f2f7' : 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 9, height: 9, borderRadius: '50%', background: svc.status === 'not_suspended' ? '#34C759' : '#ff3b30', boxShadow: svc.status === 'not_suspended' ? '0 0 5px #34C759' : 'none', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1c1c1e' }}>{svc.name}</div>
+                              <div style={{ fontSize: 11, color: '#8e8e93' }}>{svc.plan} · {svc.region}</div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: svc.status === 'not_suspended' ? '#1a7f37' : '#c0392b', background: svc.status === 'not_suspended' ? '#f0fff4' : '#fff3f3', borderRadius: 6, padding: '3px 8px' }}>
+                            {svc.status === 'not_suspended' ? 'Running' : 'Suspended'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Memory */}
+                  <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🧠 Memory Usage</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{fmtBytes(mem.used)}</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>heap used</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: memColor, lineHeight: 1 }}>{memPct}%</div>
+                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>of {fmtBytes(mem.total)}</div>
+                      </div>
+                    </div>
+                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ height: '100%', width: `${memPct}%`, background: memColor, borderRadius: 99, transition: 'width 0.6s' }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
+                      <div style={{ background: '#f9f9f9', borderRadius: 10, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 11, color: '#8e8e93' }}>RSS (total process)</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{fmtBytes(mem.rss)}</div>
+                      </div>
+                      <div style={{ background: '#f9f9f9', borderRadius: 10, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 11, color: '#8e8e93' }}>External</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{fmtBytes(mem.external)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Uptime + Requests */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>⏰ Uptime</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{serverStats.uptime}</div>
+                    </div>
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>📡 Requests</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{serverStats.requests.total.toLocaleString()}</div>
+                      <div style={{ fontSize: 11, color: '#8e8e93' }}>{serverStats.requests.thisHour} this hour</div>
+                    </div>
+                  </div>
+
+                  {/* DB Status */}
+                  <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🗄️ Database</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: serverStats.database.status === 'connected' ? '#34C759' : '#ff3b30', boxShadow: serverStats.database.status === 'connected' ? '0 0 6px #34C759' : 'none' }} />
+                      <span style={{ fontSize: 14, fontWeight: 600, color: '#3a3a3c', textTransform: 'capitalize' }}>{serverStats.database.status}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                      {[
+                        { label: 'Batches', value: serverStats.database.batches },
+                        { label: 'Images', value: serverStats.database.images },
+                        { label: 'Teachers', value: serverStats.database.teachers },
+                      ].map((item, i) => (
+                        <div key={i} style={{ background: '#f9f9f9', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: '#1c1c1e' }}>{item.value}</div>
+                          <div style={{ fontSize: 11, color: '#8e8e93' }}>{item.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div style={{ background: '#f9f9f9', borderRadius: 14, padding: '12px 16px', fontSize: 12, color: '#8e8e93' }}>
+                    Node {serverStats.node.version} · {serverStats.node.platform} · {serverStats.node.env} · Last checked: {new Date(serverStats.timestamp).toLocaleTimeString()}
+                  </div>
+                </>
+              );
+            })()}
+
+            {!serverStats && !serverLoading && !serverError && (
+              <div style={{ textAlign: 'center', padding: 40, color: '#8e8e93', fontSize: 14 }}>
+                {t('tapRefreshHint')}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+      <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
+    </div>
+  );
+}
 
 // ── LOGIN SCREEN ─────────────────────────────────────────────────────────────
 const ADMIN_USER = 'sagebulacan97';
@@ -722,6 +1917,8 @@ function TeacherSelect({ onSelect }) {
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('👩‍🏫');
   const [saving, setSaving] = useState(false);
+  const [showProgressChart, setShowProgressChart] = useState(false);
+  const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const EMOJIS = ['👩‍🏫','👨‍🏫','👩','👨','🧑‍🏫'];
 
@@ -771,78 +1968,80 @@ function TeacherSelect({ onSelect }) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px' }}>
-      <img src={LOGO_DATA_URL} alt="Sage Asian" style={{ width: '55%', maxWidth: 240, marginBottom: 28, objectFit: 'contain' }} />
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>Select Teacher</h2>
-      <p style={{ fontSize: 13, color: '#8e8e93', marginBottom: 24 }}>Tap your name to continue</p>
-      <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {loadingT && <p style={{ textAlign: 'center', color: '#8e8e93' }}>Loading...</p>}
+    <div className="teacher-screen">
+      <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" />
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('selectTeacher')}</h2>
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>{t('tapNameToContinue')}</p>
+      <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {loadingT && <p className="loading-text">{t('loading')}</p>}
         {teachers.map(t => (
           <div key={t._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => onSelect(t)} style={{
-              flex: 1, display: 'flex', alignItems: 'center', gap: 14,
-              background: '#fff', border: 'none', borderRadius: 14,
-              padding: '12px 20px', fontSize: 17, fontWeight: 600, color: '#1c1c1e',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.08)', cursor: 'pointer',
-            }}>
-              {/* Photo or emoji — tap to change */}
+            <button onClick={() => onSelect(t)} className="teacher-card">
               <label onClick={e => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }} title="Tap to change photo">
                 {t.photo
-                  ? <img src={t.photo} alt={t.name} style={{ width: 46, height: 46, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e5e5ea' }} />
-                  : <span style={{ fontSize: 36, lineHeight: 1 }}>{t.emoji}</span>
+                  ? <img src={t.photo} alt={t.name} className="student-avatar" />
+                  : <span style={{ fontSize: 34, lineHeight: 1 }}>{t.emoji}</span>
                 }
-                <span style={{ position: 'absolute', bottom: -2, right: -4, background: '#007AFF', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>✎</span>
+                <span style={{ position: 'absolute', bottom: -2, right: -4, background: 'var(--accent)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>✎</span>
                 <input type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => e.target.files[0] && uploadTeacherPhoto(t._id, e.target.files[0])} />
               </label>
-              {t.name}
-              <span style={{ marginLeft: 'auto', color: '#c7c7cc', fontSize: 20 }}>›</span>
+              <span style={{ flex: 1, textAlign: 'left', fontSize: 16, fontWeight: 600 }}>{t.name}</span>
+              <span className="chevron">›</span>
             </button>
             {deleteId === t._id ? (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => deleteTeacher(t._id)} style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
-                <button onClick={() => setDeleteId(null)} style={{ background: '#e5e5ea', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => deleteTeacher(t._id)} className="btn-danger" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Delete</button>
+                <button onClick={() => setDeleteId(null)} className="btn-cancel" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>{t('cancel')}</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <label title="Upload signature" style={{ cursor: 'pointer', fontSize: 18, padding: '4px 8px', color: t.signature ? '#34c759' : '#8e8e93' }}>
+                <label title="Upload signature" style={{ cursor: 'pointer', fontSize: 18, padding: '4px 8px', color: t.signature ? 'var(--green)' : 'var(--text-tertiary)' }}>
                   ✍️
                   <input type="file" accept="image/*" style={{ display: 'none' }}
                     onChange={e => e.target.files[0] && uploadSignature(t._id, e.target.files[0])} />
                 </label>
-                <button onClick={() => setDeleteId(t._id)} style={{ background: 'none', border: 'none', color: '#ff3b30', fontSize: 18, cursor: 'pointer', padding: '4px 8px' }}>✕</button>
+                <button onClick={() => setDeleteId(t._id)} className="delete-btn-icon">✕</button>
               </div>
             )}
           </div>
         ))}
         {showAdd ? (
-          <div style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#6e6e73', marginBottom: 8 }}>Choose emoji</p>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+          <div className="login-card" style={{ padding: 16 }}>
+            <p className="section-title" style={{ marginTop: 0 }}>{t('chooseEmoji')}</p>
+            <div className="emoji-row" style={{ marginBottom: 14 }}>
               {EMOJIS.map(e => (
-                <button key={e} onClick={() => setNewEmoji(e)} style={{ fontSize: 24, background: newEmoji === e ? '#e8f4ff' : 'none', border: newEmoji === e ? '2px solid #007AFF' : '2px solid transparent', borderRadius: 8, padding: '4px 8px', cursor: 'pointer' }}>{e}</button>
+                <button key={e} onClick={() => setNewEmoji(e)} className={`emoji-btn${newEmoji === e ? ' selected' : ''}`}>{e}</button>
               ))}
             </div>
-            <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-              placeholder="Teacher name" autoFocus
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, marginBottom: 10, boxSizing: 'border-box' }} />
+            <div className="form-group">
+              <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
+                placeholder={t('teacherName')} autoFocus />
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={addTeacher} disabled={saving || !newName.trim()} style={{ flex: 1, background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-                {saving ? 'Saving...' : 'Add Teacher'}
+              <button onClick={addTeacher} disabled={saving || !newName.trim()} className="btn-primary" style={{ fontSize: 14 }}>
+                {saving ? t('saving') : t('addTeacherLabel')}
               </button>
-              <button onClick={() => { setShowAdd(false); setNewName(''); }} style={{ background: '#e5e5ea', border: 'none', borderRadius: 10, padding: '12px 16px', fontSize: 15, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => { setShowAdd(false); setNewName(''); }} className="btn-secondary" style={{ fontSize: 14 }}>{t('cancel')}</button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setShowAdd(true)} style={{ background: '#fff', border: '2px dashed #c7c7cc', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 600, color: '#007AFF', cursor: 'pointer' }}>
-            + Add Teacher
+          <button onClick={() => setShowAdd(true)} className="print-qr-button" style={{ marginTop: 0 }}>
+            {t('addTeacher')}
           </button>
         )}
       </div>
-      <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(TEACHER_KEY); window.location.reload(); }}
-        style={{ marginTop: 36, background: 'none', border: 'none', color: '#ff3b30', fontSize: 14, cursor: 'pointer' }}>
-        Logout
+      <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(TEACHER_KEY); window.location.reload(); }}
+        className="btn-logout" style={{ marginTop: 36 }}>
+        {t('logout')}
       </button>
+      {showProgressChart && progressChartStudent && (
+        <ProgressChart
+          student={progressChartStudent}
+          batch={null}
+          onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -855,28 +2054,28 @@ function LoginScreen({ onLogin }) {
 
   const handleLogin = () => {
     if (username === ADMIN_USER && password === ADMIN_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'admin');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'admin');
       onLogin('admin');
     } else if (username === PHGIC_USER && password === PHGIC_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'viewer');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'viewer');
       onLogin('viewer');
     } else if (username === SETOUCHI_USER && password === SETOUCHI_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'setouchi');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'setouchi');
       onLogin('setouchi');
     } else if (username === WBC_USER && password === WBC_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'wbc');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'wbc');
       onLogin('wbc');
     } else if (username === GYOUMUSUISHIN_USER && password === GYOUMUSUISHIN_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'gyoumusuishin');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'gyoumusuishin');
       onLogin('gyoumusuishin');
     } else if (username === GREENSERVICES_USER && password === GREENSERVICES_PASS) {
-      localStorage.setItem(AUTH_KEY, 'true');
-      localStorage.setItem(ROLE_KEY, 'greenservices');
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'greenservices');
       onLogin('greenservices');
     } else {
       setError('Invalid username or password.');
@@ -884,48 +2083,36 @@ function LoginScreen({ onLogin }) {
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#f2f2f7',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      padding: '32px 24px', zIndex: 99999,
-    }}>
-      <img src={LOGO_DATA_URL} alt="Sage Asian" style={{ width: '65%', maxWidth: 280, marginBottom: 32, objectFit: 'contain' }} />
-      <div style={{ width: '100%', maxWidth: 360, background: '#fff', borderRadius: 16, padding: '28px 24px', boxShadow: '0 4px 24px rgba(0,0,0,0.10)' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: 20, fontSize: 20, fontWeight: 700, color: '#1c1c1e' }}>Login</h2>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 13, color: '#6e6e73', fontWeight: 600 }}>Username</label>
+    <div className="login-screen">
+      <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" style={{ marginBottom: 32 }} />
+      <div className="login-card">
+        <h2 className="login-title">{t('welcomeBack')}</h2>
+        <div className="form-group">
+          <label>{t('username')}</label>
           <input
             type="text"
             value={username}
             onChange={e => { setUsername(e.target.value); setError(''); }}
             placeholder="Enter username"
-            style={{ display: 'block', width: '100%', marginTop: 6, padding: '12px 14px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
-        <div style={{ marginBottom: 8 }}>
-          <label style={{ fontSize: 13, color: '#6e6e73', fontWeight: 600 }}>Password</label>
-          <div style={{ position: 'relative', marginTop: 6 }}>
+        <div className="form-group">
+          <label>{t('password')}</label>
+          <div className="password-wrapper">
             <input
               type={showPass ? 'text' : 'password'}
               value={password}
               onChange={e => { setPassword(e.target.value); setError(''); }}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
               placeholder="Enter password"
-              style={{ display: 'block', width: '100%', padding: '12px 44px 12px 14px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
             />
-            <button onClick={() => setShowPass(p => !p)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#8e8e93' }}>
+            <button onClick={() => setShowPass(p => !p)} className="password-toggle">
               {showPass ? '🙈' : '👁️'}
             </button>
           </div>
         </div>
-        {error && <p style={{ color: '#ff3b30', fontSize: 13, marginBottom: 8, textAlign: 'center' }}>{error}</p>}
-        <button
-          onClick={handleLogin}
-          style={{ width: '100%', marginTop: 16, padding: '14px', background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
-        >
-          Login
-        </button>
+        {error && <p className="error-text">{t('invalidCredentials')}</p>}
+        <button onClick={handleLogin} className="btn-primary" style={{ marginTop: 8 }}>{t('login')}</button>
       </div>
     </div>
   );
@@ -1043,16 +2230,24 @@ function App() {
   const [selectedCompany, setSelectedCompany] = useState(null); // { name, students[] }
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
-  const pullStartY = useRef(null);
-  const PULL_THRESHOLD = 110;
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(AUTH_KEY) === 'true');
-  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)));
+  const [pullTriggered, setPullTriggered] = useState(false);
+  const pullDistanceRef = useRef(0);
+  const pullTriggeredRef = useRef(false);
+  const pullRefreshingRef = useRef(false);
+  const pullStartY = useRef(null);        // finger Y at touchstart, null = disarmed
+  const pullScrollY = useRef(0);          // window.scrollY at touchstart
+  const PULL_THRESHOLD = 80;
+  const [showSettings, setShowSettings] = useState(false);
+  const [showProgressChart, setShowProgressChart] = useState(false);
+  const [progressChartStudent, setProgressChartStudent] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
+  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
   const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
   const [qrPassInput, setQrPassInput] = useState('');
   const [qrPassError, setQrPassError] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState(() => {
-    const s = localStorage.getItem(TEACHER_KEY);
+    const s = safeLocalGet(TEACHER_KEY);
     return s ? JSON.parse(s) : null;
   });
 
@@ -1067,7 +2262,7 @@ function App() {
     if (batchId && studentId) {
       if (isPhgicScan) {
         // QR scan — require password before granting access
-        const alreadyAuthed = localStorage.getItem(AUTH_KEY) === 'true' && localStorage.getItem(ROLE_KEY) === 'viewer';
+        const alreadyAuthed = safeLocalGet(AUTH_KEY) === 'true' && safeLocalGet(ROLE_KEY) === 'viewer';
         if (alreadyAuthed) {
           // Already verified this session, let them in
           setIsLoggedIn(true);
@@ -1080,12 +2275,12 @@ function App() {
         }
       } else {
         // Admin QR — require login first, then deeplink navigates after auth
-        const alreadyLoggedIn = localStorage.getItem(AUTH_KEY) === 'true';
+        const alreadyLoggedIn = safeLocalGet(AUTH_KEY) === 'true';
         setPendingDeepLink({ batchId, studentId });
         if (alreadyLoggedIn) {
           setIsLoggedIn(true);
-          const role = localStorage.getItem(ROLE_KEY);
-          const teacher = localStorage.getItem(TEACHER_KEY);
+          const role = safeLocalGet(ROLE_KEY);
+          const teacher = safeLocalGet(TEACHER_KEY);
           setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role));
           if (['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) {
             fetchBatches(null);
@@ -1098,12 +2293,12 @@ function App() {
         // If not logged in, LoginScreen will show — after login pendingDeepLink will auto-navigate
       }
     } else {
-      const isAuth = localStorage.getItem(AUTH_KEY) === 'true';
-      const role = localStorage.getItem(ROLE_KEY);
+      const isAuth = safeLocalGet(AUTH_KEY) === 'true';
+      const role = safeLocalGet(ROLE_KEY);
       if (isAuth && ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) {
         fetchBatches(null);
       } else {
-        const saved = localStorage.getItem(TEACHER_KEY);
+        const saved = safeLocalGet(TEACHER_KEY);
         const teacher = saved ? JSON.parse(saved) : null;
         if (isAuth && teacher) {
           fetchBatches(teacher._id);
@@ -1125,6 +2320,8 @@ function App() {
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       const data = await res.json();
+      // Sort by most recently created first (MongoDB _id contains timestamp)
+      data.sort((a, b) => (b._id > a._id ? 1 : -1));
       setBatches(data);
       // Fetch all teachers to resolve signatures
       try {
@@ -1161,6 +2358,15 @@ function App() {
     if (selectedBatch?._id === updatedBatch._id) setSelectedBatch(updatedBatch);
   };
 
+  // Auto-resolve images whenever examDetail is shown or selectedExam.images changes
+  // Fixes: images stuck on "Loading..." when returning to exam or after upload
+  useEffect(() => {
+    if (view === 'examDetail' && selectedExam?.images?.length) {
+      resolveExamImages(selectedExam);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, selectedExam?.images?.join(',')]);
+
   // Resolve image IDs to displayable src — Cloudinary URL or legacy base64
   const resolveImage = async (idOrData) => {
     if (!idOrData) return null;
@@ -1181,13 +2387,13 @@ function App() {
     } catch { return null; }
   };
 
-  // Resolve all images for current exam — PARALLEL (Promise.all), not sequential
+  // Resolve all images for current exam — single bulk request (1 round-trip instead of N)
   const resolveExamImages = async (exam) => {
     if (!exam?.images?.length) return;
 
-    // Filter lang yung mga kailangan pang i-fetch (hindi pa nasa cache)
     const toFetch = exam.images.filter(
       idOrData =>
+        idOrData &&
         !idOrData.startsWith('data:') &&
         !idOrData.startsWith('http') &&
         !imageCache.current[idOrData]
@@ -1195,20 +2401,28 @@ function App() {
 
     if (!toFetch.length) return;
 
-    // I-fetch lahat sabay-sabay
-    const results = await Promise.all(
-      toFetch.map(async (idOrData) => {
-        const url = await resolveImage(idOrData);
-        return [idOrData, url];
-      })
-    );
-
-    // Isang setState call lang para sa lahat
-    const newEntries = Object.fromEntries(
-      results.filter(([, url]) => url != null)
-    );
-    if (Object.keys(newEntries).length > 0) {
-      setResolvedImages(prev => ({ ...prev, ...newEntries }));
+    try {
+      // Single round-trip: POST /api/images/bulk returns { id: url, ... }
+      const res = await fetch(`${API}/images/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: toFetch })
+      });
+      const map = await res.json();
+      Object.entries(map).forEach(([id, url]) => { if (url) imageCache.current[id] = url; });
+      const newEntries = Object.fromEntries(Object.entries(map).filter(([, url]) => url != null));
+      if (Object.keys(newEntries).length > 0) {
+        setResolvedImages(prev => ({ ...prev, ...newEntries }));
+      }
+    } catch {
+      // Fallback: resolve individually if bulk endpoint unavailable
+      const results = await Promise.all(
+        toFetch.map(async (idOrData) => [idOrData, await resolveImage(idOrData)])
+      );
+      const newEntries = Object.fromEntries(results.filter(([, url]) => url != null));
+      if (Object.keys(newEntries).length > 0) {
+        setResolvedImages(prev => ({ ...prev, ...newEntries }));
+      }
     }
   };
 
@@ -1237,7 +2451,7 @@ function App() {
   };
 
   const goBack = () => {
-    const role = localStorage.getItem(ROLE_KEY);
+    const role = safeLocalGet(ROLE_KEY);
     const isKumiai = ['setouchi','wbc','gyoumusuishin','greenservices'].includes(role);
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
     else if (view === 'examItems') { setView('categories'); setSelectedCategory(null); }
@@ -1297,7 +2511,7 @@ function App() {
         body: JSON.stringify({ name: newName, teacherId: selectedTeacher?._id || null })
       });
       const newBatch = await res.json();
-      setBatches(prev => [...prev, newBatch]);
+      setBatches(prev => [newBatch, ...prev]);
       closeModal();
     } catch { alert('Error saving batch.'); }
     setSaving(false);
@@ -1393,6 +2607,22 @@ function App() {
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
     } catch { alert('Error updating status.'); }
+  };
+
+  const toggleArchiveStudent = async (student) => {
+    const newArchived = !student.isArchived;
+    const label = newArchived ? 'archive' : 'unarchive';
+    if (!window.confirm(`${newArchived ? 'Archive' : 'Unarchive'} ${student.name}? ${newArchived ? 'They will no longer appear on the Kumiai side.' : 'They will be visible again on the Kumiai side.'}`)) return;
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${student._id}/archive`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isArchived: newArchived })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === student._id);
+      if (updatedStudent) setSelectedStudent(updatedStudent);
+    } catch { alert(`Error: could not ${label} student.`); }
   };
 
   const deleteCategory = async (catId, e) => {
@@ -1564,11 +2794,80 @@ function App() {
     setShowScanner(true);
   };
 
-  const handleScanCapture = async (imageData) => {
+  const handleScanCapture = async (imageDataOrArray) => {
     setShowScanner(false);
-    if (scanningExamId) {
-      await uploadImage(scanningExamId, imageData);
-      setScanningExamId(null);
+    if (!scanningExamId) return;
+    const examId = scanningExamId;
+    setScanningExamId(null);
+
+    const images = Array.isArray(imageDataOrArray) ? imageDataOrArray : [imageDataOrArray];
+
+    // Track accumulated imageIds locally so each upload sees the latest list,
+    // not the stale selectedExam from the React closure
+    let accumulatedImageIds = [...(selectedExam?.images || [])];
+
+    for (const imageData of images) {
+      try {
+        // Step 1: Upload to Cloudinary
+        const formData = new FormData();
+        const blob = await fetch(imageData).then(r => r.blob());
+        formData.append('file', blob, 'image.jpg');
+        formData.append('upload_preset', CLOUDINARY_PRESET);
+        formData.append('folder', 'sage-bulacan');
+        const cdnRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+          method: 'POST', body: formData
+        });
+        const cdnData = await cdnRes.json();
+        if (!cdnData.secure_url) throw new Error('Cloudinary upload failed');
+
+        // Step 2: Save to MongoDB
+        const imgRes = await fetch(`${API}/images`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: cdnData.secure_url, publicId: cdnData.public_id })
+        });
+        const { _id: imageId } = await imgRes.json();
+
+        // Step 3: Attach imageId to exam
+        const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/image`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error('Upload failed');
+
+        // Cache and accumulate
+        imageCache.current[imageId] = cdnData.secure_url;
+        accumulatedImageIds = [...accumulatedImageIds, imageId];
+
+        // Update state with accumulated list so each iteration stacks correctly
+        setResolvedImages(prev => ({ ...prev, [imageId]: cdnData.secure_url }));
+        setSelectedExam(prev => ({ ...prev, images: accumulatedImageIds }));
+        setSelectedCategory(prev => ({
+          ...prev,
+          items: prev.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it)
+        }));
+        setSelectedStudent(prev => ({
+          ...prev,
+          categories: prev.categories.map(c => c._id === selectedCategory._id
+            ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+            : c)
+        }));
+        setSelectedBatch(prev => ({
+          ...prev,
+          students: prev.students.map(s => s._id === selectedStudent._id
+            ? { ...s, categories: s.categories.map(c => c._id === selectedCategory._id
+                ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+                : c) }
+            : s)
+        }));
+        setBatches(prev => prev.map(b => b._id === selectedBatch._id
+          ? { ...b, students: b.students.map(s => s._id === selectedStudent._id
+              ? { ...s, categories: s.categories.map(c => c._id === selectedCategory._id
+                  ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+                  : c) }
+              : s) }
+          : b));
+      } catch { alert('Error saving one of the scanned pages.'); }
     }
   };
 
@@ -1615,8 +2914,8 @@ function App() {
           onKeyDown={e => {
             if (e.key === 'Enter') {
               if (qrPassInput === PHGIC_PASS) {
-                localStorage.setItem(AUTH_KEY, 'true');
-                localStorage.setItem(ROLE_KEY, 'viewer');
+                safeLocalSet(AUTH_KEY, 'true');
+                safeLocalSet(ROLE_KEY, 'viewer');
                 setIsLoggedIn(true);
                 setIsViewer(true);
                 setPendingDeepLink(qrPasswordPrompt);
@@ -1636,8 +2935,8 @@ function App() {
         <button
           onClick={() => {
             if (qrPassInput === PHGIC_PASS) {
-              localStorage.setItem(AUTH_KEY, 'true');
-              localStorage.setItem(ROLE_KEY, 'viewer');
+              safeLocalSet(AUTH_KEY, 'true');
+              safeLocalSet(ROLE_KEY, 'viewer');
               setIsLoggedIn(true);
               setIsViewer(true);
               setPendingDeepLink(qrPasswordPrompt);
@@ -1662,7 +2961,7 @@ function App() {
       setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role));
       if (['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) fetchBatches(null);
       else {
-        const teacher = localStorage.getItem(TEACHER_KEY);
+        const teacher = safeLocalGet(TEACHER_KEY);
         if (teacher) fetchBatches(JSON.parse(teacher)._id);
       }
     }} />
@@ -1670,14 +2969,14 @@ function App() {
 
   if (!isViewer && !selectedTeacher) return (
     <TeacherSelect onSelect={(t) => {
-      localStorage.setItem(TEACHER_KEY, JSON.stringify(t));
+      safeLocalSet(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
       fetchBatches(t._id);
     }} />
   );
 
   const renderCompanyGroups = () => {
-    const role = localStorage.getItem(ROLE_KEY);
+    const role = safeLocalGet(ROLE_KEY);
     const kumiai = role === 'setouchi' ? 'Setouchi'
       : role === 'wbc' ? 'WBC'
       : role === 'gyoumusuishin' ? 'Gyoumusuishin'
@@ -1686,7 +2985,7 @@ function App() {
     const allStudents = [];
     batches.forEach(batch => {
       batch.students
-        .filter(s => s.status === 'Selected' && (s.kumiai === kumiai || (!s.kumiai && s.companyName === kumiai)))
+        .filter(s => !s.isArchived && s.status === 'Selected' && (s.kumiai === kumiai || (!s.kumiai && s.companyName === kumiai)))
         .forEach(s => allStudents.push({ ...s, batchName: batch.name, batchId: batch._id, batch }));
     });
 
@@ -1694,7 +2993,7 @@ function App() {
     allStudents.forEach(s => {
       const rawCompany = s.companyName;
       const isLegacyKumiai = rawCompany === 'Setouchi' || rawCompany === 'WBC';
-      const key = (!rawCompany || isLegacyKumiai) ? '(No Company Assigned)' : rawCompany;
+      const key = (!rawCompany || isLegacyKumiai) ? t('noCompany') : rawCompany;
       if (!groups[key]) groups[key] = [];
       groups[key].push(s);
     });
@@ -1703,7 +3002,7 @@ function App() {
 
     // ── Company detail view (students inside a company) ───────────────
     if (selectedCompany) {
-      const students = selectedCompany.students.slice().sort((a, b) => a.name.localeCompare(b.name));
+      const students = selectedCompany.students.filter(s => !s.isArchived).slice().sort((a, b) => a.name.localeCompare(b.name));
       return (
         <>
           <button className="back-btn" onClick={() => setSelectedCompany(null)}>←</button>
@@ -1712,22 +3011,34 @@ function App() {
           </div>
           <h2 className="section-title">{students.length} Student{students.length !== 1 ? 's' : ''}</h2>
           {students.map(student => (
-            <div key={student._id} className="card student-card clickable"
-              onClick={() => { setSelectedBatch(student.batch); goToCategories(student); }}>
-              <div className="card-content">
-                <div className="student-card-left">
-                  {student.photo
-                    ? <img src={student.photo} alt={student.name} className="student-avatar" />
-                    : <span className="student-avatar-icon">👤</span>
-                  }
-                  <div>
-                    <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
-                    <p className="card-subtitle">{student.batchName}</p>
-                  </div>
+          <div key={student._id} className="card student-card clickable"
+            onClick={() => { setSelectedBatch(student.batch); goToCategories(student); }}>
+            <div className="card-content">
+              <div className="student-card-left">
+                {student.photo
+                  ? <img src={student.photo} alt={student.name} className="student-avatar" />
+                  : <span className="student-avatar-icon">👤</span>
+                }
+                <div>
+                  <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
+                  <p className="card-subtitle">{student.batchName}</p>
                 </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setProgressChartStudent(student); setShowProgressChart(true); }}
+                  style={{
+                    background: '#8B0000', color: '#fff', border: 'none',
+                    borderRadius: 8, padding: '6px 12px', fontSize: 12,
+                    fontWeight: 600, cursor: 'pointer', flexShrink: 0
+                  }}
+                >
+                  📈 Progress
+                </button>
                 <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
               </div>
             </div>
+          </div>
           ))}
         </>
       );
@@ -1736,28 +3047,29 @@ function App() {
     // ── Company list view ─────────────────────────────────────────────
     return (
       <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div>
-            <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
-            <h1 className="title" style={{ margin: '2px 0 0 0' }}>{kumiai}</h1>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ background: '#fff3cd', color: '#856404', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6, border: '1px solid #ffc107' }}>VIEW ONLY</span>
-            <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }}
-              style={{ background: 'none', border: '1.5px solid #ff3b30', borderRadius: 8, color: '#ff3b30', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
-              Logout
-            </button>
+        <div className="header-banner">
+          <div className="top-row">
+            <div>
+              <p className="logged-in-label">{t('loggedInAs')}</p>
+              <h1 className="title">{kumiai}</h1>
+            </div>
+            <div className="top-row-actions">
+              <span className="badge-view-only">{t('viewOnly')}</span>
+              <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
+                {t('logout')}
+              </button>
+            </div>
           </div>
         </div>
 
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>
-          Companies ({groupKeys.length})
+        <h2 className="section-title">
+          {t('companies')} ({groupKeys.length})
         </h2>
 
         {groupKeys.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
             <div style={{ fontSize: 40, marginBottom: 10 }}>👥</div>
-            <p>No students found.</p>
+            <p>{t('noStudentsFound')}</p>
           </div>
         )}
 
@@ -1771,7 +3083,7 @@ function App() {
                   <span style={{ fontSize: 32 }}>🏢</span>
                   <div>
                     <h2 className="card-title">{groupKey}</h2>
-                    <p className="card-subtitle">{students.length} student{students.length !== 1 ? 's' : ''}</p>
+                    <p className="card-subtitle">{students.length} {t('studentPlural')}</p>
                   </div>
                 </div>
                 <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
@@ -1786,34 +3098,46 @@ function App() {
 
   const renderBatches = () => (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <div>
-          <p style={{ fontSize: 13, color: '#8e8e93', margin: 0 }}>Logged in as</p>
-          <h1 className="title" style={{ margin: '2px 0 0 0' }}>
-            {isViewer
-              ? (localStorage.getItem(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
-                : localStorage.getItem(ROLE_KEY) === 'wbc' ? 'WBC'
-                : localStorage.getItem(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMUSUISHIN'
-                : localStorage.getItem(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
-                : 'PHGIC')
-              : `${selectedTeacher?.emoji} ${selectedTeacher?.name}`}
-          </h1>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {isViewer && <span style={{ background: '#fff3cd', color: '#856404', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6, border: '1px solid #ffc107' }}>VIEW ONLY</span>}
-          {!isViewer && (
-            <button onClick={() => { localStorage.removeItem(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }}
-              style={{ background: 'none', border: '1.5px solid #8B0000', borderRadius: 8, color: '#8B0000', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
-              Switch
+      <div className="header-banner">
+        <div className="top-row">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {!isViewer && selectedTeacher?.photo && (
+              <img src={selectedTeacher.photo} alt={selectedTeacher.name}
+                style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
+            )}
+            {!isViewer && !selectedTeacher?.photo && (
+              <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji}</span>
+            )}
+            <div>
+              <p className="logged-in-label">{t('loggedInAs')}</p>
+              <h1 className="title">
+                {isViewer
+                  ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
+                    : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WBC'
+                    : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMUSUISHIN'
+                    : safeLocalGet(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
+                    : 'PHGIC')
+                  : selectedTeacher?.name}
+              </h1>
+            </div>
+          </div>
+          <div className="top-row-actions">
+            {isViewer && <span className="badge-view-only">{t('viewOnly')}</span>}
+            {!isViewer && (
+              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">{t('switch')}</button>
+            )}
+            {safeLocalGet(ROLE_KEY) === 'admin' && (
+              <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
+                ⚙️
+              </button>
+            )}
+            <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
+              {t('logout')}
             </button>
-          )}
-          <button onClick={() => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); localStorage.removeItem(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }}
-            style={{ background: 'none', border: '1.5px solid #ff3b30', borderRadius: 8, color: '#ff3b30', fontSize: 13, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}>
-            Logout
-          </button>
+          </div>
         </div>
       </div>
-      <h2 style={{ fontSize: 16, fontWeight: 600, color: '#3a3a3c', margin: '16px 0 12px' }}>{isViewer ? 'All Batches' : 'My Batches'}</h2>
+      <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
       {(isViewer ? batches.filter(b => b.students.some(s => s.status === 'Selected')) : batches).map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
@@ -1821,7 +3145,7 @@ function App() {
               <h2 className="card-title">🎌 {batch.name}</h2>
               <p className="card-subtitle">
                 {isViewer
-                  ? `${batch.students.filter(s => s.status === 'Selected').length} selected student${batch.students.filter(s => s.status === 'Selected').length !== 1 ? 's' : ''}`
+                  ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
                   : `${batch.students.length} student${batch.students.length !== 1 ? 's' : ''}`}
               </p>
             </div>
@@ -1829,18 +3153,18 @@ function App() {
           </div>
         </div>
       ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>+ Add New Batch</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
     </>
   );
 
   const renderStudents = () => {
-    const role = localStorage.getItem(ROLE_KEY);
+    const role = safeLocalGet(ROLE_KEY);
     let visibleStudents = selectedBatch.students;
-    if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'Setouchi' || (!s.kumiai && s.companyName === 'Setouchi')));
-    else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
-    else if (role === 'gyoumusuishin') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.kumiai === 'Gyoumusuishin');
-    else if (role === 'greenservices') visibleStudents = visibleStudents.filter(s => s.status === 'Selected' && s.kumiai === 'Green Services');
-    else if (isViewer) visibleStudents = visibleStudents.filter(s => s.status === 'Selected');
+    if (role === 'setouchi') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && (s.kumiai === 'Setouchi' || (!s.kumiai && s.companyName === 'Setouchi')));
+    else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
+    else if (role === 'gyoumusuishin') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && s.kumiai === 'Gyoumusuishin');
+    else if (role === 'greenservices') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && s.kumiai === 'Green Services');
+    else if (isViewer) visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected');
     visibleStudents = visibleStudents.slice().sort((a, b) => a.name.localeCompare(b.name));
     return (
     <>
@@ -1848,7 +3172,7 @@ function App() {
       <div className="header-with-back">
         <h1 className="title">{selectedBatch.name}</h1>
       </div>
-      <h2 className="section-title">Students</h2>
+      <h2 className="section-title">{t('students')}</h2>
       {visibleStudents.map(student => (
         <div key={student._id} className="card student-card clickable" onClick={() => goToCategories(student)}>
           <div className="card-content">
@@ -1868,7 +3192,7 @@ function App() {
                       fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
                       cursor: isViewer ? 'default' : 'pointer'
                     }}>
-                    {student.status === 'Selected' ? 'SELECTED' : 'REGULAR'}
+                    {student.status === 'Selected' ? t('statusSelected') : t('statusRegular')}
                   </span>
                   {student.status === 'Selected' && student.kumiai && (
                     <span style={{
@@ -1899,9 +3223,9 @@ function App() {
           </div>
         </div>
       ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>+ Add Student</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>{t('addStudent')}</button>}
       {selectedBatch.students.length > 0 && (
-        <button className="print-qr-button" onClick={generateBatchQRs}>🖨 Print QR Codes</button>
+        <button className="print-qr-button" onClick={generateBatchQRs}>{t('printQrCodes')}</button>
       )}
     </>
     );
@@ -1911,23 +3235,95 @@ function App() {
     <>
       <button className="back-btn" onClick={goBack}>←</button>
       <div className="student-profile-header">
-        {selectedStudent.photo
-          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
-          : <span className="student-profile-icon">👤</span>
-        }
-        <h1 className="student-profile-name">{selectedStudent.name}</h1>
-      </div>
+  {selectedStudent.photo
+    ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+    : <span className="student-profile-icon">👤</span>
+  }
+  <h1 className="student-profile-name">{selectedStudent.name}</h1>
+  {!isViewer && (
+    <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+      <button
+        onClick={async () => {
+          if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: 'transparent', color: '#8B2020', border: '1.5px solid #8B2020', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >{t('archiveImages')}</button>
+
+      <button
+        onClick={async () => {
+          if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: 'transparent', color: '#007AFF', border: '1.5px solid #007AFF', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >{t('restoreImages')}</button>
+
+      <button
+        onClick={() => toggleArchiveStudent(selectedStudent)}
+        style={{
+          background: selectedStudent.isArchived ? 'transparent' : '#555',
+          color: selectedStudent.isArchived ? '#555' : '#fff',
+          border: '1.5px solid #555',
+          borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer'
+        }}
+      >{selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}</button>
+
+      <button
+        onClick={async () => {
+          if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
+          if (!window.confirm(`Are you sure? This is irreversible.`)) return;
+          try {
+            const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+              alert(`🗑️ ${selectedStudent.name} permanently deleted.`);
+              goBack();
+            } else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >{t('deleteStudent')}</button>
+    </div>
+  )}
+</div>
+{/* Progress Chart Button - Kumiai/Viewer only */}
+{isViewer && (
+  <button
+    onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}
+    style={{
+      width: '100%', background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+      color: '#fff', border: 'none', borderRadius: 12,
+      padding: '14px 20px', fontSize: 15, fontWeight: 700,
+      cursor: 'pointer', marginBottom: 16,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      boxShadow: '0 2px 8px rgba(139,0,0,0.25)'
+    }}
+  >
+    <span style={{ fontSize: 20 }}>📈</span>
+    {t('viewProgressChart')}
+  </button>
+)}
 
       {/* ── Exam Categories Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📁 Exam Categories</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('examCategoriesTitle')}</h2>
           {!isViewer && (
             <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
         {(selectedStudent.categories || []).length === 0
-          ? <p style={{ fontSize: 13, color: '#8e8e93', margin: 0, textAlign: 'center', padding: '12px 0' }}>No exam categories yet.</p>
+          ? <p style={{ fontSize: 13, color: '#8e8e93', margin: 0, textAlign: 'center', padding: '12px 0' }}>{t('noExamCategories')}</p>
           : (selectedStudent.categories || []).map(cat => (
             <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
               <div className="card-content">
@@ -1947,13 +3343,13 @@ function App() {
       {/* ── Evaluations Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>📋 Evaluations</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('evaluationsTitle')}</h2>
           {!isViewer && (
             <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
         <button onClick={goToEvaluations} style={{ width: '100%', background: '#f2f2f7', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: '#3a3a3c', cursor: 'pointer', fontWeight: 500 }}>
-          View all evaluations →
+          {t('viewAllEvaluations')}
         </button>
       </div>
     </>
@@ -1969,9 +3365,9 @@ function App() {
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
       </div>
-      <h2 className="section-title">Evaluations</h2>
+      <h2 className="section-title">{t('evaluations')}</h2>
       {evaluations.length === 0
-        ? <p style={{ fontSize: 14, color: '#8e8e93', textAlign: 'center', marginTop: 32 }}>No evaluations yet.</p>
+        ? <p style={{ fontSize: 14, color: '#8e8e93', textAlign: 'center', marginTop: 32 }}>{t('noEvaluationsYet')}</p>
         : evaluations.map(ev => (
           <div key={ev._id} className="card exam-card clickable" onClick={() => goToEvaluationDetail(ev)}>
             <div className="card-content">
@@ -1985,7 +3381,7 @@ function App() {
         ))
       }
       {!isViewer && (
-        <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>+ Add Evaluation</button>
+        <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>{t('addEvaluation')}</button>
       )}
     </>
   );
@@ -2148,48 +3544,65 @@ function App() {
     return (
       <>
         <button className="back-btn" onClick={goBack}>←</button>
-        <div className="header-with-back">
-          <h1 className="title">📋 {selectedEvaluation?.ordinal} Evaluation</h1>
-        </div>
 
-        {/* Header info */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#3a3a3c' }}>{selectedEvaluation?.title}</p>
-            <p style={{ margin: 0, fontSize: 13, color: '#8e8e93' }}>📅 {selectedEvaluation?.date}</p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ margin: 0, fontSize: 12, color: '#8e8e93' }}>Student</p>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>{selectedStudent?.name}</p>
-          </div>
-        </div>
-
-        {/* Company Name */}
-        {selectedStudent?.companyName && (
-          <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 20 }}>🏢</span>
+        {/* Hero banner */}
+        <div className="eval-hero">
+          <div className="eval-hero-top">
             <div>
-              <p style={{ margin: 0, fontSize: 11, color: '#8e8e93', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Company</p>
-              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#3a3a3c' }}>{selectedStudent.companyName}</p>
+              <p className="eval-ordinal">{selectedEvaluation?.ordinal} Evaluation</p>
+              <h1 className="eval-title">{selectedEvaluation?.title}</h1>
+              <p className="eval-date">📅 {selectedEvaluation?.date}</p>
+            </div>
+            <div className="eval-student-badge">
+              {selectedStudent?.photo
+                ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="eval-student-avatar" />
+                : <span className="eval-student-icon">👤</span>
+              }
+              <p className="eval-student-name">{selectedStudent?.name}</p>
             </div>
           </div>
-        )}
-
-        {/* Ratings Section */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 16px' }}>Skills Rating (0–10)</h3>
-          {ratingField('reading', 'READING', '読むこと')}
-          {ratingField('listening', 'LISTENING', '聞くこと')}
-          {ratingField('speaking', 'SPEAKING', '話すこと')}
+          {selectedStudent?.companyName && (
+            <div className="eval-company-chip">
+              🏢 {selectedStudent.companyName}
+            </div>
+          )}
         </div>
 
-        {/* Text Fields Section */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 16px' }}>Details</h3>
-          {textField('from', 'FROM', null, 'e.g., Lesson 1')}
-          {textField('to', 'TO', null, 'e.g., Lesson 10')}
+        {/* Skills Rating */}
+        <div className="section-box">
+          <div className="section-box-header">
+            <span className="section-box-title">🎯 Skills Rating</span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>Score 0 – 10</span>
+          </div>
+          {ratingField('reading',   'READING',   '読むこと')}
+          {ratingField('listening', 'LISTENING', '聞くこと')}
+          {ratingField('speaking',  'SPEAKING',  '話すこと')}
+        </div>
+
+        {/* Lesson Details */}
+        <div className="section-box">
+          <div className="section-box-header">
+            <span className="section-box-title">📖 Lesson Details</span>
+          </div>
+          <div className="eval-lesson-row">
+            <div className="form-group" style={{ flex: 1 }}>
+              {textField('from', 'FROM', null, 'e.g., Lesson 1')}
+            </div>
+            <div className="eval-lesson-arrow">→</div>
+            <div className="form-group" style={{ flex: 1 }}>
+              {textField('to', 'TO', null, 'e.g., Lesson 10')}
+            </div>
+          </div>
           {textField('currentLesson', 'CURRENT LESSON', null, 'e.g., Chapter 3 - Greetings')}
-          {textField('remarks', 'REMARKS', '備考', 'コメントを入力してください...')}
+        </div>
+
+        {/* Remarks */}
+        <div className="section-box">
+          <div className="section-box-header">
+            <span className="section-box-title">💬 Remarks</span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>備考</span>
+          </div>
+          {textField('remarks', null, null, 'コメントを入力してください...')}
         </div>
 
         {/* Teacher Signature */}
@@ -2198,17 +3611,19 @@ function App() {
           const teacher = allTeachers.find(t => t._id === batchTeacherId);
           if (!teacher?.signature) return null;
           return (
-            <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 12px' }}>Teacher's Signature</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div className="section-box">
+              <div className="section-box-header">
+                <span className="section-box-title">✍️ Teacher's Signature</span>
+              </div>
+              <div className="eval-signature-row">
                 <img
                   src={teacher.signature}
                   alt={`${teacher.name} signature`}
-                  style={{ height: 72, maxWidth: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid #e5e5ea', background: '#fafafa', padding: 4 }}
+                  className="eval-signature-img"
                 />
                 <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#3a3a3c' }}>{teacher.name}</p>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#8e8e93' }}>Class Teacher</p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{teacher.name}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>Class Teacher</p>
                 </div>
               </div>
             </div>
@@ -2216,9 +3631,8 @@ function App() {
         })()}
 
         {!isViewer && (
-          <button onClick={saveEvaluationFields} disabled={evalSaving}
-            style={{ width: '100%', background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: evalSaving ? 'not-allowed' : 'pointer', marginBottom: 24, opacity: evalSaving ? 0.7 : 1 }}>
-            {evalSaving ? 'Saving...' : '💾 Save Evaluation'}
+          <button onClick={saveEvaluationFields} disabled={evalSaving} className="btn-primary" style={{ marginBottom: 24, opacity: evalSaving ? 0.7 : 1, cursor: evalSaving ? 'not-allowed' : 'pointer' }}>
+            {evalSaving ? t('saving') : t('saveEvaluation')}
           </button>
         )}
       </>
@@ -2231,22 +3645,49 @@ function App() {
       <div className="header-with-back">
         <h1 className="title">📁 {selectedCategory?.name}</h1>
       </div>
-      <h2 className="section-title">Exams</h2>
-      {(selectedCategory?.items || []).map(item => (
-        <div key={item._id} className="card exam-card clickable" onClick={() => goToExamDetail(item)}>
-          <div className="card-content">
-            <div>
-              <h3 className="card-title">📝 {item.name}</h3>
-              <p className="card-subtitle">{item.date} • Score: {item.score}/{item.totalScore ?? 100}</p>
-            </div>
-            <div className="exam-right">
-              {item.images?.length > 0 && <span className="has-photo-badge">📷</span>}
-              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>}
-            </div>
-          </div>
+      <h2 className="section-title">{t('exams')}</h2>
+      {(selectedCategory?.items || []).length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">📝</div>
+          <p className="empty-state-text">{t('noExamsYet')}</p>
+          <p className="empty-state-sub">{t('addExamHint')}</p>
         </div>
-      ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>+ Add Exam</button>}
+      ) : (
+        <div className="exam-list">
+          {(selectedCategory?.items || []).map((item, idx) => {
+            const score = item.score ?? 0;
+            const total = item.totalScore ?? 100;
+            const pct = Math.round((score / total) * 100);
+            const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+            const bg   = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
+            return (
+              <div key={item._id} className="exam-list-card clickable" onClick={() => goToExamDetail(item)}>
+                {/* Score badge */}
+                <div className="exam-score-badge" style={{ background: bg, color }}>
+                  <span className="exam-score-num">{score}</span>
+                  <span className="exam-score-sep">/{total}</span>
+                </div>
+                {/* Info */}
+                <div className="exam-list-info">
+                  <p className="exam-list-name">{item.name}</p>
+                  <p className="exam-list-meta">{item.date}</p>
+                  {item.images?.length > 0 && (
+                    <span className="exam-photo-chip">📷 {item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
+                {/* Pct pill */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                  <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
+                  {!isViewer && (
+                    <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
     </>
   );
 
@@ -2254,109 +3695,116 @@ function App() {
     const rawImages = selectedExam.images?.length > 0
       ? selectedExam.images
       : selectedExam.image ? [selectedExam.image] : [];
-    // Resolve IDs to URLs — legacy base64 and Cloudinary URLs pass through
-    const allImages = rawImages.map(idOrData =>
-      (idOrData.startsWith('data:') || idOrData.startsWith('http')) ? idOrData : (resolvedImages[idOrData] || null)
-    );
+      const resolveOne = (idOrData) => {
+        if (!idOrData || typeof idOrData !== 'string') return null;
+  
+        // Senior Fix: Force immediate return if it's a Cloudinary URL or Base64
+        if (idOrData.startsWith('http') || idOrData.startsWith('data:')) {
+          return idOrData;
+        }
+  
+        // Fallback for legacy Object IDs
+        return resolvedImages[idOrData] || imageCache.current?.[idOrData] || null;
+      };
+  
+      // Filter(Boolean) ensures we don't map over nulls which cause the "Loading" box
+      const allImages = (rawImages || []).map(resolveOne).filter(Boolean);
+    const score = selectedExam.score ?? 0;
+    const total = selectedExam.totalScore ?? 100;
+    const pct = Math.round((score / total) * 100);
+    const pctColor = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+    const pctBg    = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
 
     return (
       <>
         <button className="back-btn" onClick={goBack}>←</button>
-        <div className="header-with-back">
-          <h1 className="title">{selectedExam.name}</h1>
-        </div>
-        <div className="exam-detail-info">
-          <span className="detail-badge">📅 {selectedExam.date}</span>
-          <span className="detail-badge">🎯 Score: {selectedExam.score}/{selectedExam.totalScore ?? 100}</span>
+
+        {/* Hero score card */}
+        <div className="exam-detail-hero">
+          <div className="exam-detail-hero-left">
+            <h1 className="exam-detail-title">{selectedExam.name}</h1>
+            <p className="exam-detail-date">📅 {selectedExam.date}</p>
+          </div>
+          <div className="exam-detail-score-ring" style={{ background: pctBg, borderColor: pctColor }}>
+            <span className="exam-detail-score-num" style={{ color: pctColor }}>{score}</span>
+            <span className="exam-detail-score-total" style={{ color: pctColor }}>/{total}</span>
+            <span className="exam-detail-score-pct" style={{ color: pctColor }}>{pct}%</span>
+          </div>
         </div>
 
-        <h2 className="section-title">Exam Pages ({allImages.length} pages)</h2>
-
-        {/* Action buttons — hidden for viewer */}
+        {/* Action buttons */}
         {!isViewer && (
-          <div style={{ display: 'flex', gap: 10, marginBottom: 16, padding: '0 4px' }}>
-            <button className="save-btn" style={{ flex: 1 }} onClick={() => openScanner(selectedExam._id)}>
-              📷 Scan Page
+          <div className="exam-action-row">
+            <button className="exam-action-btn scan" onClick={() => openScanner(selectedExam._id)}>
+              <span>📷</span> {t('scanPage')}
             </button>
-            <button className="cancel-btn" style={{ flex: 1 }} onClick={() => triggerFileInput(selectedExam._id)}>
-              🖼️ Upload Page
+            <button className="exam-action-btn upload" onClick={() => triggerFileInput(selectedExam._id)}>
+              <span>🖼️</span> {t('upload')}
             </button>
           </div>
         )}
 
-        {/* Document pages — vertical list like Files app */}
+        {/* Pages */}
+        <h2 className="section-title">
+          {t('examPages')} {rawImages.length > 0 && `· ${rawImages.length} page${rawImages.length !== 1 ? 's' : ''}`}
+        </h2>
+
         {rawImages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>📄</div>
-            <p style={{ color: '#8E8E93' }}>No pages yet. Scan or upload to add.</p>
+          <div className="exam-empty-pages">
+            <div style={{ fontSize: 52, marginBottom: 14 }}>📄</div>
+            <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>{t('noPagesYet')}</p>
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>{t('scanOrUpload')}</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px' }}>
+          <div className="exam-pages-grid">
             {rawImages.map((idOrData, idx) => {
-              const src = (idOrData.startsWith('data:') || idOrData.startsWith('http')) ? idOrData : resolvedImages[idOrData];
+              const src = resolveOne(idOrData);
               return (
-              <div key={idx} style={{
-                background: '#fff',
-                borderRadius: 12,
-                boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-                overflow: 'hidden',
-                position: 'relative'
-              }}>
-                {/* Page header */}
-                <div style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 12px', background: '#f5f5f7', borderBottom: '1px solid #e5e5ea'
-                }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>Page {idx + 1}</span>
+                <div key={idx} className="exam-page-card">
+                  {/* Page number pill */}
+                  <div className="exam-page-num-pill">Page {idx + 1}</div>
+
+                  {/* Delete button */}
                   {!isViewer && (
                     <button
+                      className="exam-page-delete"
                       onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
-                      style={{
-                        background: 'none', border: 'none', color: '#ff3b30',
-                        fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '2px 6px'
-                      }}
-                    >
-                      🗑 Delete
-                    </button>
+                    >✕</button>
+                  )}
+
+                  {/* Image */}
+                  {src ? (
+                    <img
+                      src={src}
+                      alt={`Page ${idx + 1}`}
+                      className="exam-page-img"
+                      onClick={() => setImageViewer({ images: allImages.filter(Boolean), index: allImages.filter(Boolean).indexOf(src) })}
+                    />
+                  ) : (
+                    <div className="exam-page-loading">
+                      <span>⏳</span>
+                      <p>{t('loading')}</p>
+                    </div>
+                  )}
+
+                  {/* {t('tapToView')} hint */}
+                  {src && (
+                    <div className="exam-page-tap-hint">{t('tapToView')}</div>
                   )}
                 </div>
-                {/* Document image or loading placeholder */}
-                {src ? (
-                <img
-                  src={src}
-                  alt={`Page ${idx + 1}`}
-                  onClick={() => setImageViewer({ images: allImages.filter(Boolean), index: allImages.filter(Boolean).indexOf(src) })}
-                  style={{
-                    width: '100%',
-                    aspectRatio: '210 / 297',
-                    objectFit: 'contain',
-                    display: 'block',
-                    background: '#fafafa',
-                    cursor: 'zoom-in'
-                  }}
-                />
-                ) : (
-                  <div style={{ width: '100%', aspectRatio: '210/297', background: '#f5f5f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: '#8e8e93', fontSize: 13 }}>⏳ Loading...</span>
-                  </div>
-                )}
-              </div>
               );
             })}
           </div>
         )}
 
-        {/* Spacer before delete button */}
         <div style={{ height: 16 }} />
 
-        {/* Hidden — keep old empty state removed */}
-        {false && (
-          <div></div>
+        {!isViewer && (
+          <button className="btn-danger" style={{ width: '100%', marginTop: 8 }}
+            onClick={(e) => deleteExam(selectedExam._id, e)}>
+            {t('deleteExam')}
+          </button>
         )}
-
-        {!isViewer && <button className="delete-button-full" onClick={(e) => deleteExam(selectedExam._id, e)}>
-          🗑 Delete Exam
-        </button>}
 
         <input
           type="file"
@@ -2372,20 +3820,21 @@ function App() {
 
   const renderModal = () => {
     if (!showModal) return null;
-    const titles = { batch: 'Add New Batch', student: 'Add New Student', editStudent: 'Edit Student', category: 'Add Exam Category', exam: 'Add New Exam', evaluation: 'New Evaluation' };
+    const titles = { batch: t('addNewBatchModal'), student: t('addNewStudentModal'), editStudent: t('editStudentModal'), category: t('addExamCategory'), exam: t('addNewExam'), evaluation: t('newEvaluation') };
     return (
       <div className="modal-overlay">
-        <div className="modal">
+        <div className="modal-sheet">
+          <div className="modal-handle" />
           <h2 className="modal-title">{titles[modalType]}</h2>
           {modalType === 'evaluation' ? (
             <>
               <div className="form-group">
-                <label>Evaluation Title:</label>
+                <label>{t('evaluationTitle')}</label>
                 <input type="text" value={evalTitle} onChange={(e) => setEvalTitle(e.target.value)} placeholder="e.g., Mid-term, Final, Progress Check" />
               </div>
               <div className="form-group">
-                <label>Date:</label>
-                <input type="date" value={evalDate} onChange={(e) => setEvalDate(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15 }} />
+                <label>{t('date')}</label>
+                <input type="date" value={evalDate} onChange={(e) => setEvalDate(e.target.value)} />
               </div>
               <p style={{ fontSize: 12, color: '#8e8e93', margin: '4px 0 0' }}>
                 This will be saved as the <strong>{['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th'][evaluations.length] || `${evaluations.length+1}th`} Evaluation</strong>.
@@ -2393,47 +3842,47 @@ function App() {
             </>
           ) : modalType === 'category' ? (
             <div className="form-group">
-              <label>Category Name:</label>
-              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Kanji, Grammar, Vocabulary" />
+              <label>{t('categoryName')}</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('categoryPlaceholder')} />
             </div>
           ) : modalType === 'exam' ? (
             <>
               <div className="form-group">
-                <label>Exam Name:</label>
-                <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder="e.g., Quiz 1, Midterm, Finals" />
+                <label>{t('examName')}</label>
+                <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder={t('examNamePlaceholder')} />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Score:</label>
-                  <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder="e.g., 85" min="0" />
+                  <label>{t('score')}</label>
+                  <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder={t('scorePlaceholder')} min="0" />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Total Score:</label>
-                  <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder="e.g., 100" min="1" />
+                  <label>{t('totalScore')}</label>
+                  <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder={t('totalScorePlaceholder')} min="1" />
                 </div>
               </div>
             </>
           ) : modalType === 'student' || modalType === 'editStudent' ? (
             <>
               <div className="form-group">
-                <label>Name:</label>
-                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Juan Cruz" />
+                <label>{t('name')}</label>
+                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('namePlaceholder')} />
               </div>
               <div className="form-group">
-                <label>Status:</label>
+                <label>{t('status')}</label>
                 <select value={newStudentStatus} onChange={(e) => setNewStudentStatus(e.target.value)}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
-                  <option value="Regular">Regular</option>
-                  <option value="Selected">Selected</option>
+                  <option value="Regular">{t('statusRegularOption')}</option>
+                  <option value="Selected">{t('statusSelectedOption')}</option>
                 </select>
               </div>
               {newStudentStatus === 'Selected' && (
                 <>
                   <div className="form-group">
-                    <label>KUMIAI:</label>
+                    <label>{t('kumiai')}</label>
                     <select value={newKumiai} onChange={(e) => setNewKumiai(e.target.value)}
                       style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
-                      <option value="">— Select KUMIAI —</option>
+                      <option value="">— {t('selectKumiai')} —</option>
                       <option value="Setouchi">Setouchi</option>
                       <option value="WBC">WBC</option>
                       <option value="Gyoumusuishin">Gyoumusuishin</option>
@@ -2441,18 +3890,18 @@ function App() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Company Name:</label>
+                    <label>{t('companyName')}</label>
                     <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
-                      placeholder="e.g., Sunrise, Toyota..." />
+                      placeholder={t('companyPlaceholder')} />
                   </div>
                 </>
               )}
               <div className="form-group">
-                <label>Photo (optional):</label>
+                <label>{t('photoOptional')}</label>
                 <div className="student-photo-upload" onClick={() => studentPhotoInputRef.current.click()}>
                   {newStudentPhoto
                     ? <img src={newStudentPhoto} alt="Preview" className="student-photo-preview" />
-                    : <><span className="upload-icon" style={{ fontSize: 28 }}>👤</span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>Tap to upload photo</p></>
+                    : <><span className="upload-icon" style={{ fontSize: 28 }}>👤</span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>{t('tapToUploadPhoto')}</p></>
                   }
                 </div>
                 <input
@@ -2472,15 +3921,15 @@ function App() {
             </>
           ) : (
             <div className="form-group">
-              <label>Name:</label>
-              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., N5 Saturday 2PM" />
+              <label>{t('name')}</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('batchNamePlaceholder')} />
             </div>
           )}
-          <div className="modal-buttons">
-            <button className="cancel-btn" onClick={closeModal} disabled={saving}>Cancel</button>
-            <button className="save-btn" disabled={saving}
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <button className="btn-secondary" onClick={closeModal} disabled={saving} style={{ flex: 1 }}>{t('cancel')}</button>
+            <button className="btn-primary" disabled={saving} style={{ flex: 2 }}
               onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? t('saving') : t('save')}
             </button>
           </div>
         </div>
@@ -2665,36 +4114,108 @@ function App() {
     );
   };
 
-  const onTouchStart = (e) => {
-    // Only arm pull-to-refresh if page is truly at the top
-    if (window.scrollY === 0) {
-      pullStartY.current = e.touches[0].clientY;
-    } else {
-      pullStartY.current = null;
+
+  // Cross-platform haptic — works on Android (Vibration API) + iOS (AudioContext click)
+  const haptic = (type = 'light') => {
+    // Android / some browsers
+    if (navigator.vibrate) {
+      if (type === 'light') navigator.vibrate(10);
+      else if (type === 'medium') navigator.vibrate(30);
+      else if (type === 'success') navigator.vibrate([15, 30, 15]);
     }
+    // iOS Safari — AudioContext short click triggers taptic engine indirectly
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === 'light') {
+        osc.frequency.value = 1000;
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.04);
+      } else if (type === 'medium') {
+        osc.frequency.value = 600;
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.07);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.07);
+      } else if (type === 'success') {
+        // Two-tone success click
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        osc.frequency.setValueAtTime(900, ctx.currentTime + 0.06);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.12);
+      }
+      setTimeout(() => ctx.close(), 200);
+    } catch {}
   };
+
+  // ── helpers (keep state + ref in sync) ───────────────────────────────────
+  const setDist = (v) => { pullDistanceRef.current = v; setPullDistance(v); };
+  const setTriggered = (v) => { pullTriggeredRef.current = v; setPullTriggered(v); };
+  const setRefreshing = (v) => { pullRefreshingRef.current = v; setPullRefreshing(v); };
+
+  // ── Pull-to-refresh handlers (window scroll — body is the scroller) ───────
+  const onTouchStart = (e) => {
+    if (pullRefreshingRef.current) return;
+    // Only arm when the page is truly at the very top
+    if (window.scrollY > 0) { pullStartY.current = null; return; }
+    pullStartY.current = e.touches[0].clientY;
+    pullScrollY.current = window.scrollY;
+  };
+
   const onTouchMove = (e) => {
     if (pullStartY.current === null) return;
-    // Cancel if user scrolled away from top during the move
-    if (window.scrollY > 5) { pullStartY.current = null; setPullDistance(0); return; }
-    const dist = e.touches[0].clientY - pullStartY.current;
-    if (dist > 0) setPullDistance(Math.min(dist, 120));
-    else { pullStartY.current = null; setPullDistance(0); }
-  };
-  const onTouchEnd = async () => {
-    if (pullDistance >= PULL_THRESHOLD && !pullRefreshing) {
-      setPullRefreshing(true);
-      setPullDistance(0);
+    if (pullRefreshingRef.current) return;
+
+    // If the page scrolled down since touchstart, the user is scrolling — disarm
+    if (window.scrollY > 0) {
       pullStartY.current = null;
+      setDist(0); setTriggered(false);
+      return;
+    }
+
+    const dy = e.touches[0].clientY - pullStartY.current;
+
+    // Must be a clear downward drag
+    if (dy <= 0) {
+      setDist(0); setTriggered(false);
+      return;
+    }
+
+    // Rubber-band resistance: feels heavy like native
+    const resistance = 0.45;
+    const dist = Math.min(dy * resistance, 120);
+    setDist(dist);
+
+    if (dist >= PULL_THRESHOLD && !pullTriggeredRef.current) {
+      setTriggered(true);
+      haptic('medium');
+    } else if (dist < PULL_THRESHOLD && pullTriggeredRef.current) {
+      setTriggered(false);
+    }
+  };
+
+  const onTouchEnd = async () => {
+    if (pullDistanceRef.current >= PULL_THRESHOLD && !pullRefreshingRef.current) {
+      pullStartY.current = null;
+      setDist(0); setTriggered(false);
+      setRefreshing(true);
+      haptic('success');
       try {
         if (isViewer) await fetchBatches(null);
         else if (selectedTeacher) await fetchBatches(selectedTeacher._id);
       } finally {
-        setPullRefreshing(false);
+        setRefreshing(false);
       }
     } else {
-      setPullDistance(0);
       pullStartY.current = null;
+      setDist(0); setTriggered(false);
     }
   };
 
@@ -2703,35 +4224,79 @@ function App() {
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      style={{ overflowY: 'auto', minHeight: '100vh', position: 'relative' }}
+      style={{ position: 'relative' }}
     >
-      {/* Pull-to-refresh indicator */}
-      {(pullDistance > 0 || pullRefreshing) && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-          display: 'flex', justifyContent: 'center', alignItems: 'center',
-          height: pullRefreshing ? 56 : Math.min(pullDistance * 0.6, 56),
-          background: 'transparent',
-          transition: pullRefreshing ? 'height 0.2s' : 'none',
-          overflow: 'hidden',
-          pointerEvents: 'none',
-        }}>
+      {/* ── Pull-to-refresh indicator ── */}
+      {(pullDistance > 0 || pullRefreshing) && (() => {
+        const progress = Math.min(pullDistance / PULL_THRESHOLD, 1);
+        const circleSize = 44;
+        const radius = 16;
+        const circumference = 2 * Math.PI * radius;
+        const dashOffset = circumference * (1 - (pullTriggered ? 1 : progress));
+        const rotate = pullTriggered || pullRefreshing ? 180 : progress * 200;
+
+        return (
           <div style={{
-            background: '#fff',
-            borderRadius: '50%',
-            width: 36, height: 36,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-            transform: pullRefreshing ? 'none' : `rotate(${pullDistance * 2}deg)`,
-            transition: pullRefreshing ? 'transform 0.6s linear' : 'none',
-            animation: pullRefreshing ? 'spin 0.7s linear infinite' : 'none',
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+            display: 'flex', justifyContent: 'center',
+            paddingTop: 10,
+            pointerEvents: 'none',
           }}>
-            {pullRefreshing ? '🔄' : '↓'}
+            <div style={{
+              width: circleSize, height: circleSize,
+              borderRadius: '50%',
+              background: pullTriggered || pullRefreshing
+                ? 'linear-gradient(135deg, #8B0000, #c0392b)'
+                : 'rgba(255,255,255,0.97)',
+              boxShadow: pullTriggered || pullRefreshing
+                ? '0 4px 20px rgba(139,0,0,0.4)'
+                : '0 2px 14px rgba(0,0,0,0.18)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transform: `scale(${0.65 + progress * 0.35})`,
+              transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
+            }}>
+              {pullRefreshing ? (
+                <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`}
+                  style={{ position: 'absolute', animation: 'ptr-spin 0.75s linear infinite' }}>
+                  <circle cx={circleSize/2} cy={circleSize/2} r={radius}
+                    fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" />
+                  <circle cx={circleSize/2} cy={circleSize/2} r={radius}
+                    fill="none" stroke="#fff" strokeWidth="2.5"
+                    strokeDasharray={circumference} strokeDashoffset={circumference * 0.72}
+                    strokeLinecap="round"
+                    transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} />
+                </svg>
+              ) : (
+                <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`}
+                  style={{ position: 'absolute' }}>
+                  <circle cx={circleSize/2} cy={circleSize/2} r={radius}
+                    fill="none" stroke="rgba(139,0,0,0.12)" strokeWidth="2.5" />
+                  <circle cx={circleSize/2} cy={circleSize/2} r={radius}
+                    fill="none" stroke={pullTriggered ? '#fff' : '#8B0000'} strokeWidth="2.5"
+                    strokeDasharray={circumference} strokeDashoffset={dashOffset}
+                    strokeLinecap="round"
+                    transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`}
+                    style={{ transition: 'stroke-dashoffset 0.06s, stroke 0.2s' }} />
+                </svg>
+              )}
+              <svg width="16" height="16" viewBox="0 0 16 16" style={{
+                position: 'relative', zIndex: 1,
+                transform: `rotate(${rotate}deg)`,
+                transition: pullTriggered ? 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1)' : 'transform 0.1s',
+              }}>
+                <path d="M8 2 L8 11 M4 7 L8 11 L12 7"
+                  stroke={pullTriggered || pullRefreshing ? '#fff' : '#8B0000'}
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"
+                  style={{ transition: 'stroke 0.2s' }} />
+              </svg>
+            </div>
           </div>
-        </div>
-      )}
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(localStorage.getItem(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
+        );
+      })()}
+      <style>{`
+        @keyframes ptr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+      {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
       {view === 'students' && renderStudents()}
       {view === 'categories' && renderCategories()}
       {view === 'evaluations' && renderEvaluations()}
@@ -2742,6 +4307,7 @@ function App() {
       {renderPrintQRs()}
       {showScanner && (
         <DocumentScanner
+          bulkMode={true}
           onCapture={handleScanCapture}
           onClose={() => { setShowScanner(false); setScanningExamId(null); }}
         />
@@ -2751,6 +4317,20 @@ function App() {
           images={imageViewer.images}
           startIndex={imageViewer.index}
           onClose={() => setImageViewer(null)}
+        />
+      )}
+      {showSettings && (
+        <SettingsPage
+          batches={batches}
+          onClose={() => setShowSettings(false)}
+          API={API}
+        />
+      )}
+      {showProgressChart && progressChartStudent && (
+        <ProgressChart
+          student={progressChartStudent}
+          batch={selectedBatch}
+          onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
         />
       )}
     </div>
