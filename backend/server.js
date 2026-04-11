@@ -229,6 +229,17 @@ app.post('/api/batches', async (req, res) => {
   try { const b = new Batch({ name: req.body.name, name_ja: req.body.name_ja || '', teacherId: req.body.teacherId || null, students: [] }); await b.save(); res.json(b); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.patch('/api/batches/:batchId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    if (req.body.name !== undefined) batch.name = req.body.name;
+    if (req.body.name_ja !== undefined) batch.name_ja = req.body.name_ja;
+    await batch.save();
+    res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/batches/:batchId', async (req, res) => {
   try { await Batch.findByIdAndDelete(req.params.batchId); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -293,6 +304,19 @@ app.post('/api/batches/:batchId/students/:studentId/categories', async (req, res
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.patch('/api/batches/:batchId/students/:studentId/categories/:catId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    const cat = student.categories.id(req.params.catId);
+    if (!cat) return res.status(404).json({ error: 'Category not found' });
+    if (req.body.name !== undefined) cat.name = req.body.name;
+    if (req.body.name_ja !== undefined) cat.name_ja = req.body.name_ja;
+    await batch.save();
+    res.json(batch);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/batches/:batchId/students/:studentId/categories/:catId', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
@@ -312,6 +336,23 @@ app.post('/api/batches/:batchId/students/:studentId/categories/:catId/items', as
     cat.items.push(newItem);
     await batch.save();
     res.json(cat.items[cat.items.length - 1]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    const student = batch.students.id(req.params.studentId);
+    const cat = student.categories.id(req.params.catId);
+    const item = cat.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (req.body.name !== undefined) item.name = req.body.name;
+    if (req.body.name_ja !== undefined) item.name_ja = req.body.name_ja;
+    if (req.body.score !== undefined) item.score = req.body.score;
+    if (req.body.totalScore !== undefined) item.totalScore = req.body.totalScore;
+    if (req.body.date !== undefined) item.date = req.body.date;
+    await batch.save();
+    res.json(item);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

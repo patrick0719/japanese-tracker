@@ -3,15 +3,23 @@ import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
 
-// Returns the correct name based on logged-in role
-// Admin/PHGIC → English name, Kumiai → Japanese name (fallback to English)
+// Returns correct name based on logged-in role
 function displayName(item) {
   try {
     const role = localStorage.getItem('sage_role') || 'admin';
-    const jaRoles = ['setouchi','wbc','gyoumusuishin','greenservices'];
-    if (jaRoles.includes(role) && item?.name_ja) return item.name_ja;
+    if (['setouchi','wbc','gyoumusuishin','greenservices'].includes(role) && item?.name_ja) return item.name_ja;
   } catch {}
   return item?.name || '';
+}
+
+// Inject dark mode CSS variables into :root
+function applyDarkMode(dark) {
+  const root = document.documentElement;
+  if (dark) {
+    root.setAttribute('data-theme', 'dark');
+  } else {
+    root.removeAttribute('data-theme');
+  }
 }
 
 const API = 'https://japanese-tracker.onrender.com/api';
@@ -2220,6 +2228,10 @@ function App() {
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newKumiai, setNewKumiai] = useState('');
   const [newNameJa, setNewNameJa] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem('sage_dark') === 'true'; } catch { return false; }
+  });
   const [saving, setSaving] = useState(false);
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
@@ -2318,6 +2330,12 @@ function App() {
       }
     }
   }, []);
+
+  // Apply dark mode on mount and whenever it changes
+  useEffect(() => {
+    applyDarkMode(darkMode);
+    try { localStorage.setItem('sage_dark', darkMode); } catch {}
+  }, [darkMode]);
 
   const fetchBatches = async (teacherId) => {
     try {
@@ -2480,7 +2498,7 @@ function App() {
 
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
-    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewCompanyName(''); setNewNameJa('');
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewCompanyName(''); setNewNameJa(''); setEditingCategory(null);
   };
   const openEditStudent = (student, e) => {
     e.stopPropagation();
@@ -2496,6 +2514,7 @@ function App() {
   const closeModal = () => {
     setShowModal(false);
     setEditingStudent(null);
+    setEditingCategory(null);
     setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai(''); setNewNameJa('');
   };
 
@@ -2647,6 +2666,23 @@ function App() {
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) setSelectedStudent(updatedStudent);
     } catch { alert('Error deleting category.'); }
+  };
+
+  const updateCategory = async () => {
+    if (!newName || !editingCategory) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${editingCategory._id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, name_ja: newNameJa })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
+      if (updatedStudent) setSelectedStudent(updatedStudent);
+      closeModal();
+    } catch { alert('Error updating category.'); }
+    setSaving(false);
   };
 
   const deleteExamItem = async (itemId, e) => {
@@ -3138,6 +3174,9 @@ function App() {
             {!isViewer && (
               <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">{t('switch')}</button>
             )}
+            <button onClick={() => setDarkMode(d => !d)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Toggle Dark Mode">
+                {darkMode ? '☀️' : '🌙'}
+              </button>
             {safeLocalGet(ROLE_KEY) === 'admin' && (
               <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
                 ⚙️
@@ -3344,7 +3383,13 @@ function App() {
                   <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="exam-right">
-                  {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>}
+                  {!isViewer && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
+                        onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}>✎</button>
+                      <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -3832,7 +3877,7 @@ function App() {
 
   const renderModal = () => {
     if (!showModal) return null;
-    const titles = { batch: t('addNewBatchModal'), student: t('addNewStudentModal'), editStudent: t('editStudentModal'), category: t('addExamCategory'), exam: t('addNewExam'), evaluation: t('newEvaluation') };
+    const titles = { batch: t('addNewBatchModal'), student: t('addNewStudentModal'), editStudent: t('editStudentModal'), category: t('addExamCategory'), editCategory: t('editCategoryModal'), exam: t('addNewExam'), evaluation: t('newEvaluation') };
     return (
       <div className="modal-overlay">
         <div className="modal-sheet">
@@ -3852,7 +3897,7 @@ function App() {
                 This will be saved as the <strong>{['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th'][evaluations.length] || `${evaluations.length+1}th`} Evaluation</strong>.
               </p>
             </>
-          ) : modalType === 'category' ? (
+          ) : modalType === 'category' || modalType === 'editCategory' ? (
             <div className="form-group">
               <label>{t('categoryName')}</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('categoryPlaceholder')} />
@@ -3946,7 +3991,7 @@ function App() {
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
             <button className="btn-secondary" onClick={closeModal} disabled={saving} style={{ flex: 1 }}>{t('cancel')}</button>
             <button className="btn-primary" disabled={saving} style={{ flex: 2 }}
-              onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'category' ? saveCategory : saveExamItem}>
+              onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'editCategory' ? updateCategory : modalType === 'category' ? saveCategory : saveExamItem}>
               {saving ? t('saving') : t('save')}
             </button>
           </div>
@@ -4244,6 +4289,107 @@ function App() {
       onTouchEnd={onTouchEnd}
       style={{ position: 'relative' }}
     >
+      {/* ── Dark mode global styles ── */}
+      <style>{`
+        :root {
+          --bg-primary: #f2f2f7;
+          --bg-card: #ffffff;
+          --bg-card2: #f9f9f9;
+          --bg-input: #ffffff;
+          --text-primary: #1c1c1e;
+          --text-secondary: #3a3a3c;
+          --text-tertiary: #8e8e93;
+          --border-color: #e5e5ea;
+          --header-bg: linear-gradient(135deg, #8B0000, #c0392b);
+          --accent: #8B0000;
+          --green: #34C759;
+          --green-soft: #e8f5e9;
+          --amber: #ff9500;
+          --amber-soft: #fff8e1;
+          --red: #ff3b30;
+          --red-soft: #ffebee;
+          --shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        [data-theme="dark"] {
+          --bg-primary: #1c1c1e;
+          --bg-card: #2c2c2e;
+          --bg-card2: #3a3a3c;
+          --bg-input: #3a3a3c;
+          --text-primary: #ffffff;
+          --text-secondary: #ebebf5cc;
+          --text-tertiary: #ebebf599;
+          --border-color: #48484a;
+          --header-bg: linear-gradient(135deg, #6b0000, #922b21);
+          --accent: #ff6b6b;
+          --green: #30d158;
+          --green-soft: #1a2e1a;
+          --amber: #ffd60a;
+          --amber-soft: #2e2a1a;
+          --red: #ff453a;
+          --red-soft: #2e1a1a;
+          --shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        [data-theme="dark"] body,
+        [data-theme="dark"] #root {
+          background: var(--bg-primary) !important;
+          color: var(--text-primary) !important;
+        }
+        [data-theme="dark"] .card,
+        [data-theme="dark"] .login-card,
+        [data-theme="dark"] .modal-sheet,
+        [data-theme="dark"] .teacher-card,
+        [data-theme="dark"] .section-box,
+        [data-theme="dark"] .eval-hero {
+          background: var(--bg-card) !important;
+          border-color: var(--border-color) !important;
+          color: var(--text-primary) !important;
+        }
+        [data-theme="dark"] .card-title,
+        [data-theme="dark"] .card-subtitle,
+        [data-theme="dark"] .section-title,
+        [data-theme="dark"] .modal-title,
+        [data-theme="dark"] .exam-list-name,
+        [data-theme="dark"] .exam-detail-title,
+        [data-theme="dark"] .student-profile-name,
+        [data-theme="dark"] .title {
+          color: var(--text-primary) !important;
+        }
+        [data-theme="dark"] input,
+        [data-theme="dark"] textarea,
+        [data-theme="dark"] select {
+          background: var(--bg-input) !important;
+          color: var(--text-primary) !important;
+          border-color: var(--border-color) !important;
+        }
+        [data-theme="dark"] .add-button,
+        [data-theme="dark"] .print-qr-button {
+          background: var(--bg-card) !important;
+          color: var(--accent) !important;
+          border-color: var(--accent) !important;
+        }
+        [data-theme="dark"] .exam-list-card,
+        [data-theme="dark"] .exam-page-card {
+          background: var(--bg-card) !important;
+          border-color: var(--border-color) !important;
+        }
+        [data-theme="dark"] .modal-overlay {
+          background: rgba(0,0,0,0.75) !important;
+        }
+        [data-theme="dark"] .logged-in-label {
+          color: rgba(255,255,255,0.7) !important;
+        }
+        [data-theme="dark"] .badge-view-only {
+          background: rgba(255,255,255,0.15) !important;
+          color: #fff !important;
+        }
+        [data-theme="dark"] .form-group label {
+          color: var(--text-secondary) !important;
+        }
+        [data-theme="dark"] .teacher-screen,
+        [data-theme="dark"] .login-screen {
+          background: var(--bg-primary) !important;
+        }
+      `}</style>
       {/* ── Pull-to-refresh indicator ── */}
       {(pullDistance > 0 || pullRefreshing) && (() => {
         const progress = Math.min(pullDistance / PULL_THRESHOLD, 1);
