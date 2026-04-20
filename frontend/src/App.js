@@ -3123,7 +3123,7 @@ function App() {
           <div className="top-row">
             <div>
               <p className="logged-in-label">{t('loggedInAs')}</p>
-              <h1 className="title">{kumiaiDisplayName}</h1>
+              <h1 className="title kumiai-title">{kumiaiDisplayName}</h1>
             </div>
             <div className="top-row-actions">
               <span className="badge-view-only">{t('viewOnly')}</span>
@@ -3182,7 +3182,7 @@ function App() {
             )}
             <div>
               <p className="logged-in-label">{t('loggedInAs')}</p>
-              <h1 className="title">
+              <h1 className={`title${isViewer && safeLocalGet(ROLE_KEY) !== 'viewer' ? ' kumiai-title' : ''}`}>
                 {isViewer
                   ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI TECH COOPERATIVE ASSOCIATION'
                     : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WORLD BUSINESS COOPERATIVE'

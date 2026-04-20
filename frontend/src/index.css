@@ -125,8 +125,16 @@
      pointer-events: none;
    }
    
-   .header-banner .logged-in-label { font-size: 11px; color: var(--text-on-dark-2); font-weight: 500; margin-bottom: 2px; }
+   .header-banner .logged-in-label { font-size: 11px; color: var(--text-on-dark-2); font-weight: 500; margin-bottom: 3px; }
    .header-banner .title { color: var(--text-on-dark); font-size: 24px; }
+   .header-banner .title.kumiai-title {
+     font-size: 14px;
+     font-weight: 700;
+     letter-spacing: 0.02em;
+     line-height: 1.3;
+     text-transform: uppercase;
+     color: rgba(240,240,248,0.92);
+   }
    .header-banner .badge-view-only { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.75); border-color: rgba(255,255,255,0.15); }
    .header-banner .btn-logout { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.7); box-shadow: none; }
    .header-banner .btn-logout:hover { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.6); color: #fca5a5; }
