@@ -4000,7 +4000,7 @@ function App() {
                         <option value="FURUSAWA CORPORATION">FURUSAWA CORPORATION</option>
                         <option value="HAGIWARA HIGHLAND FARM AGRICULTURAL ASSOCIATION CORPORATION">HAGIWARA HIGHLAND FARM AGRICULTURAL ASSOCIATION CORPORATION</option>
                         <option value="HASEGAWA CORPORATION">HASEGAWA CORPORATION</option>
-                        <option value="JOIN(GOUDOU) COMPANY KUROKI FARM">JOIN(GOUDOU) COMPANY KUROKI FARM</option>
+                        <option value="JOIN(GOUDOU) COMPANY KUROKI FARM">JOIN (GOUDOU) COMPANY KUROKI FARM</option>
                         <option value="KUBOTA TAKESHI">KUBOTA TAKESHI</option>
                         <option value="KUDOU SEIICHI">KUDOU SEIICHI</option>
                         <option value="L AUTO CO., LTD">L AUTO CO., LTD</option>
