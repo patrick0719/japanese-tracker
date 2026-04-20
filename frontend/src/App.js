@@ -3992,8 +3992,10 @@ function App() {
                         <option value="ENDO MANUFACTURING CO., LTD">ENDO MANUFACTURING CO., LTD</option>
                         <option value="ES SEAL CO., LTD">ES SEAL CO., LTD</option>
                         <option value="ETOU HIDEKI">ETOU HIDEKI</option>
+                        <option value="FURUSAWA CORPORATION">FURUSAWA CORPORATION</option>
                         <option value="HAGIWARA HIGHLAND FARM AGRICULTURAL ASSOCIATION CORPORATION">HAGIWARA HIGHLAND FARM AGRICULTURAL ASSOCIATION CORPORATION</option>
                         <option value="HASEGAWA CORPORATION">HASEGAWA CORPORATION</option>
+                        <option value="JOIN(GOUDOU) COMPANY KUROKI FARM">JOIN(GOUDOU) COMPANY KUROKI FARM</option>
                         <option value="KUBOTA TAKESHI">KUBOTA TAKESHI</option>
                         <option value="KUDOU SEIICHI">KUDOU SEIICHI</option>
                         <option value="L AUTO CO., LTD">L AUTO CO., LTD</option>
@@ -4051,7 +4053,7 @@ function App() {
                         <option value="NAKAMOTOKIKOU CO., LTD">NAKAMOTO KIKOU CO., LTD</option>
                         <option value="MISAKIKANKOU CO., LTD">MISAKIKANKOU CO., LTD</option>
                         <option value="KAMEI INDUSTRY CO., LTD">KAMEI INDUSTRY CO., LTD</option>
-                        
+
                       </select>
                     ) : (
                       <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
