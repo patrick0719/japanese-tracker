@@ -3968,7 +3968,7 @@ function App() {
                 <>
                   <div className="form-group">
                     <label>{t('kumiai')}</label>
-                    <select value={newKumiai} onChange={(e) => setNewKumiai(e.target.value)}
+                    <select value={newKumiai} onChange={(e) => { setNewKumiai(e.target.value); setNewCompanyName(''); }}
                       style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
                       <option value="">— {t('selectKumiai')} —</option>
                       <option value="Setouchi">Setouchi</option>
@@ -3979,8 +3979,84 @@ function App() {
                   </div>
                   <div className="form-group">
                     <label>{t('companyName')}</label>
-                    <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
-                      placeholder={t('companyPlaceholder')} />
+                    {newKumiai === 'Setouchi' ? (
+                      <select value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
+                        <option value="">— Select Company —</option>
+                        <option value="AISHIN KIKOU CO., LTD">AISHIN KIKOU CO., LTD</option>
+                        <option value="ANAN SUEO">ANAN SUEO</option>
+                        <option value="BIZAN FOODS CO., LTD">BIZAN FOODS CO., LTD</option>
+                        <option value="CORPORATION FURUSAWA FARM">CORPORATION FURUSAWA FARM</option>
+                        <option value="CORPORATION KUBOTA FARM">CORPORATION KUBOTA FARM</option>
+                        <option value="D CRAFT CO., LTD">D CRAFT CO., LTD</option>
+                        <option value="ENDO MANUFACTURING CO., LTD">ENDO MANUFACTURING CO., LTD</option>
+                        <option value="ES SEAL CO., LTD">ES SEAL CO., LTD</option>
+                        <option value="ETOU HIDEKI">ETOU HIDEKI</option>
+                        <option value="HAGIWARA HIGHLAND FARM AGRICULTURAL ASSOCIATION CORPORATION">HAGIWARA HIGHLAND FARM AGRICULTURAL ASSOCIATION CORPORATION</option>
+                        <option value="HASEGAWA CORPORATION">HASEGAWA CORPORATION</option>
+                        <option value="KUBOTA TAKESHI">KUBOTA TAKESHI</option>
+                        <option value="KUDOU SEIICHI">KUDOU SEIICHI</option>
+                        <option value="L AUTO CO., LTD">L AUTO CO., LTD</option>
+                        <option value="LWC CORPORATION">LWC CORPORATION</option>
+                        <option value="M FARM CO., LTD">M FARM CO., LTD</option>
+                        <option value="MIYABI CORPORATION">MIYABI CORPORATION</option>
+                        <option value="MT SHOJI CO., LTD ">MT SHOJI CO., LTD </option>
+                        <option value="NAKAGAWA MANUFACTURING CO., LTD">NAKAGAWA MANUFACTURING CO., LTD</option>
+                        <option value="NARIMATSU MASANAO">NARIMATSU MASANAO</option>
+                        <option value="NISHIMURA HIRONORI">NISHIMURA HIRONORI</option>
+                        <option value="NOUJI COOPERATIVE ASSOCIATION YOSHIURA RANCH">NOUJI COOPERATIVE ASSOCIATION YOSHIURA RANCH</option>
+                        <option value="OKAMURA TSUYOSHI">OKAMURA TSUYOSHI</option>
+                        <option value="OKAZAKI CO., LTD">OKAZAKI CO., LTD</option>
+                        <option value="OROCHI CO., LTD ">OROCHI CO., LTD </option>
+                        <option value="SANKO LIMITED COMPANY">SANKO LIMITED COMPANY</option>
+                        <option value="SAWADA HIDEO">SAWADA HIDEO</option>
+                        <option value="SEKITO INDUSTRY CO., LTD">SEKITO INDUSTRY CO., LTD</option>
+                        <option value="SHINSEIKOUGYOU CO., LTD">SHINSEIKOUGYOU CO., LTD</option>
+                        <option value="SHIRAHAMA SHINICHI">SHIRAHAMA SHINICHI</option>
+                        <option value="SHOKI CO., LTD">SHOKI CO., LTD</option>
+                        <option value="SHOUIE KOUGYOU CO., LTD">SHOUIE KOUGYOU CO., LTD</option>
+                        <option value="SUNRISE CORPORATION">SUNRISE CORPORATION</option>
+                        <option value="TAKAYAMA WELDER CO., LTD">TAKAYAMA WELDER CO., LTD</option>
+                        <option value="TAKEDA CO., LTD">TAKEDA CO., LTD</option>
+                        <option value="TSUCHIDA HIROYUKI">TSUCHIDA HIROYUKI</option>
+                        <option value="UCHIMURAGUMI CO., LTD">UCHIMURAGUMI CO., LTD</option>
+                        <option value="UEDA KOUJI">UEDA KOUJI</option>
+                        <option value="WEST HILL CO., LTD">WEST HILL CO., LTD</option>
+                        <option value="YABETEKKIN KOUGYOU CORPORATION">YABETEKKIN KOUGYOU CORPORATION</option>
+                        <option value="YAMADA KENJI">YAMADA KENJI</option>
+                        <option value="YASUDA PAINT CO., LTD">YASUDA PAINT CO., LTD</option>
+                      </select>
+                    ) : newKumiai === 'Gyoumusuishin' ? (
+                      <select value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
+                        <option value="">— Select Company —</option>
+                        <option value="KAGOSHIMA KIMOTSUKI AGRICULTURAL COOPERATIVE">KAGOSHIMA KIMOTSUKI AGRICULTURAL COOPERATIVE</option>
+                        <option value="NAITO SATOSHI">NAITO SATOSHI</option>
+                        <option value="CO., LTD KAMIKUBO LIVESTOCK">CO., LTD KAMIKUBO LIVESTOCK</option>
+                        <option value="CO., LTD KIMURA DAIRY FARM">CO., LTDKIMURA DAIRY FARM</option>
+                        <option value="KIRA FOOD CO., LTD">KIRA FOOD CO., LTD</option>
+                        <option value="MARUYAMA FARM CO., LTD">MARUYAMA FARM CO., LTD</option>
+                        <option value="YAMASHITA HIDENNOBU">YAMASHITA HIDENNOBU</option>
+                        <option value="AGRICULTURAL UNION CORPORATION KAMOTO POULTRY FARMING ASSOCIATION">AGRICULTURAL UNION CORPORATION KAMOTO POULTRY FARMING ASSOCIATION</option>
+                        <option value="CO., LTD SASSA RANCH">CO., LTD SASSA RANCH</option>
+                        <option value="CO., LTD PAC">CO., LTD PAC</option>
+                      </select>
+                    ) : newKumiai === 'WBC' ? (
+                      <select value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
+                        <option value="">— Select Company —</option>
+                        <option value="KANAI METAL INDUSTRY CO., LTD">KANAI METAL INDUSTRY CO., LTD</option>
+                        <option value="KAJIHARA KIKO CO., LTD">KAJIHARA KIKO CO., LTD</option>
+                        <option value="HAYASHI SHOTEN CO., LTD">HAYASHI SHOTEN CO., LTD</option>
+                        <option value="NAKAMOTOKIKOU CO., LTD">NAKAMOTO KIKOU CO., LTD</option>
+                        <option value="MISAKIKANKOU CO., LTD">MISAKIKANKOU CO., LTD</option>
+                        <option value="KAMEI INDUSTRY CO., LTD">KAMEI INDUSTRY CO., LTD</option>
+                        
+                      </select>
+                    ) : (
+                      <input type="text" value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
+                        placeholder={t('companyPlaceholder')} />
+                    )}
                   </div>
                 </>
               )}
