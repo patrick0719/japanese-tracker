@@ -3049,6 +3049,11 @@ function App() {
       : role === 'gyoumusuishin' ? 'Gyoumusuishin'
       : 'Green Services';
 
+    const kumiaiDisplayName = role === 'setouchi' ? 'SETOUCHI TECH COOPERATIVE ASSOCIATION'
+      : role === 'wbc' ? 'WORLD BUSINESS COOPERATIVE'
+      : role === 'gyoumusuishin' ? 'GYOUMU SUISHIN COOPERATIVE ASSOCIATION'
+      : 'Green Services';
+
     const allStudents = [];
     batches.forEach(batch => {
       batch.students
@@ -3118,7 +3123,7 @@ function App() {
           <div className="top-row">
             <div>
               <p className="logged-in-label">{t('loggedInAs')}</p>
-              <h1 className="title">{kumiai}</h1>
+              <h1 className="title">{kumiaiDisplayName}</h1>
             </div>
             <div className="top-row-actions">
               <span className="badge-view-only">{t('viewOnly')}</span>
@@ -3179,9 +3184,9 @@ function App() {
               <p className="logged-in-label">{t('loggedInAs')}</p>
               <h1 className="title">
                 {isViewer
-                  ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI'
-                    : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WBC'
-                    : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMUSUISHIN'
+                  ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI TECH COOPERATIVE ASSOCIATION'
+                    : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WORLD BUSINESS COOPERATIVE'
+                    : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMU SUISHIN COOPERATIVE ASSOCIATION'
                     : safeLocalGet(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
                     : 'PHGIC')
                   : selectedTeacher?.name}
