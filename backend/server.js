@@ -811,92 +811,19 @@ app.get('/api/admin/server-stats', async (req, res) => {
     const imageCount = await Image.countDocuments();
     const teacherCount = await Teacher.countDocuments();
 
-    // ── Render API: real billing usage ───────────────────────────────────────
-    let renderBilling = null;
-    const RENDER_API_KEY = process.env.RENDER_API_KEY;
-    if (RENDER_API_KEY) {
-      try {
-        // 1. Get list of services
-        const svcRes = await fetch('https://api.render.com/v1/services?limit=20&type=web_service', {
-          headers: { Authorization: `Bearer ${RENDER_API_KEY}`, Accept: 'application/json' }
-        });
-        const svcData = await svcRes.json();
-
-        // 2. Get bandwidth usage for this month
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const bwRes = await fetch(
-          `https://api.render.com/v1/metrics/bandwidth?startTime=${startOfMonth}&endTime=${now.toISOString()}`,
-          { headers: { Authorization: `Bearer ${RENDER_API_KEY}`, Accept: 'application/json' } }
-        );
-        const bwData = await bwRes.json();
-
-        // 3. Parse services
-        const services = Array.isArray(svcData) ? svcData.map(s => s.service || s) : [];
-        const thisService = services.find(s =>
-          s?.serviceDetails?.url?.includes('japanese-tracker') ||
-          s?.name?.toLowerCase().includes('japanese') ||
-          s?.name?.toLowerCase().includes('tracker')
-        ) || services[0];
-
-        // 4. Compute estimated instance hours from deploy createdAt
-        // Render free tier: 750 hrs/month per workspace
-        const LIMIT = 750;
-        const hoursThisMonth = (Date.now() - new Date(now.getFullYear(), now.getMonth(), 1).getTime()) / (1000 * 60 * 60);
-        const hoursUsed = parseFloat(Math.min(hoursThisMonth, LIMIT).toFixed(1));
-        const hoursLeft = parseFloat(Math.max(LIMIT - hoursUsed, 0).toFixed(1));
-
-        // 5. Bandwidth total in bytes
-        let totalBandwidthBytes = 0;
-        if (Array.isArray(bwData)) {
-          totalBandwidthBytes = bwData.reduce((sum, point) => sum + (point.value || 0), 0);
-        } else if (bwData?.data) {
-          totalBandwidthBytes = bwData.data.reduce((sum, point) => sum + (point.value || 0), 0);
-        }
-
-        renderBilling = {
-          hoursUsed,
-          hoursLeft,
-          limitHours: LIMIT,
-          percentUsed: parseFloat(((hoursUsed / LIMIT) * 100).toFixed(1)),
-          willSuspend: hoursLeft < 50,
-          bandwidthUsedBytes: totalBandwidthBytes,
-          bandwidthLimitBytes: 100 * 1024 * 1024 * 1024, // 100GB free tier limit
-          services: services.map(s => ({
-            name: s?.name || '—',
-            status: s?.suspended || 'not_suspended',
-            url: s?.serviceDetails?.url || null,
-            plan: s?.serviceDetails?.plan || s?.plan || 'free',
-            region: s?.serviceDetails?.region || '—',
-            createdAt: s?.createdAt || null,
-          })),
-          thisService: thisService ? {
-            name: thisService?.name,
-            status: thisService?.suspended,
-            url: thisService?.serviceDetails?.url,
-            plan: thisService?.serviceDetails?.plan || 'free',
-          } : null,
-          apiAvailable: true,
-        };
-      } catch (renderErr) {
-        console.error('[render-api]', renderErr.message);
-        renderBilling = { apiAvailable: false, error: renderErr.message };
-      }
-    } else {
-      // Fallback: estimate from calendar time
-      const now = new Date();
-      const hoursThisMonth = (Date.now() - new Date(now.getFullYear(), now.getMonth(), 1).getTime()) / (1000 * 60 * 60);
-      const LIMIT = 750;
-      renderBilling = {
-        hoursUsed: parseFloat(Math.min(hoursThisMonth, LIMIT).toFixed(1)),
-        hoursLeft: parseFloat(Math.max(LIMIT - hoursThisMonth, 0).toFixed(1)),
-        limitHours: LIMIT,
-        percentUsed: parseFloat((Math.min(hoursThisMonth, LIMIT) / LIMIT * 100).toFixed(1)),
-        willSuspend: (LIMIT - hoursThisMonth) < 50,
-        apiAvailable: false,
-        error: 'RENDER_API_KEY not set — showing calendar estimate',
-      };
-    }
+    // ── Railway: walang Instance Hours limit — always running ─────────────────
+    // Expose Railway environment info from env vars (auto-set by Railway)
+    const railway = {
+      platform: 'Railway',
+      environment: process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV || 'production',
+      region: process.env.RAILWAY_REGION || 'asia-southeast1',
+      serviceName: process.env.RAILWAY_SERVICE_NAME || 'japanese-tracker',
+      deploymentId: process.env.RAILWAY_DEPLOYMENT_ID || null,
+      replicaId: process.env.RAILWAY_REPLICA_ID || null,
+      // Railway Hobby plan: always on, no instance hour limits
+      alwaysOn: true,
+      plan: 'Hobby',
+    };
 
     res.json({
       uptime: uptimeStr,
@@ -911,7 +838,7 @@ app.get('/api/admin/server-stats', async (req, res) => {
         total: requestCount,
         thisHour: requestCountThisHour,
       },
-      render: renderBilling,
+      railway,
       database: {
         status: dbStateLabel,
         batches: batchCount,
@@ -921,7 +848,7 @@ app.get('/api/admin/server-stats', async (req, res) => {
       node: {
         version: process.version,
         platform: process.platform,
-        env: process.env.NODE_ENV || 'development',
+        env: process.env.NODE_ENV || 'production',
       },
       timestamp: new Date().toISOString(),
     });
