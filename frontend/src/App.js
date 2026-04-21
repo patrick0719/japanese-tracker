@@ -18,7 +18,7 @@ function applyDarkMode(dark) {
   else document.documentElement.removeAttribute('data-theme');
 }
 
-const API = 'https://japanese-tracker-production.up.railway.app/api';
+const API = 'https://YOUR-RAILWAY-URL.up.railway.app/api'; // TODO: palitan ng Railway URL mo pagkatapos mag-deploy
 // TODO: set REACT_APP_CLOUDINARY_CLOUD and REACT_APP_CLOUDINARY_PRESET in your .env file
 const CLOUDINARY_CLOUD = process.env.REACT_APP_CLOUDINARY_CLOUD || 'daofbq9wz';
 const CLOUDINARY_PRESET = process.env.REACT_APP_CLOUDINARY_PRESET || 'cnbztuzc';
@@ -1729,9 +1729,7 @@ useEffect(() => {
               const mem = serverStats.memory;
               const memPct = Math.round((mem.used / mem.total) * 100);
               const memColor = memPct > 85 ? '#ff3b30' : memPct > 65 ? '#ff9500' : '#34C759';
-              const r = serverStats.render;
-              const renderPct = r.percentUsed;
-              const renderColor = renderPct > 90 ? '#ff3b30' : renderPct > 70 ? '#ff9500' : '#34C759';
+              const rw = serverStats.railway || {};
               const fmtBytes = (b) => {
                 if (!b) return '0 B';
                 if (b < 1024) return b + ' B';
@@ -1739,90 +1737,32 @@ useEffect(() => {
                 if (b < 1024*1024*1024) return (b/(1024*1024)).toFixed(1) + ' MB';
                 return (b/(1024*1024*1024)).toFixed(2) + ' GB';
               };
-              const bwPct = r.bandwidthLimitBytes ? Math.min((r.bandwidthUsedBytes / r.bandwidthLimitBytes) * 100, 100) : 0;
-              const bwColor = bwPct > 85 ? '#ff3b30' : bwPct > 65 ? '#ff9500' : '#34C759';
 
               return (
                 <>
-                  {/* API source badge */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: r.apiAvailable ? '#f0fff4' : '#fffbe6', borderRadius: 10, fontSize: 12 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.apiAvailable ? '#34C759' : '#ff9500' }} />
-                    <span style={{ color: r.apiAvailable ? '#1a7f37' : '#856404', fontWeight: 600 }}>
-                      {r.apiAvailable ? '✅ Live data mula sa Render API' : '⚠️ Estimated data (walang API key)'}
-                    </span>
+                  {/* Railway Platform Badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'linear-gradient(135deg, #0f0f1a, #1a1a2e)', borderRadius: 12, fontSize: 12 }}>
+                    <span style={{ fontSize: 18 }}>🚂</span>
+                    <div>
+                      <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>Railway — {rw.plan || 'Hobby'}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11 }}>{rw.serviceName || 'japanese-tracker'} · {rw.region || 'asia-southeast1'} · {rw.environment || 'production'}</div>
+                    </div>
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#34C759', boxShadow: '0 0 6px #34C759' }} />
+                      <span style={{ color: '#34C759', fontWeight: 700, fontSize: 12 }}>Always On</span>
+                    </div>
                   </div>
 
-                  {/* Instance Hours Card */}
-                  <div style={{ background: r.willSuspend ? '#fff3f3' : '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>
-                      ⏱️ Instance Hours
-                      {r.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px' }}>⚠️ Malapit maubos!</span>}
+                  {/* Always On info card */}
+                  <div style={{ background: '#f0fff4', borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 20 }}>✅</span>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1a7f37' }}>Walang Instance Hours Limit</div>
+                      <div style={{ fontSize: 11, color: '#2e7d32', marginTop: 2 }}>Railway Hobby — palagi running, walang sleep, walang suspend. 🎉</div>
                     </div>
-                    <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included Usage — resets every 1st of month</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <div>
-                        <div style={{ fontSize: 32, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{r.hoursUsed}h</div>
-                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>nagamit ngayong buwan</div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: 32, fontWeight: 800, color: renderColor, lineHeight: 1 }}>{r.hoursLeft}h</div>
-                        <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>natitira sa {r.limitHours}h</div>
-                      </div>
-                    </div>
-                    <div style={{ background: '#f2f2f7', borderRadius: 99, height: 12, overflow: 'hidden', marginBottom: 8 }}>
-                      <div style={{ height: '100%', width: `${renderPct}%`, background: renderPct > 90 ? 'linear-gradient(90deg,#ff9500,#ff3b30)' : renderPct > 70 ? 'linear-gradient(90deg,#34C759,#ff9500)' : 'linear-gradient(90deg,#34C759,#30d158)', borderRadius: 99, transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)' }} />
-                    </div>
-                    <div style={{ fontSize: 12, color: '#8e8e93' }}>{renderPct}% ng 750h monthly limit</div>
-                    {r.willSuspend && (
-                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 600 }}>
-                        🚨 Bababa na sa 50 hours! Mag-migrate na o mag-upgrade bago ma-suspend ang app.
-                      </div>
-                    )}
                   </div>
 
-                  {/* Bandwidth Card */}
-                  {r.bandwidthUsedBytes !== undefined && (
-                    <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>🌐 Outbound Bandwidth</div>
-                      <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included: 100 GB</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <div>
-                          <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1 }}>{fmtBytes(r.bandwidthUsedBytes)}</div>
-                          <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>nagamit</div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: 24, fontWeight: 800, color: bwColor, lineHeight: 1 }}>{bwPct.toFixed(1)}%</div>
-                          <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 2 }}>ng 100 GB</div>
-                        </div>
-                      </div>
-                      <div style={{ background: '#f2f2f7', borderRadius: 99, height: 10, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${bwPct}%`, background: bwColor, borderRadius: 99, transition: 'width 0.6s' }} />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Services List */}
-                  {r.services && r.services.length > 0 && (
-                    <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🚀 Render Services</div>
-                      {r.services.map((svc, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < r.services.length - 1 ? '1px solid #f2f2f7' : 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{ width: 9, height: 9, borderRadius: '50%', background: svc.status === 'not_suspended' ? '#34C759' : '#ff3b30', boxShadow: svc.status === 'not_suspended' ? '0 0 5px #34C759' : 'none', flexShrink: 0 }} />
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1c1c1e' }}>{svc.name}</div>
-                              <div style={{ fontSize: 11, color: '#8e8e93' }}>{svc.plan} · {svc.region}</div>
-                            </div>
-                          </div>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: svc.status === 'not_suspended' ? '#1a7f37' : '#c0392b', background: svc.status === 'not_suspended' ? '#f0fff4' : '#fff3f3', borderRadius: 6, padding: '3px 8px' }}>
-                            {svc.status === 'not_suspended' ? 'Running' : 'Suspended'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Memory */}
+                  {/* Memory Usage */}
                   <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🧠 Memory Usage</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -1883,6 +1823,17 @@ useEffect(() => {
                       ))}
                     </div>
                   </div>
+
+                  {/* Deployment Info */}
+                  {rw.deploymentId && (
+                    <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1c1c1e', marginBottom: 8 }}>🔧 Deployment Info</div>
+                      <div style={{ fontSize: 11, color: '#8e8e93', lineHeight: 1.8 }}>
+                        <div>Deployment ID: <span style={{ color: '#3a3a3c', fontWeight: 600, fontFamily: 'monospace' }}>{rw.deploymentId.slice(0, 16)}…</span></div>
+                        {rw.replicaId && <div>Replica ID: <span style={{ color: '#3a3a3c', fontWeight: 600, fontFamily: 'monospace' }}>{rw.replicaId.slice(0, 16)}…</span></div>}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Footer */}
                   <div style={{ background: '#f9f9f9', borderRadius: 14, padding: '12px 16px', fontSize: 12, color: '#8e8e93' }}>
