@@ -95,6 +95,8 @@ const batchSchema = new mongoose.Schema({
     isArchived: { type: Boolean, default: false },
     companyName: { type: String, default: '' },
     kumiai: { type: String, default: '' },
+    scholarship: { type: String, default: 'no' },
+    scholarshipType: { type: String, default: '' },
     categories: [{
       name: String,
       name_ja: { type: String, default: '' },
@@ -262,6 +264,8 @@ app.patch('/api/batches/:batchId/students/:studentId', async (req, res) => {
     if (req.body.status !== undefined) student.status = req.body.status;
     if (req.body.companyName !== undefined) student.companyName = req.body.companyName;
     if (req.body.kumiai !== undefined) student.kumiai = req.body.kumiai;
+    if (req.body.scholarship !== undefined) student.scholarship = req.body.scholarship;
+    if (req.body.scholarshipType !== undefined) student.scholarshipType = req.body.scholarshipType;
     await batch.save();
     res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
