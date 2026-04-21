@@ -68,6 +68,17 @@ function ImageViewer({ images, startIndex, onClose }) {
   const prev = () => setCurrent(i => Math.max(0, i - 1));
   const next = () => setCurrent(i => Math.min(images.length - 1, i + 1));
 
+  // Keyboard navigation: Escape closes, Left/Right arrows navigate
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') prev();
+      else if (e.key === 'ArrowRight') next();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
   const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
   const onTouchEnd = (e) => {
     if (touchStartX.current === null) return;
@@ -281,6 +292,14 @@ function ProgressChart({ student, batch, onClose }) {
     processChartData();
   }, [processChartData]);
 
+  // Cleanup PTR refresh timer on unmount to prevent setState on unmounted component
+  useEffect(() => {
+    return () => {
+      if (ptrRefreshingRef._timer) clearTimeout(ptrRefreshingRef._timer);
+      ptrRefreshingRef.current = false;
+    };
+  }, []);
+
   const renderChart = () => {
     if (!chartData || chartData.exams.length === 0) return null;
     
@@ -314,15 +333,22 @@ function ProgressChart({ student, batch, onClose }) {
       label: val + '%'
     }));
 
+    // Read CSS vars at render time so SVG respects dark mode
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const chartBg    = isDark ? '#2c2c2e' : '#f8f9fa';
+    const gridStroke = isDark ? '#48484a' : '#e5e5ea';
+    const labelFill  = isDark ? 'rgba(235,235,245,0.5)' : '#8e8e93';
+    const dotFill    = isDark ? '#2c2c2e' : '#fff';
+
     return (
       <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ maxWidth: 400 }}>
-        <rect x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} fill="#f8f9fa" rx={4} />
+        <rect x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} fill={chartBg} rx={4} />
         
         {gridLines.map((line, i) => (
           <g key={i}>
             <line x1={padding.left} y1={line.y} x2={width - padding.right} y2={line.y} 
-              stroke="#e5e5ea" strokeWidth={1} strokeDasharray="4,4" />
-            <text x={padding.left - 8} y={line.y + 4} textAnchor="end" fontSize={10} fill="#8e8e93">{line.label}</text>
+              stroke={gridStroke} strokeWidth={1} strokeDasharray="4,4" />
+            <text x={padding.left - 8} y={line.y + 4} textAnchor="end" fontSize={10} fill={labelFill}>{line.label}</text>
           </g>
         ))}
         
@@ -345,13 +371,13 @@ function ProgressChart({ student, batch, onClose }) {
         
         {exams.map((e, i) => (
           <g key={i}>
-            <circle cx={scaleX(i)} cy={scaleY(e.percentage)} r={5} fill="#fff" stroke="#007AFF" strokeWidth={2} />
+            <circle cx={scaleX(i)} cy={scaleY(e.percentage)} r={5} fill={dotFill} stroke="#007AFF" strokeWidth={2} />
             <title>{`${e.examName}\n${e.category}: ${e.score}/${e.total} (${e.percentage}%)\n${e.dateStr}`}</title>
           </g>
         ))}
         
         {exams.length <= 8 ? exams.map((e, i) => (
-          <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
+          <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill={labelFill} transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
             {e.dateStr.slice(5)}
           </text>
         )) : (() => {
@@ -360,7 +386,7 @@ function ProgressChart({ student, batch, onClose }) {
             .map((e, i) => ({ e, i }))
             .filter(({ i }) => i % step === 0)
             .map(({ e, i }) => (
-              <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill="#8e8e93" transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
+              <text key={i} x={scaleX(i)} y={height - 10} textAnchor="middle" fontSize={9} fill={labelFill} transform={`rotate(-45, ${scaleX(i)}, ${height - 10})`}>
                 {e.dateStr.slice(5)}
               </text>
             ));
@@ -406,7 +432,14 @@ function ProgressChart({ student, batch, onClose }) {
       setPtrTriggered(false); ptrTriggeredRef.current = false;
       setPtrRefreshing(true); ptrRefreshingRef.current = true;
       // re-process chart data (simulates refresh)
-      setTimeout(() => { processChartData(); setPtrRefreshing(false); ptrRefreshingRef.current = false; }, 800);
+      const timer = setTimeout(() => {
+        if (!ptrRefreshingRef.current) return; // guard: component may have unmounted
+        processChartData();
+        setPtrRefreshing(false);
+        ptrRefreshingRef.current = false;
+      }, 800);
+      // store timer so it can be cleared on unmount
+      ptrRefreshingRef._timer = timer;
     } else {
       ptrStartY.current = null;
       setPtrDist(0); ptrDistRef.current = 0;
@@ -422,7 +455,7 @@ function ProgressChart({ student, batch, onClose }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: '#f2f2f7', zIndex: 9999,
+      position: 'fixed', inset: 0, background: 'var(--bg-primary, #f2f2f7)', zIndex: 9999,
       display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif'
     }}>
       <div style={{
@@ -442,7 +475,7 @@ function ProgressChart({ student, batch, onClose }) {
       </div>
 
       <div style={{
-        background: '#fff', padding: '16px 20px', borderBottom: '1px solid #e5e5ea',
+        background: 'var(--bg-card, #fff)', padding: '16px 20px', borderBottom: '1px solid var(--border-color, #e5e5ea)',
         display: 'flex', alignItems: 'center', gap: 14
       }}>
         {student.photo ? (
@@ -453,12 +486,12 @@ function ProgressChart({ student, batch, onClose }) {
           <span style={{ fontSize: 40 }}>👤</span>
         )}
         <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1c1c1e' }}>{student.name}</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#8e8e93' }}>{batch?.name}</p>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary, #8e8e93)' }}>{batch?.name}</p>
           {student.companyName && (
             <span style={{
               display: 'inline-block', marginTop: 4,
-              background: '#e8f5e9', color: '#2e7d32',
+              background: 'var(--green-soft, #e8f5e9)', color: 'var(--green, #2e7d32)',
               fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12
             }}>🏢 {student.companyName}</span>
           )}
@@ -522,13 +555,13 @@ function ProgressChart({ student, batch, onClose }) {
                   },
             ].map((stat, i) => (
               <div key={i} style={{
-                background: '#fff', borderRadius: 14, padding: '16px 14px',
+                background: 'var(--bg-card, #fff)', borderRadius: 14, padding: '16px 14px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.06)', textAlign: 'center'
               }}>
                 <div style={{ fontSize: 24, marginBottom: 6 }}>{stat.icon}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
-                <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
-                {stat.sub && <div style={{ fontSize: 10, color: '#c7c7cc', marginTop: 2 }}>{stat.sub}</div>}
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary, #8e8e93)', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
+                {stat.sub && <div style={{ fontSize: 10, color: 'var(--text-tertiary, #c7c7cc)', marginTop: 2 }}>{stat.sub}</div>}
               </div>
             ))}
           </div>
@@ -571,10 +604,10 @@ function ProgressChart({ student, batch, onClose }) {
         })()}
 
         <div style={{
-          background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
+          background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
         }}>
-          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>⏱️ Time Range</p>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)' }}>⏱️ Time Range</p>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
               { id: 'all', label: 'All Time' },
@@ -584,8 +617,8 @@ function ProgressChart({ student, batch, onClose }) {
               <button key={opt.id} onClick={() => setTimeRange(opt.id)} style={{
                 flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none',
                 fontSize: 13, fontWeight: timeRange === opt.id ? 700 : 500,
-                background: timeRange === opt.id ? '#8B0000' : '#f2f2f7',
-                color: timeRange === opt.id ? '#fff' : '#3a3a3c',
+                background: timeRange === opt.id ? '#8B0000' : 'var(--bg-card2, #f2f2f7)',
+                color: timeRange === opt.id ? '#fff' : 'var(--text-primary, #3a3a3c)',
                 cursor: 'pointer', transition: 'all 0.2s'
               }}>{opt.label}</button>
             ))}
@@ -594,10 +627,10 @@ function ProgressChart({ student, batch, onClose }) {
 
         {!loading && chartData && chartData.categories.length > 0 && (
           <div style={{
-            background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
+            background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>📁 Categories</p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)' }}>📁 Categories</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {chartData.categories.map(cat => {
                 const colors = {
@@ -628,12 +661,12 @@ function ProgressChart({ student, batch, onClose }) {
         )}
 
         <div style={{
-          background: '#fff', borderRadius: 16, padding: '20px 16px',
+          background: 'var(--bg-card, #fff)', borderRadius: 16, padding: '20px 16px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📈 Score Trend</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>📈 Score Trend</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--text-secondary, #3a3a3c)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 12, height: 3, background: '#007AFF', borderRadius: 2 }} />
                 Actual
@@ -657,7 +690,7 @@ function ProgressChart({ student, batch, onClose }) {
               </div>
             </div>
           ) : chartData?.exams.length === 0 ? (
-            <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#8e8e93' }}>
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary, #8e8e93)' }}>
               <span style={{ fontSize: 40, marginBottom: 10 }}>📊</span>
               <p style={{ margin: 0, fontSize: 14 }}>No exam data available</p>
               <p style={{ margin: '4px 0 0', fontSize: 12 }}>Add exams with dates to see progress</p>
@@ -671,32 +704,32 @@ function ProgressChart({ student, batch, onClose }) {
 
         {!loading && chartData && chartData.exams.length > 0 && (
           <div style={{
-            background: '#fff', borderRadius: 16, padding: 16,
+            background: 'var(--bg-card, #fff)', borderRadius: 16, padding: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📝 Recent Exams</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>📝 Recent Exams</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {chartData.exams.slice(-5).reverse().map((exam, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 14px', background: '#f9f9f9', borderRadius: 10
+                  padding: '12px 14px', background: 'var(--bg-card2, #f9f9f9)', borderRadius: 10
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{
                       width: 36, height: 36, borderRadius: '50%',
-                      background: exam.percentage >= 80 ? '#e8f5e9' : exam.percentage >= 60 ? '#fff8e1' : '#ffebee',
-                      color: exam.percentage >= 80 ? '#2e7d32' : exam.percentage >= 60 ? '#f57c00' : '#c62828',
+                      background: exam.percentage >= 80 ? 'var(--green-soft, #e8f5e9)' : exam.percentage >= 60 ? 'var(--amber-soft, #fff8e1)' : 'var(--red-soft, #ffebee)',
+                      color: exam.percentage >= 80 ? 'var(--green, #2e7d32)' : exam.percentage >= 60 ? 'var(--amber, #f57c00)' : 'var(--red, #c62828)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 13, fontWeight: 700
                     }}>{exam.percentage}%</span>
                     <div>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1c1c1e' }}>{exam.examName}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#8e8e93' }}>{exam.category} • {exam.dateStr}</p>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary, #1c1c1e)' }}>{exam.examName}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary, #8e8e93)' }}>{exam.category} • {exam.dateStr}</p>
                     </div>
                   </div>
                   <span style={{
-                    fontSize: 13, fontWeight: 700, color: '#3a3a3c',
-                    background: '#f2f2f7', padding: '4px 10px', borderRadius: 8
+                    fontSize: 13, fontWeight: 700, color: 'var(--text-secondary, #3a3a3c)',
+                    background: 'var(--bg-primary, #f2f2f7)', padding: '4px 10px', borderRadius: 8
                   }}>{exam.score}/{exam.total}</span>
                 </div>
               ))}
@@ -1981,7 +2014,7 @@ function TeacherSelect({ onSelect }) {
       body: JSON.stringify({ photo: compressed })
     });
     const updated = await res.json();
-    setTeachers(prev => prev.map(t => t._id === teacherId ? { ...t, photo: updated.photo } : t));
+    setTeachers(prev => prev.map(tc => tc._id === teacherId ? { ...tc, photo: updated.photo } : tc));
   };
 
   return (
@@ -1991,34 +2024,34 @@ function TeacherSelect({ onSelect }) {
       <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>{t('tapNameToContinue')}</p>
       <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loadingT && <p className="loading-text">{t('loading')}</p>}
-        {teachers.map(t => (
-          <div key={t._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => onSelect(t)} className="teacher-card">
+        {teachers.map(teacher => (
+          <div key={teacher._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => onSelect(teacher)} className="teacher-card">
               <label onClick={e => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }} title="Tap to change photo">
-                {t.photo
-                  ? <img src={t.photo} alt={t.name} className="student-avatar" />
-                  : <span style={{ fontSize: 34, lineHeight: 1 }}>{t.emoji}</span>
+                {teacher.photo
+                  ? <img src={teacher.photo} alt={teacher.name} className="student-avatar" />
+                  : <span style={{ fontSize: 34, lineHeight: 1 }}>{teacher.emoji}</span>
                 }
                 <span style={{ position: 'absolute', bottom: -2, right: -4, background: 'var(--accent)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>✎</span>
                 <input type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={e => e.target.files[0] && uploadTeacherPhoto(t._id, e.target.files[0])} />
+                  onChange={e => e.target.files[0] && uploadTeacherPhoto(teacher._id, e.target.files[0])} />
               </label>
-              <span style={{ flex: 1, textAlign: 'left', fontSize: 16, fontWeight: 600 }}>{t.name}</span>
+              <span style={{ flex: 1, textAlign: 'left', fontSize: 16, fontWeight: 600 }}>{teacher.name}</span>
               <span className="chevron">›</span>
             </button>
-            {deleteId === t._id ? (
+            {deleteId === teacher._id ? (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => deleteTeacher(t._id)} className="btn-danger" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Delete</button>
+                <button onClick={() => deleteTeacher(teacher._id)} className="btn-danger" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Delete</button>
                 <button onClick={() => setDeleteId(null)} className="btn-cancel" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>{t('cancel')}</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <label title="Upload signature" style={{ cursor: 'pointer', fontSize: 18, padding: '4px 8px', color: t.signature ? 'var(--green)' : 'var(--text-tertiary)' }}>
+                <label title="Upload signature" style={{ cursor: 'pointer', fontSize: 18, padding: '4px 8px', color: teacher.signature ? 'var(--green)' : 'var(--text-tertiary)' }}>
                   ✍️
                   <input type="file" accept="image/*" style={{ display: 'none' }}
-                    onChange={e => e.target.files[0] && uploadSignature(t._id, e.target.files[0])} />
+                    onChange={e => e.target.files[0] && uploadSignature(teacher._id, e.target.files[0])} />
                 </label>
-                <button onClick={() => setDeleteId(t._id)} className="delete-btn-icon">✕</button>
+                <button onClick={() => setDeleteId(teacher._id)} className="delete-btn-icon">✕</button>
               </div>
             )}
           </div>
@@ -2068,6 +2101,7 @@ function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const passwordRef = useRef(null);
 
   const handleLogin = () => {
     if (username === ADMIN_USER && password === ADMIN_PASS) {
@@ -2114,6 +2148,7 @@ function LoginScreen({ onLogin }) {
             type="text"
             value={username}
             onChange={e => { setUsername(e.target.value); setError(''); }}
+            onKeyDown={e => e.key === 'Enter' && passwordRef.current?.focus()}
             placeholder="Enter username"
           />
         </div>
@@ -2121,6 +2156,7 @@ function LoginScreen({ onLogin }) {
           <label>{t('password')}</label>
           <div className="password-wrapper">
             <input
+              ref={passwordRef}
               type={showPass ? 'text' : 'password'}
               value={password}
               onChange={e => { setPassword(e.target.value); setError(''); }}
@@ -2494,8 +2530,7 @@ function App() {
     else if (view === 'evaluations') { setView('categories'); }
     else if (view === 'categories') {
       if (isKumiai) {
-        if (selectedCompany) { setView('batches'); setSelectedStudent(null); setSelectedBatch(null); }
-        else { setView('batches'); setSelectedStudent(null); setSelectedBatch(null); }
+        setView('batches'); setSelectedStudent(null); setSelectedBatch(null);
       } else { setView('students'); setSelectedStudent(null); }
     }
     else if (view === 'students') { setView('batches'); setSelectedBatch(null); }
@@ -3236,7 +3271,7 @@ function App() {
               <p className="card-subtitle">
                 {isViewer
                   ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
-                  : `${batch.students.length} student${batch.students.length !== 1 ? 's' : ''}`}
+                  : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
               </p>
             </div>
             {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>}
@@ -4443,74 +4478,6 @@ function App() {
       onTouchEnd={onTouchEnd}
       style={{ position: 'relative' }}
     >
-      <style>{`
-        :root {
-          --bg-primary: #f2f2f7;
-          --bg-card: #ffffff;
-          --bg-card2: #f9f9f9;
-          --bg-input: #ffffff;
-          --text-primary: #1c1c1e;
-          --text-secondary: #3a3a3c;
-          --text-tertiary: #8e8e93;
-          --border-color: #e5e5ea;
-          --accent: #8B0000;
-          --green: #34C759;
-          --green-soft: #e8f5e9;
-          --amber: #ff9500;
-          --amber-soft: #fff8e1;
-          --red: #ff3b30;
-          --red-soft: #ffebee;
-        }
-        [data-theme="dark"] {
-          --bg-primary: #1c1c1e;
-          --bg-card: #2c2c2e;
-          --bg-card2: #3a3a3c;
-          --bg-input: #3a3a3c;
-          --text-primary: #ffffff;
-          --text-secondary: rgba(235,235,245,0.8);
-          --text-tertiary: rgba(235,235,245,0.6);
-          --border-color: #48484a;
-          --accent: #ff6b6b;
-          --green: #30d158;
-          --green-soft: #0d2b0d;
-          --amber: #ffd60a;
-          --amber-soft: #2b2200;
-          --red: #ff453a;
-          --red-soft: #2b0a0a;
-        }
-        [data-theme="dark"] body,
-        [data-theme="dark"] #root { background: var(--bg-primary) !important; color: var(--text-primary) !important; }
-        [data-theme="dark"] .card,
-        [data-theme="dark"] .login-card,
-        [data-theme="dark"] .modal-sheet,
-        [data-theme="dark"] .teacher-card,
-        [data-theme="dark"] .section-box,
-        [data-theme="dark"] .eval-hero { background: var(--bg-card) !important; border-color: var(--border-color) !important; }
-        [data-theme="dark"] .card-title,
-        [data-theme="dark"] .card-subtitle,
-        [data-theme="dark"] .section-title,
-        [data-theme="dark"] .modal-title,
-        [data-theme="dark"] .exam-list-name,
-        [data-theme="dark"] .exam-detail-title,
-        [data-theme="dark"] .student-profile-name,
-        [data-theme="dark"] .title,
-        [data-theme="dark"] .logged-in-label { color: var(--text-primary) !important; }
-        [data-theme="dark"] input,
-        [data-theme="dark"] textarea,
-        [data-theme="dark"] select { background: var(--bg-input) !important; color: var(--text-primary) !important; border-color: var(--border-color) !important; }
-        [data-theme="dark"] .add-button,
-        [data-theme="dark"] .print-qr-button { background: var(--bg-card) !important; color: var(--accent) !important; border-color: var(--accent) !important; }
-        [data-theme="dark"] .exam-list-card,
-        [data-theme="dark"] .exam-page-card { background: var(--bg-card) !important; border-color: var(--border-color) !important; }
-        [data-theme="dark"] .modal-overlay { background: rgba(0,0,0,0.75) !important; }
-        [data-theme="dark"] .badge-view-only { background: rgba(255,255,255,0.15) !important; color: #fff !important; }
-        [data-theme="dark"] .form-group label { color: var(--text-secondary) !important; }
-        [data-theme="dark"] .teacher-screen,
-        [data-theme="dark"] .login-screen { background: var(--bg-primary) !important; }
-        [data-theme="dark"] .section-box-title { color: var(--text-primary) !important; }
-        [data-theme="dark"] .eval-hero { color: var(--text-primary) !important; }
-        [data-theme="dark"] .header-banner { background: linear-gradient(135deg, #6b0000, #922b21) !important; }
-      `}</style>
       {/* ── Pull-to-refresh indicator ── */}
       {(pullDistance > 0 || pullRefreshing) && (() => {
         const progress = Math.min(pullDistance / PULL_THRESHOLD, 1);
