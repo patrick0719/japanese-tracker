@@ -1919,6 +1919,8 @@ const GYOUMUSUISHIN_USER = 'GYOUMUSUISHIN';
 const GYOUMUSUISHIN_PASS = 'gyoumusuishin';
 const GREENSERVICES_USER = 'GREEN SERVICES';
 const GREENSERVICES_PASS = 'greenservices';
+const SULOP_USER = 'SULOP';
+const SULOP_PASS = 'sulop';
 const AUTH_KEY = 'sage_auth';
 const ROLE_KEY = 'sage_role'; // 'admin' or 'viewer'
 
@@ -2092,6 +2094,10 @@ function LoginScreen({ onLogin }) {
       safeLocalSet(AUTH_KEY, 'true');
       safeLocalSet(ROLE_KEY, 'greenservices');
       onLogin('greenservices');
+    } else if (username === SULOP_USER && password === SULOP_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'sulop');
+      onLogin('sulop');
     } else {
       setError('Invalid username or password.');
     }
@@ -2265,7 +2271,7 @@ function App() {
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
-  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)));
+  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
   const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
   const [qrPassInput, setQrPassInput] = useState('');
@@ -2305,8 +2311,8 @@ function App() {
           setIsLoggedIn(true);
           const role = safeLocalGet(ROLE_KEY);
           const teacher = safeLocalGet(TEACHER_KEY);
-          setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role));
-          if (['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) {
+          setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role));
+          if (['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role)) {
             fetchBatches(null);
           } else if (teacher) {
             fetchBatches(JSON.parse(teacher)._id);
@@ -2319,7 +2325,7 @@ function App() {
     } else {
       const isAuth = safeLocalGet(AUTH_KEY) === 'true';
       const role = safeLocalGet(ROLE_KEY);
-      if (isAuth && ['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) {
+      if (isAuth && ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role)) {
         fetchBatches(null);
       } else {
         const saved = safeLocalGet(TEACHER_KEY);
@@ -3029,8 +3035,8 @@ function App() {
   if (!isLoggedIn) return (
     <LoginScreen onLogin={(role) => {
       setIsLoggedIn(true);
-      setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role));
-      if (['viewer','setouchi','wbc','gyoumusuishin','greenservices'].includes(role)) fetchBatches(null);
+      setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role));
+      if (['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role)) fetchBatches(null);
       else {
         const teacher = safeLocalGet(TEACHER_KEY);
         if (teacher) fetchBatches(JSON.parse(teacher)._id);
@@ -3192,6 +3198,7 @@ function App() {
                     : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WORLD BUSINESS COOPERATIVE'
                     : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMU SUISHIN COOPERATIVE ASSOCIATION'
                     : safeLocalGet(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
+                    : safeLocalGet(ROLE_KEY) === 'sulop' ? 'SULOP'
                     : 'PHGIC')
                   : selectedTeacher?.name}
               </h1>
@@ -3217,7 +3224,11 @@ function App() {
         </div>
       </div>
       <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
-      {(isViewer ? batches.filter(b => b.students.some(s => s.status === 'Selected')) : batches).map(batch => (
+      {(isViewer
+        ? batches.filter(b => safeLocalGet(ROLE_KEY) === 'sulop'
+            ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
+            : b.students.some(s => s.status === 'Selected'))
+        : batches).map(batch => (
         <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
           <div className="card-content">
             <div>
@@ -3243,6 +3254,7 @@ function App() {
     else if (role === 'wbc') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && (s.kumiai === 'WBC' || (!s.kumiai && s.companyName === 'WBC')));
     else if (role === 'gyoumusuishin') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && s.kumiai === 'Gyoumusuishin');
     else if (role === 'greenservices') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected' && s.kumiai === 'Green Services');
+    else if (role === 'sulop') visibleStudents = visibleStudents.filter(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop');
     else if (isViewer) visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected');
     visibleStudents = visibleStudents.slice().sort((a, b) => a.name.localeCompare(b.name));
     return (
