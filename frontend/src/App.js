@@ -3,63 +3,6 @@ import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
 
-// ── TOAST NOTIFICATION SYSTEM ────────────────────────────────────────────────
-let _toastId = 0;
-let _setToasts = null;
-const toast = {
-  _show(msg, type = 'info') {
-    if (!_setToasts) return;
-    const id = ++_toastId;
-    _setToasts(prev => [...prev, { id, msg, type }]);
-    setTimeout(() => _setToasts(prev => prev.filter(t => t.id !== id)), 3200);
-  },
-  success(msg) { this._show(msg, 'success'); },
-  error(msg)   { this._show(msg, 'error'); },
-  info(msg)    { this._show(msg, 'info'); },
-};
-
-function ToastContainer() {
-  const [toasts, setToasts] = useState([]);
-  useEffect(() => { _setToasts = setToasts; return () => { _setToasts = null; }; }, []);
-  if (!toasts.length) return null;
-  return (
-    <div style={{ position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 99999, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none', width: '90%', maxWidth: 360 }}>
-      {toasts.map(t => (
-        <div key={t.id} style={{
-          background: t.type === 'success' ? '#1a7f37' : t.type === 'error' ? '#c0392b' : '#1c1c1e',
-          color: '#fff', borderRadius: 12, padding: '12px 18px', fontSize: 14, fontWeight: 600,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
-          animation: 'toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1)',
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <span style={{ fontSize: 18 }}>{t.type === 'success' ? '✅' : t.type === 'error' ? '❌' : 'ℹ️'}</span>
-          {t.msg}
-        </div>
-      ))}
-      <style>{`@keyframes toastIn { from { opacity:0; transform:translateY(16px) scale(0.94); } to { opacity:1; transform:translateY(0) scale(1); } }`}</style>
-    </div>
-  );
-}
-
-// ── CUSTOM CONFIRM DIALOG ─────────────────────────────────────────────────────
-function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', confirmStyle = 'danger', onConfirm, onCancel }) {
-  if (!open) return null;
-  const btnBg = confirmStyle === 'danger' ? '#ff3b30' : confirmStyle === 'warning' ? '#ff9500' : '#8B0000';
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
-      <div style={{ background: 'var(--bg-card, #fff)', borderRadius: 20, padding: '28px 24px', width: '100%', maxWidth: 340, boxShadow: '0 8px 40px rgba(0,0,0,0.3)', animation: 'confirmIn 0.22s cubic-bezier(0.34,1.56,0.64,1)' }}>
-        <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{title}</h3>
-        {message && <p style={{ margin: '0 0 24px', fontSize: 14, color: 'var(--text-secondary, #3a3a3c)', lineHeight: 1.5 }}>{message}</p>}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onCancel} style={{ flex: 1, padding: '13px', borderRadius: 12, border: '1.5px solid var(--border-color, #e5e5ea)', background: 'none', fontSize: 15, fontWeight: 600, cursor: 'pointer', color: 'var(--text-primary, #1c1c1e)' }}>Cancel</button>
-          <button onClick={onConfirm} style={{ flex: 1, padding: '13px', borderRadius: 12, border: 'none', background: btnBg, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>{confirmLabel}</button>
-        </div>
-      </div>
-      <style>{`@keyframes confirmIn { from { opacity:0; transform:scale(0.88); } to { opacity:1; transform:scale(1); } }`}</style>
-    </div>
-  );
-}
-
 // Returns correct name based on role — JA for kumiai, EN for admin/PHGIC
 function displayName(item) {
   try {
@@ -373,7 +316,7 @@ function ProgressChart({ student, batch, onClose }) {
 
     return (
       <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ maxWidth: 400 }}>
-        <rect x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} fill="var(--bg-primary, #f8f9fa)" rx={4} />
+        <rect x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} fill="#f8f9fa" rx={4} />
         
         {gridLines.map((line, i) => (
           <g key={i}>
@@ -479,7 +422,7 @@ function ProgressChart({ student, batch, onClose }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'var(--bg-primary, #f2f2f7)', zIndex: 9999,
+      position: 'fixed', inset: 0, background: '#f2f2f7', zIndex: 9999,
       display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif'
     }}>
       <div style={{
@@ -499,7 +442,7 @@ function ProgressChart({ student, batch, onClose }) {
       </div>
 
       <div style={{
-        background: 'var(--bg-card, #fff)', padding: '16px 20px', borderBottom: '1px solid var(--border-color, #e5e5ea)',
+        background: '#fff', padding: '16px 20px', borderBottom: '1px solid #e5e5ea',
         display: 'flex', alignItems: 'center', gap: 14
       }}>
         {student.photo ? (
@@ -510,8 +453,8 @@ function ProgressChart({ student, batch, onClose }) {
           <span style={{ fontSize: 40 }}>👤</span>
         )}
         <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary, #8e8e93)' }}>{batch?.name}</p>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1c1c1e' }}>{student.name}</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#8e8e93' }}>{batch?.name}</p>
           {student.companyName && (
             <span style={{
               display: 'inline-block', marginTop: 4,
@@ -579,13 +522,13 @@ function ProgressChart({ student, batch, onClose }) {
                   },
             ].map((stat, i) => (
               <div key={i} style={{
-                background: 'var(--bg-card, #fff)', borderRadius: 14, padding: '16px 14px',
+                background: '#fff', borderRadius: 14, padding: '16px 14px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.06)', textAlign: 'center'
               }}>
                 <div style={{ fontSize: 24, marginBottom: 6 }}>{stat.icon}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary, #8e8e93)', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
-                {stat.sub && <div style={{ fontSize: 10, color: 'var(--text-tertiary, #c7c7cc)', marginTop: 2 }}>{stat.sub}</div>}
+                <div style={{ fontSize: 11, color: '#8e8e93', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
+                {stat.sub && <div style={{ fontSize: 10, color: '#c7c7cc', marginTop: 2 }}>{stat.sub}</div>}
               </div>
             ))}
           </div>
@@ -628,10 +571,10 @@ function ProgressChart({ student, batch, onClose }) {
         })()}
 
         <div style={{
-          background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
+          background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
         }}>
-          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)' }}>⏱️ Time Range</p>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>⏱️ Time Range</p>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
               { id: 'all', label: 'All Time' },
@@ -651,10 +594,10 @@ function ProgressChart({ student, batch, onClose }) {
 
         {!loading && chartData && chartData.categories.length > 0 && (
           <div style={{
-            background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
+            background: '#fff', borderRadius: 12, padding: 12, marginBottom: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)' }}>📁 Categories</p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>📁 Categories</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {chartData.categories.map(cat => {
                 const colors = {
@@ -685,11 +628,11 @@ function ProgressChart({ student, batch, onClose }) {
         )}
 
         <div style={{
-          background: 'var(--bg-card, #fff)', borderRadius: 16, padding: '20px 16px',
+          background: '#fff', borderRadius: 16, padding: '20px 16px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>📈 Score Trend</h3>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📈 Score Trend</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 12, height: 3, background: '#007AFF', borderRadius: 2 }} />
@@ -728,32 +671,32 @@ function ProgressChart({ student, batch, onClose }) {
 
         {!loading && chartData && chartData.exams.length > 0 && (
           <div style={{
-            background: 'var(--bg-card, #fff)', borderRadius: 16, padding: 16,
+            background: '#fff', borderRadius: 16, padding: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>📝 Recent Exams</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📝 Recent Exams</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {chartData.exams.slice(-5).reverse().map((exam, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 14px', background: 'var(--bg-card2, #f9f9f9)', borderRadius: 10
+                  padding: '12px 14px', background: '#f9f9f9', borderRadius: 10
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{
                       width: 36, height: 36, borderRadius: '50%',
-                      background: exam.percentage >= 80 ? 'var(--green-soft, #e8f5e9)' : exam.percentage >= 60 ? 'var(--amber-soft, #fff8e1)' : 'var(--red-soft, #ffebee)',
-                      color: exam.percentage >= 80 ? 'var(--green, #2e7d32)' : exam.percentage >= 60 ? 'var(--amber, #f57c00)' : 'var(--red, #c62828)',
+                      background: exam.percentage >= 80 ? '#e8f5e9' : exam.percentage >= 60 ? '#fff8e1' : '#ffebee',
+                      color: exam.percentage >= 80 ? '#2e7d32' : exam.percentage >= 60 ? '#f57c00' : '#c62828',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 13, fontWeight: 700
                     }}>{exam.percentage}%</span>
                     <div>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary, #1c1c1e)' }}>{exam.examName}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary, #8e8e93)' }}>{exam.category} • {exam.dateStr}</p>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1c1c1e' }}>{exam.examName}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#8e8e93' }}>{exam.category} • {exam.dateStr}</p>
                     </div>
                   </div>
                   <span style={{
-                    fontSize: 13, fontWeight: 700, color: 'var(--text-secondary, #3a3a3c)',
-                    background: 'var(--bg-primary, #f2f2f7)', padding: '4px 10px', borderRadius: 8
+                    fontSize: 13, fontWeight: 700, color: '#3a3a3c',
+                    background: '#f2f2f7', padding: '4px 10px', borderRadius: 8
                   }}>{exam.score}/{exam.total}</span>
                 </div>
               ))}
@@ -1515,7 +1458,7 @@ function SettingsPage({ batches, onClose, API }) {
 const [serverLoading, setServerLoading] = useState(false);
 const [serverError, setServerError] = useState(null);
 
-const fetchServerStats = useCallback(async () => {
+const fetchServerStats = async () => {
   setServerLoading(true);
   setServerError(null);
   try {
@@ -1528,11 +1471,11 @@ const fetchServerStats = useCallback(async () => {
   } finally {
     setServerLoading(false);
   }
-}, []);
+};
 
 useEffect(() => {
   if (activeSection === 'server') fetchServerStats();
-}, [activeSection, fetchServerStats]);
+}, [activeSection]);
 
   const formatBytes = (bytes) => {
     if (bytes == null) return '—';
@@ -2275,102 +2218,68 @@ function App() {
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedExam, setSelectedExam] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState('');
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [newName, setNewName] = useState('');
+  const [newExamName, setNewExamName] = useState('');
+  const [newScore, setNewScore] = useState('');
+  const [newTotalScore, setNewTotalScore] = useState('');
+  const [newStudentPhoto, setNewStudentPhoto] = useState(null);
+  const [newStudentStatus, setNewStudentStatus] = useState('Regular');
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newKumiai, setNewKumiai] = useState('');
+  const [newScholarship, setNewScholarship] = useState('no');
+  const [newScholarshipType, setNewScholarshipType] = useState('');
+  const [newNameJa, setNewNameJa] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingExam, setEditingExam] = useState(null);
+  const [newExamDate, setNewExamDate] = useState('');
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem('sage_dark') === 'true'; } catch { return false; }
+  });
   const [saving, setSaving] = useState(false);
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
   const [scanningExamId, setScanningExamId] = useState(null);
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
-  const [resolvedImages, setResolvedImages] = useState({}); // imageId -> url
+  const [resolvedImages, setResolvedImages] = useState({}); // imageId -> base64
   const imageCache = useRef({}); // in-memory cache
-  const [allTeachers, setAllTeachers] = useState([]);
-  const [selectedCompany, setSelectedCompany] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showProgressChart, setShowProgressChart] = useState(false);
-  const [progressChartStudent, setProgressChartStudent] = useState(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
-  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
-  const [isStudentView, setIsStudentView] = useState(false);
-  const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null);
-  const [qrPassInput, setQrPassInput] = useState('');
-  const [qrPassError, setQrPassError] = useState('');
-
-  // ── Modal state (grouped) ─────────────────────────────────────────────────
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState('');
-  const [editingStudent, setEditingStudent] = useState(null);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [editingExam, setEditingExam] = useState(null);
-
-  // ── Modal form fields (grouped) ───────────────────────────────────────────
-  const MODAL_FORM_DEFAULTS = { name: '', examName: '', score: '', totalScore: '', studentPhoto: null, studentStatus: 'Regular', companyName: '', kumiai: '', scholarship: 'no', scholarshipType: '', nameJa: '', examDate: '' };
-  const [modalForm, setModalForm] = useState(MODAL_FORM_DEFAULTS);
-  const setMF = (key, val) => setModalForm(prev => ({ ...prev, [key]: val }));
-  // Convenience aliases so existing render code still works without mass-renaming
-  const newName = modalForm.name;
-  const setNewName = (v) => setMF('name', v);
-  const newExamName = modalForm.examName;
-  const setNewExamName = (v) => setMF('examName', v);
-  const newScore = modalForm.score;
-  const setNewScore = (v) => setMF('score', v);
-  const newTotalScore = modalForm.totalScore;
-  const setNewTotalScore = (v) => setMF('totalScore', v);
-  const newStudentPhoto = modalForm.studentPhoto;
-  const setNewStudentPhoto = (v) => setMF('studentPhoto', v);
-  const newStudentStatus = modalForm.studentStatus;
-  const setNewStudentStatus = (v) => setMF('studentStatus', v);
-  const newCompanyName = modalForm.companyName;
-  const setNewCompanyName = (v) => setMF('companyName', v);
-  const newKumiai = modalForm.kumiai;
-  const setNewKumiai = (v) => setMF('kumiai', v);
-  const newScholarship = modalForm.scholarship;
-  const setNewScholarship = (v) => setMF('scholarship', v);
-  const newScholarshipType = modalForm.scholarshipType;
-  const setNewScholarshipType = (v) => setMF('scholarshipType', v);
-  const newNameJa = modalForm.nameJa;
-  const setNewNameJa = (v) => setMF('nameJa', v);
-  const newExamDate = modalForm.examDate;
-  const setNewExamDate = (v) => setMF('examDate', v);
-
-  // ── Eval state (grouped) ──────────────────────────────────────────────────
-  const [evaluations, setEvaluations] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [evaluations, setEvaluations] = useState([]); // per-student evaluations
   const [selectedEvaluation, setSelectedEvaluation] = useState(null);
+  const [evalTitle, setEvalTitle] = useState('');
+  const [evalDate, setEvalDate] = useState('');
+  const [evalFields, setEvalFields] = useState({});
   const [evalSaving, setEvalSaving] = useState(false);
-  const [evalForm, setEvalForm] = useState({ title: '', date: '', fields: {} });
-  const evalTitle = evalForm.title;
-  const setEvalTitle = (v) => setEvalForm(prev => ({ ...prev, title: v }));
-  const evalDate = evalForm.date;
-  const setEvalDate = (v) => setEvalForm(prev => ({ ...prev, date: v }));
-  const evalFields = evalForm.fields;
-  const setEvalFields = (v) => setEvalForm(prev => ({ ...prev, fields: typeof v === 'function' ? v(prev.fields) : v }));
-
-  // ── Translation state ─────────────────────────────────────────────────────
   const [remarksTranslation, setRemarksTranslation] = useState('');
   const [translating, setTranslating] = useState(false);
   const translateTimerRef = useRef(null);
-
-  // ── Pull-to-refresh state ─────────────────────────────────────────────────
+  const [allTeachers, setAllTeachers] = useState([]);
+  const [selectedCompany, setSelectedCompany] = useState(null); // { name, students[] }
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [pullTriggered, setPullTriggered] = useState(false);
   const pullDistanceRef = useRef(0);
   const pullTriggeredRef = useRef(false);
   const pullRefreshingRef = useRef(false);
-  const pullStartY = useRef(null);
-  const pullScrollY = useRef(0);
+  const pullStartY = useRef(null);        // finger Y at touchstart, null = disarmed
+  const pullScrollY = useRef(0);          // window.scrollY at touchstart
   const PULL_THRESHOLD = 80;
-
-  const [darkMode, setDarkMode] = useState(() => {
-    try { return localStorage.getItem('sage_dark') === 'true'; } catch { return false; }
+  const [showSettings, setShowSettings] = useState(false);
+  const [showProgressChart, setShowProgressChart] = useState(false);
+  const [progressChartStudent, setProgressChartStudent] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
+  const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
+  const [isStudentView, setIsStudentView] = useState(false);
+  const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
+  const [qrPassInput, setQrPassInput] = useState('');
+  const [qrPassError, setQrPassError] = useState('');
+  const [selectedTeacher, setSelectedTeacher] = useState(() => {
+    const s = safeLocalGet(TEACHER_KEY);
+    return s ? JSON.parse(s) : null;
   });
-
-  // ── Confirm dialog state ──────────────────────────────────────────────────
-  const [confirmDialog, setConfirmDialog] = useState({ open: false });
-  const showConfirm = (title, message, onConfirm, opts = {}) => {
-    setConfirmDialog({ open: true, title, message, onConfirm, confirmLabel: opts.confirmLabel || 'Confirm', confirmStyle: opts.confirmStyle || 'danger' });
-  };
-  const closeConfirm = () => setConfirmDialog({ open: false });
 
   const fileInputRef = useRef(null);
   const studentPhotoInputRef = useRef(null);
@@ -2457,9 +2366,9 @@ function App() {
       } catch {}
     } catch (err) {
       if (err.name === 'AbortError') {
-        toast.error('Connection timed out. Please try again.');
+        alert('Connection timed out. Please try again.');
       } else {
-        toast.error('Cannot connect to server. Check your internet connection.');
+        alert('Cannot connect to server. Check your internet connection.');
       }
     } finally {
       setLoading(false);
@@ -2614,7 +2523,7 @@ function App() {
     setEditingStudent(null);
     setEditingCategory(null);
     setEditingExam(null);
-    setModalForm(MODAL_FORM_DEFAULTS);
+    setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai(''); setNewNameJa(''); setNewExamDate(''); setNewScholarship('no'); setNewScholarshipType('');
   };
 
   const updateStudent = async () => {
@@ -2628,8 +2537,7 @@ function App() {
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       closeModal();
-      toast.success('Student updated.');
-    } catch { toast.error('Error updating student.'); }
+    } catch { alert('Error updating student.'); }
     setSaving(false);
   };
 
@@ -2644,8 +2552,7 @@ function App() {
       const newBatch = await res.json();
       setBatches(prev => [newBatch, ...prev]);
       closeModal();
-      toast.success('Batch created.');
-    } catch { toast.error('Error saving batch.'); }
+    } catch { alert('Error saving batch.'); }
     setSaving(false);
   };
 
@@ -2660,8 +2567,7 @@ function App() {
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       closeModal();
-      toast.success('Student added.');
-    } catch { toast.error('Error saving student.'); }
+    } catch { alert('Error saving student.'); }
     setSaving(false);
   };
 
@@ -2678,23 +2584,17 @@ function App() {
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) setSelectedStudent(updatedStudent);
       closeModal();
-      toast.success('Category added.');
-    } catch { toast.error('Error saving category.'); }
+    } catch { alert('Error saving category.'); }
     setSaving(false);
   };
 
   const saveExamItem = async () => {
     if (!newExamName || !newScore || !newTotalScore || !selectedCategory) return;
-    const score = parseInt(newScore);
-    const total = parseInt(newTotalScore);
-    if (total <= 0) { toast.error('Total score must be greater than 0.'); return; }
-    if (score < 0) { toast.error('Score cannot be negative.'); return; }
-    if (score > total) { toast.error(`Score (${score}) cannot exceed total score (${total}).`); return; }
     setSaving(true);
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newExamName, name_ja: newNameJa, score, totalScore: total })
+        body: JSON.stringify({ name: newExamName, name_ja: newNameJa, score: parseInt(newScore), totalScore: parseInt(newTotalScore) })
       });
       const newItem = await res.json();
       // Update state locally — no need to reload the whole batch
@@ -2712,34 +2612,27 @@ function App() {
       setSelectedBatch(updatedBatch);
       setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
       closeModal();
-      toast.success('Exam added.');
-    } catch { toast.error('Error saving exam.'); }
+    } catch { alert('Error saving exam.'); }
     setSaving(false);
   };
 
   const deleteBatch = async (id, e) => {
     e.stopPropagation();
-    showConfirm('Delete Batch', 'This will permanently delete the batch and all its students. This cannot be undone.', async () => {
-      closeConfirm();
-      try {
-        await fetch(`${API}/batches/${id}`, { method: 'DELETE' });
-        setBatches(prev => prev.filter(b => b._id !== id));
-        toast.success('Batch deleted.');
-      } catch { toast.error('Error deleting batch.'); }
-    }, { confirmLabel: 'Delete', confirmStyle: 'danger' });
+    if (!window.confirm('Delete this batch?')) return;
+    try {
+      await fetch(`${API}/batches/${id}`, { method: 'DELETE' });
+      setBatches(prev => prev.filter(b => b._id !== id));
+    } catch { alert('Error deleting batch.'); }
   };
 
   const deleteStudent = async (studentId, e) => {
     e.stopPropagation();
-    showConfirm('Delete Student', 'This will permanently delete this student and all their exam records.', async () => {
-      closeConfirm();
-      try {
-        const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${studentId}`, { method: 'DELETE' });
-        const updatedBatch = await res.json();
-        updateBatchInState(updatedBatch);
-        toast.success('Student deleted.');
-      } catch { toast.error('Error deleting student.'); }
-    }, { confirmLabel: 'Delete', confirmStyle: 'danger' });
+    if (!window.confirm('Delete this student?')) return;
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${studentId}`, { method: 'DELETE' });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+    } catch { alert('Error deleting student.'); }
   };
 
   const toggleStudentStatus = async (student, e) => {
@@ -2752,47 +2645,35 @@ function App() {
       });
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
-    } catch { toast.error('Error updating status.'); }
+    } catch { alert('Error updating status.'); }
   };
 
   const toggleArchiveStudent = async (student) => {
     const newArchived = !student.isArchived;
-    showConfirm(
-      newArchived ? 'Archive Student' : 'Unarchive Student',
-      newArchived
-        ? `${student.name} will no longer appear on the Kumiai side.`
-        : `${student.name} will be visible again on the Kumiai side.`,
-      async () => {
-        closeConfirm();
-        try {
-          const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${student._id}/archive`, {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isArchived: newArchived })
-          });
-          const updatedBatch = await res.json();
-          updateBatchInState(updatedBatch);
-          const updatedStudent = updatedBatch.students.find(s => s._id === student._id);
-          if (updatedStudent) setSelectedStudent(updatedStudent);
-          toast.success(newArchived ? 'Student archived.' : 'Student unarchived.');
-        } catch { toast.error(`Error: could not ${newArchived ? 'archive' : 'unarchive'} student.`); }
-      },
-      { confirmLabel: newArchived ? 'Archive' : 'Unarchive', confirmStyle: newArchived ? 'warning' : 'primary' }
-    );
+    const label = newArchived ? 'archive' : 'unarchive';
+    if (!window.confirm(`${newArchived ? 'Archive' : 'Unarchive'} ${student.name}? ${newArchived ? 'They will no longer appear on the Kumiai side.' : 'They will be visible again on the Kumiai side.'}`)) return;
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${student._id}/archive`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isArchived: newArchived })
+      });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === student._id);
+      if (updatedStudent) setSelectedStudent(updatedStudent);
+    } catch { alert(`Error: could not ${label} student.`); }
   };
 
   const deleteCategory = async (catId, e) => {
     if (e) e.stopPropagation();
-    showConfirm('Delete Category', 'This will delete this category and all its exams. This cannot be undone.', async () => {
-      closeConfirm();
-      try {
-        const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${catId}`, { method: 'DELETE' });
-        const updatedBatch = await res.json();
-        updateBatchInState(updatedBatch);
-        const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
-        if (updatedStudent) setSelectedStudent(updatedStudent);
-        toast.success('Category deleted.');
-      } catch { toast.error('Error deleting category.'); }
-    }, { confirmLabel: 'Delete', confirmStyle: 'danger' });
+    if (!window.confirm('Delete this category and all its exams?')) return;
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${catId}`, { method: 'DELETE' });
+      const updatedBatch = await res.json();
+      updateBatchInState(updatedBatch);
+      const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
+      if (updatedStudent) setSelectedStudent(updatedStudent);
+    } catch { alert('Error deleting category.'); }
   };
 
   const updateCategory = async () => {
@@ -2808,19 +2689,12 @@ function App() {
       const updatedStudent = updatedBatch.students.find(s => s._id === selectedStudent._id);
       if (updatedStudent) setSelectedStudent(updatedStudent);
       closeModal();
-    } catch { toast.error('Error updating category.'); }
+    } catch { alert('Error updating category.'); }
     setSaving(false);
   };
 
   const updateExamItem = async () => {
     if (!newExamName || !editingExam) return;
-    const score = parseInt(newScore);
-    const total = parseInt(newTotalScore);
-    if (!isNaN(score) && !isNaN(total)) {
-      if (total <= 0) { toast.error('Total score must be greater than 0.'); return; }
-      if (score < 0) { toast.error('Score cannot be negative.'); return; }
-      if (score > total) { toast.error(`Score (${score}) cannot exceed total score (${total}).`); return; }
-    }
     setSaving(true);
     try {
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${editingExam._id}`, {
@@ -2836,33 +2710,30 @@ function App() {
       setSelectedBatch(updatedBatch);
       setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
       closeModal();
-    } catch { toast.error('Error updating exam.'); }
+    } catch { alert('Error updating exam.'); }
     setSaving(false);
   };
 
   const deleteExamItem = async (itemId, e) => {
     if (e) e.stopPropagation();
-    showConfirm('Delete Exam', 'This will permanently delete this exam and all its pages.', async () => {
-      closeConfirm();
-      try {
-        await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${itemId}`, { method: 'DELETE' });
-        const updatedCat = { ...selectedCategory, items: selectedCategory.items.filter(i => i._id !== itemId) };
-        const updatedStudent = {
-          ...selectedStudent,
-          categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c)
-        };
-        const updatedBatch = {
-          ...selectedBatch,
-          students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s)
-        };
-        setSelectedCategory(updatedCat);
-        setSelectedStudent(updatedStudent);
-        setSelectedBatch(updatedBatch);
-        setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
-        if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
-        toast.success('Exam deleted.');
-      } catch { toast.error('Error deleting exam.'); }
-    }, { confirmLabel: 'Delete', confirmStyle: 'danger' });
+    if (!window.confirm('Delete this exam?')) return;
+    try {
+      await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${itemId}`, { method: 'DELETE' });
+      const updatedCat = { ...selectedCategory, items: selectedCategory.items.filter(i => i._id !== itemId) };
+      const updatedStudent = {
+        ...selectedStudent,
+        categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c)
+      };
+      const updatedBatch = {
+        ...selectedBatch,
+        students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s)
+      };
+      setSelectedCategory(updatedCat);
+      setSelectedStudent(updatedStudent);
+      setSelectedBatch(updatedBatch);
+      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
+      if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
+    } catch { alert('Error deleting exam.'); }
   };
 
   const deleteExam = deleteExamItem;
@@ -2880,22 +2751,19 @@ function App() {
       });
       const newEval = await res.json();
       setEvaluations(prev => [...prev, newEval]);
-      setEvalForm(prev => ({ ...prev, title: '', date: '' }));
+      setEvalTitle(''); setEvalDate('');
       closeModal();
-    } catch { toast.error('Error creating evaluation.'); }
+    } catch { alert('Error creating evaluation.'); }
     setSaving(false);
   };
 
   const deleteEvaluation = async (evalId, e) => {
     e.stopPropagation();
-    showConfirm('Delete Evaluation', 'This evaluation record will be permanently deleted.', async () => {
-      closeConfirm();
-      try {
-        await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/evaluations/${evalId}`, { method: 'DELETE' });
-        setEvaluations(prev => prev.filter(ev => ev._id !== evalId));
-        toast.success('Evaluation deleted.');
-      } catch { toast.error('Error deleting evaluation.'); }
-    }, { confirmLabel: 'Delete', confirmStyle: 'danger' });
+    if (!window.confirm('Delete this evaluation?')) return;
+    try {
+      await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/evaluations/${evalId}`, { method: 'DELETE' });
+      setEvaluations(prev => prev.filter(ev => ev._id !== evalId));
+    } catch { alert('Error deleting evaluation.'); }
   };
 
   const saveEvaluationFields = async () => {
@@ -2908,30 +2776,28 @@ function App() {
       const updated = await res.json();
       setSelectedEvaluation(updated);
       setEvaluations(prev => prev.map(ev => ev._id === updated._id ? updated : ev));
-      toast.success('Evaluation saved.');
-    } catch { toast.error('Error saving evaluation.'); }
+      alert('Saved!');
+    } catch { alert('Error saving evaluation.'); }
     setEvalSaving(false);
   };
 
   const deleteImagePage = async (examId, index) => {
-    showConfirm(`Delete Page ${index + 1}`, 'This page will be permanently removed from the exam.', async () => {
-      closeConfirm();
-      // Optimistic update — remove from UI immediately
-      const updatedExam = { ...selectedExam, images: selectedExam.images.filter((_, i) => i !== index) };
-      const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
-      const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
-      const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
-      setSelectedExam(updatedExam);
-      setSelectedCategory(updatedCat);
-      setSelectedStudent(updatedStudent);
-      setSelectedBatch(updatedBatch);
-      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
-      // Delete from server in background
-      fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/remove-image`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index })
-      }).catch(() => toast.error('Error deleting page from server.'));
-    }, { confirmLabel: 'Delete', confirmStyle: 'danger' });
+    if (!window.confirm(`Delete page ${index + 1}?`)) return;
+    // Optimistic update — remove from UI immediately
+    const updatedExam = { ...selectedExam, images: selectedExam.images.filter((_, i) => i !== index) };
+    const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
+    const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
+    const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
+    setSelectedExam(updatedExam);
+    setSelectedCategory(updatedCat);
+    setSelectedStudent(updatedStudent);
+    setSelectedBatch(updatedBatch);
+    setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
+    // Delete from server in background
+    fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/${examId}/remove-image`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ index })
+    }).catch(() => alert('Error deleting page from server.'));
   };
 
   const uploadImage = async (examId, imageData) => {
@@ -2969,41 +2835,21 @@ function App() {
       const data = await res.json();
       if (!data.success) throw new Error('Upload failed');
 
+      // Cache URL immediately — display is instant
       imageCache.current[imageId] = imageUrl;
-      applyImageUpdate(examId, imageId, imageUrl, [...(selectedExam?.images || []), imageId]);
-    } catch { toast.error('Error saving image.'); }
-  };
+      setResolvedImages(prev => ({ ...prev, [imageId]: imageUrl }));
 
-  // ── Shared helper: apply a new imageId into all nested state in one batch ──
-  // catId / studentId / batchId are captured from the closure at call time.
-  const applyImageUpdate = (examId, imageId, imageUrl, newImageIds) => {
-    setResolvedImages(prev => ({ ...prev, [imageId]: imageUrl }));
-    setSelectedExam(prev => prev ? { ...prev, images: newImageIds } : prev);
-    setSelectedCategory(prev => prev ? {
-      ...prev,
-      items: prev.items.map(it => it._id === examId ? { ...it, images: newImageIds } : it)
-    } : prev);
-    setSelectedStudent(prev => prev ? {
-      ...prev,
-      categories: prev.categories.map(c => c._id === selectedCategory._id
-        ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: newImageIds } : it) }
-        : c)
-    } : prev);
-    setSelectedBatch(prev => prev ? {
-      ...prev,
-      students: prev.students.map(s => s._id === selectedStudent._id
-        ? { ...s, categories: s.categories.map(c => c._id === selectedCategory._id
-            ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: newImageIds } : it) }
-            : c) }
-        : s)
-    } : prev);
-    setBatches(prev => prev.map(b => b._id === selectedBatch._id
-      ? { ...b, students: b.students.map(s => s._id === selectedStudent._id
-          ? { ...s, categories: s.categories.map(c => c._id === selectedCategory._id
-              ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: newImageIds } : it) }
-              : c) }
-          : s) }
-      : b));
+      // Update state locally
+      const updatedExam = { ...selectedExam, images: [...(selectedExam?.images || []), imageId] };
+      const updatedCat = { ...selectedCategory, items: selectedCategory.items.map(it => it._id === examId ? updatedExam : it) };
+      const updatedStudent = { ...selectedStudent, categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c) };
+      const updatedBatch = { ...selectedBatch, students: selectedBatch.students.map(s => s._id === selectedStudent._id ? updatedStudent : s) };
+      setSelectedExam(updatedExam);
+      setSelectedCategory(updatedCat);
+      setSelectedStudent(updatedStudent);
+      setSelectedBatch(updatedBatch);
+      setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
+    } catch { alert('Error saving image.'); }
   };
 
   const triggerFileInput = (examId) => {
@@ -3070,9 +2916,35 @@ function App() {
         imageCache.current[imageId] = cdnData.secure_url;
         accumulatedImageIds = [...accumulatedImageIds, imageId];
 
-        // Single helper call replaces 5 separate setState calls
-        applyImageUpdate(examId, imageId, cdnData.secure_url, accumulatedImageIds);
-      } catch { toast.error('Error saving one of the scanned pages.'); }
+        // Update state with accumulated list so each iteration stacks correctly
+        setResolvedImages(prev => ({ ...prev, [imageId]: cdnData.secure_url }));
+        setSelectedExam(prev => ({ ...prev, images: accumulatedImageIds }));
+        setSelectedCategory(prev => ({
+          ...prev,
+          items: prev.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it)
+        }));
+        setSelectedStudent(prev => ({
+          ...prev,
+          categories: prev.categories.map(c => c._id === selectedCategory._id
+            ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+            : c)
+        }));
+        setSelectedBatch(prev => ({
+          ...prev,
+          students: prev.students.map(s => s._id === selectedStudent._id
+            ? { ...s, categories: s.categories.map(c => c._id === selectedCategory._id
+                ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+                : c) }
+            : s)
+        }));
+        setBatches(prev => prev.map(b => b._id === selectedBatch._id
+          ? { ...b, students: b.students.map(s => s._id === selectedStudent._id
+              ? { ...s, categories: s.categories.map(c => c._id === selectedCategory._id
+                  ? { ...c, items: c.items.map(it => it._id === examId ? { ...it, images: accumulatedImageIds } : it) }
+                  : c) }
+              : s) }
+          : b));
+      } catch { alert('Error saving one of the scanned pages.'); }
     }
   };
 
@@ -3106,22 +2978,7 @@ function App() {
   );
 
   // QR scan password prompt — show before anything else if pending
-  if (qrPasswordPrompt) {
-    const handleQrSubmit = () => {
-      if (qrPassInput === PHGIC_PASS) {
-        safeLocalSet(AUTH_KEY, 'true');
-        safeLocalSet(ROLE_KEY, 'viewer');
-        setIsLoggedIn(true);
-        setIsViewer(true);
-        setPendingDeepLink(qrPasswordPrompt);
-        setQrPasswordPrompt(null);
-        setQrPassInput('');
-        fetchBatches(null);
-      } else {
-        setQrPassError('Incorrect password. Please try again.');
-      }
-    };
-    return (
+  if (qrPasswordPrompt) return (
     <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
       <div style={{ fontSize: 56, marginBottom: 16 }}>🔒</div>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1c1c1e', marginBottom: 6, textAlign: 'center' }}>Access Required</h2>
@@ -3131,21 +2988,48 @@ function App() {
           type="password"
           value={qrPassInput}
           onChange={e => { setQrPassInput(e.target.value); setQrPassError(''); }}
-          onKeyDown={e => { if (e.key === 'Enter') handleQrSubmit(); }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              if (qrPassInput === PHGIC_PASS) {
+                safeLocalSet(AUTH_KEY, 'true');
+                safeLocalSet(ROLE_KEY, 'viewer');
+                setIsLoggedIn(true);
+                setIsViewer(true);
+                setPendingDeepLink(qrPasswordPrompt);
+                setQrPasswordPrompt(null);
+                setQrPassInput('');
+                fetchBatches(null);
+              } else {
+                setQrPassError('Incorrect password. Please try again.');
+              }
+            }
+          }}
           placeholder="Enter password"
           autoFocus
           style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${qrPassError ? '#ff3b30' : '#e5e5ea'}`, fontSize: 16, boxSizing: 'border-box', marginBottom: 10, outline: 'none' }}
         />
         {qrPassError && <p style={{ color: '#ff3b30', fontSize: 13, margin: '0 0 10px', textAlign: 'center' }}>{qrPassError}</p>}
         <button
-          onClick={handleQrSubmit}
+          onClick={() => {
+            if (qrPassInput === PHGIC_PASS) {
+              safeLocalSet(AUTH_KEY, 'true');
+              safeLocalSet(ROLE_KEY, 'viewer');
+              setIsLoggedIn(true);
+              setIsViewer(true);
+              setPendingDeepLink(qrPasswordPrompt);
+              setQrPasswordPrompt(null);
+              setQrPassInput('');
+              fetchBatches(null);
+            } else {
+              setQrPassError('Incorrect password. Please try again.');
+            }
+          }}
           style={{ width: '100%', background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
           View Record
         </button>
       </div>
     </div>
   );
-  } // end if (qrPasswordPrompt)
 
   // Always require login — no QR scan bypasses auth
   if (!isLoggedIn) return (
@@ -3380,13 +3264,7 @@ function App() {
         <h1 className="title">{displayName(selectedBatch)}</h1>
       </div>
       <h2 className="section-title">{t('students')}</h2>
-      {visibleStudents.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">👤</div>
-          <p className="empty-state-text">{isViewer ? 'No students available.' : 'No students yet.'}</p>
-          <p className="empty-state-sub">{isViewer ? 'Students will appear here once added by the teacher.' : 'Tap "Add Student" below to get started.'}</p>
-        </div>
-      ) : visibleStudents.map(student => (
+      {visibleStudents.map(student => (
         <div key={student._id} className="card student-card clickable" onClick={() => goToCategories(student)}>
           <div className="card-content">
             <div className="student-card-left">
@@ -3456,31 +3334,27 @@ function App() {
   {!isViewer && (
     <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
       <button
-        onClick={() => {
-          showConfirm('Archive Images', `Archive all exam images of ${selectedStudent.name}? They will be moved to cold storage.`, async () => {
-            closeConfirm();
-            try {
-              const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-              const data = await res.json();
-              if (data.success) toast.success(`Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
-              else toast.error(data.error || 'Unknown error');
-            } catch (e) { toast.error('Failed: ' + e.message); }
-          }, { confirmLabel: 'Archive', confirmStyle: 'warning' });
+        onClick={async () => {
+          if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: 'transparent', color: '#8B2020', border: '1.5px solid #8B2020', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
       >{t('archiveImages')}</button>
 
       <button
-        onClick={() => {
-          showConfirm('Restore Images', `Restore all images of ${selectedStudent.name} back to main storage?`, async () => {
-            closeConfirm();
-            try {
-              const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-              const data = await res.json();
-              if (data.success) toast.success(`Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
-              else toast.error(data.error || 'Unknown error');
-            } catch (e) { toast.error('Failed: ' + e.message); }
-          }, { confirmLabel: 'Restore', confirmStyle: 'primary' });
+        onClick={async () => {
+          if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: 'transparent', color: '#007AFF', border: '1.5px solid #007AFF', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
       >{t('restoreImages')}</button>
@@ -3496,24 +3370,17 @@ function App() {
       >{selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}</button>
 
       <button
-        onClick={() => {
-          showConfirm(
-            '⚠️ Permanent Delete',
-            `This will permanently delete ALL images and the student record of ${selectedStudent.name}. This CANNOT be undone.`,
-            () => {
-              closeConfirm();
-              showConfirm('Are you absolutely sure?', 'This is irreversible. The student and all data will be gone forever.', async () => {
-                closeConfirm();
-                try {
-                  const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
-                  const data = await res.json();
-                  if (data.success) { toast.success(`${selectedStudent.name} permanently deleted.`); goBack(); }
-                  else toast.error(data.error || 'Unknown error');
-                } catch (e) { toast.error('Failed: ' + e.message); }
-              }, { confirmLabel: 'Delete Forever', confirmStyle: 'danger' });
-            },
-            { confirmLabel: 'Yes, continue', confirmStyle: 'danger' }
-          );
+        onClick={async () => {
+          if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
+          if (!window.confirm(`Are you sure? This is irreversible.`)) return;
+          try {
+            const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+              alert(`🗑️ ${selectedStudent.name} permanently deleted.`);
+              goBack();
+            } else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
         }}
         style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
       >{t('deleteStudent')}</button>
@@ -4156,14 +4023,14 @@ function App() {
                         <option value="LWC CORPORATION">LWC CORPORATION</option>
                         <option value="M FARM CO., LTD">M FARM CO., LTD</option>
                         <option value="MIYABI CORPORATION">MIYABI CORPORATION</option>
-                        <option value="MT SHOJI CO., LTD">MT SHOJI CO., LTD</option>
+                        <option value="MT SHOJI CO., LTD ">MT SHOJI CO., LTD </option>
                         <option value="NAKAGAWA MANUFACTURING CO., LTD">NAKAGAWA MANUFACTURING CO., LTD</option>
                         <option value="NARIMATSU MASANAO">NARIMATSU MASANAO</option>
                         <option value="NISHIMURA HIRONORI">NISHIMURA HIRONORI</option>
                         <option value="NOUJI COOPERATIVE ASSOCIATION YOSHIURA RANCH">NOUJI COOPERATIVE ASSOCIATION YOSHIURA RANCH</option>
                         <option value="OKAMURA TSUYOSHI">OKAMURA TSUYOSHI</option>
                         <option value="OKAZAKI CO., LTD">OKAZAKI CO., LTD</option>
-                        <option value="OROCHI CO., LTD">OROCHI CO., LTD</option>
+                        <option value="OROCHI CO., LTD ">OROCHI CO., LTD </option>
                         <option value="SANKO LIMITED COMPANY">SANKO LIMITED COMPANY</option>
                         <option value="SAWADA HIDEO">SAWADA HIDEO</option>
                         <option value="SEKITO INDUSTRY CO., LTD">SEKITO INDUSTRY CO., LTD</option>
@@ -4189,7 +4056,7 @@ function App() {
                         <option value="KAGOSHIMA KIMOTSUKI AGRICULTURAL COOPERATIVE">KAGOSHIMA KIMOTSUKI AGRICULTURAL COOPERATIVE</option>
                         <option value="NAITO SATOSHI">NAITO SATOSHI</option>
                         <option value="CO., LTD KAMIKUBO LIVESTOCK">CO., LTD KAMIKUBO LIVESTOCK</option>
-                        <option value="CO., LTD KIMURA DAIRY FARM">CO., LTD KIMURA DAIRY FARM</option>
+                        <option value="CO., LTD KIMURA DAIRY FARM">CO., LTDKIMURA DAIRY FARM</option>
                         <option value="KIRA FOOD CO., LTD">KIRA FOOD CO., LTD</option>
                         <option value="MARUYAMA FARM CO., LTD">MARUYAMA FARM CO., LTD</option>
                         <option value="YAMASHITA HIDENNOBU">YAMASHITA HIDENNOBU</option>
@@ -4751,16 +4618,6 @@ function App() {
           onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
         />
       )}
-      <ConfirmDialog
-        open={confirmDialog.open}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        confirmLabel={confirmDialog.confirmLabel}
-        confirmStyle={confirmDialog.confirmStyle}
-        onConfirm={confirmDialog.onConfirm}
-        onCancel={closeConfirm}
-      />
-      <ToastContainer />
     </div>
   );
 }
