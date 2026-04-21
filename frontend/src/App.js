@@ -18,7 +18,7 @@ function applyDarkMode(dark) {
   else document.documentElement.removeAttribute('data-theme');
 }
 
-const API = 'https://YOUR-RAILWAY-URL.up.railway.app/api'; // TODO: palitan ng Railway URL mo pagkatapos mag-deploy
+const API = 'https://japanese-tracker-production.up.railway.app/api'; // TODO: palitan ng Railway URL mo pagkatapos mag-deploy
 // TODO: set REACT_APP_CLOUDINARY_CLOUD and REACT_APP_CLOUDINARY_PRESET in your .env file
 const CLOUDINARY_CLOUD = process.env.REACT_APP_CLOUDINARY_CLOUD || 'daofbq9wz';
 const CLOUDINARY_PRESET = process.env.REACT_APP_CLOUDINARY_PRESET || 'cnbztuzc';
