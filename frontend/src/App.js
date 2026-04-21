@@ -18,7 +18,7 @@ function applyDarkMode(dark) {
   else document.documentElement.removeAttribute('data-theme');
 }
 
-const API = 'https://japanese-tracker.onrender.com/api';
+const API = 'https://japanese-tracker-production.up.railway.app';
 // TODO: set REACT_APP_CLOUDINARY_CLOUD and REACT_APP_CLOUDINARY_PRESET in your .env file
 const CLOUDINARY_CLOUD = process.env.REACT_APP_CLOUDINARY_CLOUD || 'daofbq9wz';
 const CLOUDINARY_PRESET = process.env.REACT_APP_CLOUDINARY_PRESET || 'cnbztuzc';
