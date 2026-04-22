@@ -1173,3 +1173,55 @@
    [data-theme="dark"] .rating-btn.selected { background: var(--brand) !important; color: #fff !important; }
    [data-theme="dark"] .view-all-btn { background: var(--surface2) !important; color: var(--text-secondary) !important; }
    [data-theme="dark"] .view-all-btn:hover { background: var(--surface3) !important; color: var(--brand) !important; }
+
+/* ── STICKY HEADERS ──────────────────────────────────── */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  margin-left: calc(-1 * var(--page-pad));
+  margin-right: calc(-1 * var(--page-pad));
+  padding-left: var(--page-pad);
+  padding-right: var(--page-pad);
+}
+
+/* Header banner (batches / kumiai screen) */
+.sticky-header .header-banner {
+  border-radius: 0 0 var(--radius-xl, 20px) var(--radius-xl, 20px);
+  margin-bottom: 0;
+}
+
+/* Back-button style sticky bar */
+.sticky-header--back {
+  background: var(--bg);
+  padding-top: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sticky-header--back .back-btn {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.sticky-header--back .header-with-back {
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.sticky-header--back .title {
+  font-size: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+[data-theme="dark"] .sticky-header--back {
+  background: var(--bg);
+  border-bottom-color: var(--border);
+}

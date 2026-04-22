@@ -3164,6 +3164,7 @@ function App() {
     // ── Company list view ─────────────────────────────────────────────
     return (
       <>
+        <div className="sticky-header">
         <div className="header-banner">
           <div className="top-row">
             <div>
@@ -3178,6 +3179,7 @@ function App() {
             </div>
           </div>
         </div>
+        </div>{/* end sticky-header */}
 
         <h2 className="section-title">
           {t('companies')} ({groupKeys.length})
@@ -3215,6 +3217,7 @@ function App() {
 
   const renderBatches = () => (
     <>
+      <div className="sticky-header">
       <div className="header-banner">
         <div className="top-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -3257,7 +3260,7 @@ function App() {
             </button>
           </div>
         </div>
-      </div>
+      </div>{/* end sticky-header */}
       <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
       {(isViewer
         ? batches.filter(b => safeLocalGet(ROLE_KEY) === 'sulop'
@@ -3294,9 +3297,11 @@ function App() {
     visibleStudents = visibleStudents.slice().sort((a, b) => a.name.localeCompare(b.name));
     return (
     <>
-      <button className="back-btn" onClick={goBack}>←</button>
-      <div className="header-with-back">
-        <h1 className="title">{displayName(selectedBatch)}</h1>
+      <div className="sticky-header sticky-header--back">
+        <button className="back-btn" onClick={goBack}>←</button>
+        <div className="header-with-back">
+          <h1 className="title">{displayName(selectedBatch)}</h1>
+        </div>
       </div>
       <h2 className="section-title">{t('students')}</h2>
       {visibleStudents.map(student => (
@@ -3359,7 +3364,9 @@ function App() {
 
   const renderCategories = () => (
     <>
-      <button className="back-btn" onClick={goBack}>←</button>
+      <div className="sticky-header sticky-header--back">
+        <button className="back-btn" onClick={goBack}>←</button>
+      </div>
       <div className="student-profile-header">
   {selectedStudent.photo
     ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
@@ -3489,7 +3496,9 @@ function App() {
 
   const renderEvaluations = () => (
     <>
-      <button className="back-btn" onClick={goBack}>←</button>
+      <div className="sticky-header sticky-header--back">
+        <button className="back-btn" onClick={goBack}>←</button>
+      </div>
       <div className="student-profile-header">
         {selectedStudent.photo
           ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
@@ -3675,7 +3684,9 @@ function App() {
 
     return (
       <>
-        <button className="back-btn" onClick={goBack}>←</button>
+        <div className="sticky-header sticky-header--back">
+          <button className="back-btn" onClick={goBack}>←</button>
+        </div>
 
         {/* Hero banner */}
         <div className="eval-hero">
@@ -3773,9 +3784,11 @@ function App() {
 
   const renderExamItems = () => (
     <>
-      <button className="back-btn" onClick={goBack}>←</button>
-      <div className="header-with-back">
-        <h1 className="title">📁 {displayName(selectedCategory)}</h1>
+      <div className="sticky-header sticky-header--back">
+        <button className="back-btn" onClick={goBack}>←</button>
+        <div className="header-with-back">
+          <h1 className="title">📁 {displayName(selectedCategory)}</h1>
+        </div>
       </div>
       <h2 className="section-title">{t('exams')}</h2>
       {(selectedCategory?.items || []).length === 0 ? (
@@ -3853,7 +3866,9 @@ function App() {
 
     return (
       <>
-        <button className="back-btn" onClick={goBack}>←</button>
+        <div className="sticky-header sticky-header--back">
+          <button className="back-btn" onClick={goBack}>←</button>
+        </div>
 
         {/* Hero score card */}
         <div className="exam-detail-hero">
