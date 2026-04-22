@@ -6,6 +6,70 @@ const cors = require('cors');
 const crypto = require('crypto');
 require('dotenv').config();
 
+// ── ALLOWED ORIGINS (S1 fix — no more wildcard CORS) ─────────────────────────
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+// Always allow the production frontend + localhost for dev
+const DEFAULT_ORIGINS = [
+  'https://japanese-tracker.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
+const allAllowedOrigins = [...new Set([...DEFAULT_ORIGINS, ...ALLOWED_ORIGINS])];
+
+// ── RATE LIMITER (S2 fix — in-memory sliding window, no extra npm needed) ─────
+const rateLimitStore = new Map();
+function rateLimit({ windowMs = 60_000, max = 60, message = 'Too many requests, please try again later.' } = {}) {
+  return (req, res, next) => {
+    const ip = (req.headers['x-forwarded-for'] || req.ip || 'unknown').split(',')[0].trim();
+    const now = Date.now();
+    const windowStart = now - windowMs;
+    const timestamps = (rateLimitStore.get(ip) || []).filter(t => t > windowStart);
+    timestamps.push(now);
+    rateLimitStore.set(ip, timestamps);
+    if (timestamps.length > max) {
+      return res.status(429).json({ error: message });
+    }
+    next();
+  };
+}
+// Clean stale IPs every 5 min to prevent memory growth
+setInterval(() => {
+  const cutoff = Date.now() - 5 * 60_000;
+  for (const [ip, times] of rateLimitStore.entries()) {
+    if (!times.some(t => t > cutoff)) rateLimitStore.delete(ip);
+  }
+}, 5 * 60_000);
+
+// ── SIMPLE ADMIN AUTH MIDDLEWARE (S4 fix) ─────────────────────────────────────
+// Admin endpoints require X-Admin-Key header matching ADMIN_SECRET env var
+const requireAdmin = (req, res, next) => {
+  const adminSecret = (process.env.ADMIN_SECRET || '').trim();
+  if (!adminSecret) {
+    // If ADMIN_SECRET not set, block all admin access in production
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'Admin endpoints disabled: ADMIN_SECRET not configured.' });
+    }
+    return next(); // Allow in dev if not set
+  }
+  const key = (req.headers['x-admin-key'] || '').trim();
+  if (!key || key !== adminSecret) {
+    return res.status(401).json({ error: 'Unauthorized. Valid X-Admin-Key header required.' });
+  }
+  next();
+};
+
+// ── INPUT VALIDATION HELPERS (S3 fix) ────────────────────────────────────────
+const isValidObjectId = (id) => /^[a-f\d]{24}$/i.test(id);
+const sanitizeStr = (v, maxLen = 500) => (typeof v === 'string' ? v.trim().slice(0, maxLen) : '');
+const sanitizeNum = (v, min = 0, max = 99999) => {
+  const n = Number(v);
+  return (!isNaN(n) && n >= min && n <= max) ? n : null;
+};
+
+
 // ── CLOUDINARY UPLOAD (via REST API — no npm package needed) ─────────────────
 const cloudinaryUpload = async (base64Data) => {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -60,22 +124,29 @@ const cloudinaryDelete = async (publicId) => {
 };
 
 const app = express();
+
+// ── SERVER MONITOR ────────────────────────────────────────────────────────────
+let requestCount = 0;
+let requestCountThisHour = 0;
+let hourStart = Date.now();
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
+  requestCount++;
+  if (Date.now() - hourStart > 60 * 60 * 1000) { requestCountThisHour = 0; hourStart = Date.now(); }
+  requestCountThisHour++;
+  next();
 });
 
+// S1 fix: CORS restricted to known frontend origins (no more wildcard)
 app.use(cors({
-  origin: '*',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allAllowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS: origin '${origin}' not allowed`));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Key'],
+  credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -142,7 +213,7 @@ app.get('/api/images/:id', async (req, res) => {
 });
 
 // POST bulk fetch images by IDs — returns { id: url } map in one round-trip
-app.post("/api/images/bulk", async (req, res) => {
+app.post("/api/images/bulk", rateLimit({ windowMs: 60_000, max: 60 }), async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.json({});
@@ -156,7 +227,7 @@ app.post("/api/images/bulk", async (req, res) => {
 
 // POST save image reference — browser uploads directly to Cloudinary,
 // then sends us just the URL + publicId to store
-app.post('/api/images', async (req, res) => {
+app.post('/api/images', rateLimit({ windowMs: 60_000, max: 30 }), async (req, res) => {
   try {
     const { url, publicId } = req.body;
     if (!url) return res.status(400).json({ error: 'url required' });
@@ -227,8 +298,19 @@ app.get('/api/batches', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/batches', async (req, res) => {
-  try { const b = new Batch({ name: req.body.name, name_ja: req.body.name_ja || '', teacherId: req.body.teacherId || null, students: [] }); await b.save(); res.json(b); } catch (err) { res.status(500).json({ error: err.message }); }
+app.post('/api/batches', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const name = sanitizeStr(req.body.name, 200);
+    if (!name) return res.status(400).json({ error: 'Batch name is required' });
+    const b = new Batch({
+      name,
+      name_ja: sanitizeStr(req.body.name_ja, 200),
+      teacherId: req.body.teacherId || null,
+      students: [],
+    });
+    await b.save();
+    res.json(b);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.patch('/api/batches/:batchId', async (req, res) => {
@@ -248,8 +330,22 @@ app.delete('/api/batches/:batchId', async (req, res) => {
 
 app.post('/api/batches/:batchId/students', async (req, res) => {
   try {
+    // S3/B2 fix: null check + input validation
     const batch = await Batch.findById(req.params.batchId);
-    batch.students.push({ name: req.body.name, photo: req.body.photo || null, status: req.body.status || 'Regular', companyName: req.body.companyName || '', kumiai: req.body.kumiai || '', categories: [], evaluations: [] });
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const name = sanitizeStr(req.body.name, 200);
+    if (!name) return res.status(400).json({ error: 'Student name is required' });
+    batch.students.push({
+      name,
+      photo: req.body.photo || null,
+      status: ['Regular', 'Selected'].includes(req.body.status) ? req.body.status : 'Regular',
+      companyName: sanitizeStr(req.body.companyName, 200),
+      kumiai: sanitizeStr(req.body.kumiai, 100),
+      scholarship: ['yes', 'no'].includes(req.body.scholarship) ? req.body.scholarship : 'no',
+      scholarshipType: sanitizeStr(req.body.scholarshipType, 100),
+      categories: [],
+      evaluations: [],
+    });
     await batch.save();
     res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -334,9 +430,27 @@ app.delete('/api/batches/:batchId/students/:studentId/categories/:catId', async 
 app.post('/api/batches/:batchId/students/:studentId/categories/:catId/items', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
     const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
     const cat = student.categories.id(req.params.catId);
-    const newItem = { name: req.body.name, name_ja: req.body.name_ja || '', date: new Date().toISOString().split('T')[0], score: req.body.score, totalScore: req.body.totalScore || 100, images: [] };
+    if (!cat) return res.status(404).json({ error: 'Category not found' });
+
+    // B3/S3 fix: server-side score validation
+    const name = sanitizeStr(req.body.name, 300);
+    if (!name) return res.status(400).json({ error: 'Exam name is required' });
+    const score = sanitizeNum(req.body.score, 0, 99999);
+    const totalScore = sanitizeNum(req.body.totalScore, 1, 99999) || 100;
+    if (score === null) return res.status(400).json({ error: 'Score must be a number between 0 and 99999' });
+    if (score > totalScore) return res.status(400).json({ error: `Score (${score}) cannot exceed total score (${totalScore})` });
+
+    // B4 fix: use provided date if valid, else today
+    const dateInput = req.body.date;
+    const date = (dateInput && /^\d{4}-\d{2}-\d{2}$/.test(dateInput))
+      ? dateInput
+      : new Date().toISOString().split('T')[0];
+
+    const newItem = { name, name_ja: sanitizeStr(req.body.name_ja, 300), date, score, totalScore, images: [] };
     cat.items.push(newItem);
     await batch.save();
     res.json(cat.items[cat.items.length - 1]);
@@ -346,15 +460,26 @@ app.post('/api/batches/:batchId/students/:studentId/categories/:catId/items', as
 app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
     const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
     const cat = student.categories.id(req.params.catId);
+    if (!cat) return res.status(404).json({ error: 'Category not found' });
     const item = cat.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item not found' });
-    if (req.body.name !== undefined) item.name = req.body.name;
-    if (req.body.name_ja !== undefined) item.name_ja = req.body.name_ja;
-    if (req.body.score !== undefined) item.score = req.body.score;
-    if (req.body.totalScore !== undefined) item.totalScore = req.body.totalScore;
-    if (req.body.date !== undefined) item.date = req.body.date;
+
+    if (req.body.name !== undefined) item.name = sanitizeStr(req.body.name, 300);
+    if (req.body.name_ja !== undefined) item.name_ja = sanitizeStr(req.body.name_ja, 300);
+    // B3 fix: validate score on update too
+    if (req.body.score !== undefined || req.body.totalScore !== undefined) {
+      const score = sanitizeNum(req.body.score ?? item.score, 0, 99999);
+      const totalScore = sanitizeNum(req.body.totalScore ?? item.totalScore, 1, 99999);
+      if (score === null || totalScore === null) return res.status(400).json({ error: 'Invalid score values' });
+      if (score > totalScore) return res.status(400).json({ error: `Score (${score}) cannot exceed total score (${totalScore})` });
+      item.score = score;
+      item.totalScore = totalScore;
+    }
+    if (req.body.date !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(req.body.date)) item.date = req.body.date;
     await batch.save();
     res.json(item);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -462,7 +587,7 @@ app.delete('/api/batches/:batchId/students/:studentId/evaluations/:evalId', asyn
 });
 
 // ── ARCHIVE: migrate base64 images to Cloudinary ─────────────────────────────
-app.post('/api/archive/migrate-base64', async (req, res) => {
+app.post('/api/archive/migrate-base64', requireAdmin, async (req, res) => {
   try {
     const batches = await Batch.find();
     let migrated = 0, skipped = 0, failed = 0;
@@ -555,50 +680,63 @@ const cloudinaryArchiveUpload = async (base64Data) => {
   return { url: data.secure_url, publicId: data.public_id };
 };
 
-// ── ARCHIVE BATCH: move all images to archive Cloudinary ─────────────────────
-app.post('/api/archive/batch/:batchId', async (req, res) => {
-  try {
-    const batch = await Batch.findById(req.params.batchId);
-    if (!batch) return res.status(404).json({ error: 'Batch not found' });
 
-    let migrated = 0, skipped = 0, failed = 0;
-    const errors = [];
+// ── SHARED ARCHIVE HELPER (Q1 fix — DRY) ─────────────────────────────────────
+// Migrates images for a list of students between Cloudinary accounts
+// direction: 'archive' = main → archive account, 'restore' = archive → main account
+async function migrateStudentImages(student, direction) {
+  let migrated = 0, skipped = 0, failed = 0;
+  const errors = [];
+  const archiveCloudName = process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME || '';
 
-    for (const student of batch.students) {
-      for (const cat of student.categories) {
-        for (const item of cat.items) {
-          for (let i = 0; i < (item.images || []).length; i++) {
-            const imgRef = item.images[i];
-            if (!/^[a-f\d]{24}$/i.test(imgRef)) { skipped++; continue; }
+  for (const cat of student.categories) {
+    for (const item of cat.items) {
+      for (const imgRef of (item.images || [])) {
+        if (!isValidObjectId(imgRef)) { skipped++; continue; }
+        const imgDoc = await Image.findById(imgRef);
+        if (!imgDoc?.url) { skipped++; continue; }
 
-            const imgDoc = await Image.findById(imgRef);
-            if (!imgDoc?.url) { skipped++; continue; }
+        const isInArchive = archiveCloudName && imgDoc.url.includes(archiveCloudName);
+        // Skip if already in the right place
+        if (direction === 'archive' && isInArchive) { skipped++; continue; }
+        if (direction === 'restore' && !isInArchive) { skipped++; continue; }
 
-            if (imgDoc.url.includes(process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME)) {
-              skipped++; continue;
-            }
+        try {
+          const fetchRes = await fetch(imgDoc.url);
+          const arrayBuffer = await fetchRes.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          const mimeType = fetchRes.headers.get('content-type') || 'image/jpeg';
+          const dataUrl = `data:${mimeType};base64,${base64}`;
 
-            try {
-              const fetchRes = await fetch(imgDoc.url);
-              const arrayBuffer = await fetchRes.arrayBuffer();
-              const base64 = Buffer.from(arrayBuffer).toString('base64');
-              const mimeType = fetchRes.headers.get('content-type') || 'image/jpeg';
-              const dataUrl = `data:${mimeType};base64,${base64}`;
+          const { url, publicId } = direction === 'archive'
+            ? await cloudinaryArchiveUpload(dataUrl)
+            : await cloudinaryUpload(dataUrl);
 
-              const { url, publicId } = await cloudinaryArchiveUpload(dataUrl);
-              imgDoc.url = url;
-              imgDoc.publicId = publicId;
-              await imgDoc.save();
-              migrated++;
-            } catch (e) {
-              failed++;
-              errors.push({ student: student.name, item: item.name, error: e.message });
-            }
-          }
+          imgDoc.url = url;
+          imgDoc.publicId = publicId;
+          await imgDoc.save();
+          migrated++;
+        } catch (e) {
+          failed++;
+          errors.push({ item: item.name, error: e.message });
         }
       }
     }
+  }
+  return { migrated, skipped, failed, errors };
+}
 
+// ── ARCHIVE BATCH: move all images to archive Cloudinary ─────────────────────
+app.post('/api/archive/batch/:batchId', requireAdmin, async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    let migrated = 0, skipped = 0, failed = 0, errors = [];
+    for (const student of batch.students) {
+      const r = await migrateStudentImages(student, 'archive');
+      migrated += r.migrated; skipped += r.skipped; failed += r.failed;
+      errors = errors.concat(r.errors.map(e => ({ student: student.name, ...e })));
+    }
     res.json({ success: true, batch: batch.name, migrated, skipped, failed, errors });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -606,7 +744,7 @@ app.post('/api/archive/batch/:batchId', async (req, res) => {
 });
 
 // ── CLEANUP: delete empty Image documents ────────────────────────────────────
-app.delete('/api/diagnostic/cleanup-empty', async (req, res) => {
+app.delete('/api/diagnostic/cleanup-empty', requireAdmin, async (req, res) => {
   try {
     const result = await Image.deleteMany({ url: { $exists: false } });
     res.json({ deleted: result.deletedCount });
@@ -614,107 +752,35 @@ app.delete('/api/diagnostic/cleanup-empty', async (req, res) => {
 });
 
 // ── ARCHIVE STUDENT: move one student's images to archive Cloudinary ──────────
-app.post('/api/archive/student/:batchId/:studentId', async (req, res) => {
+app.post('/api/archive/student/:batchId/:studentId', requireAdmin, async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
     if (!batch) return res.status(404).json({ error: 'Batch not found' });
     const student = batch.students.id(req.params.studentId);
     if (!student) return res.status(404).json({ error: 'Student not found' });
-
-    let migrated = 0, skipped = 0, failed = 0;
-    const errors = [];
-
-    for (const cat of student.categories) {
-      for (const item of cat.items) {
-        for (let i = 0; i < (item.images || []).length; i++) {
-          const imgRef = item.images[i];
-          if (!/^[a-f\d]{24}$/i.test(imgRef)) { skipped++; continue; }
-
-          const imgDoc = await Image.findById(imgRef);
-          if (!imgDoc?.url) { skipped++; continue; }
-
-          if (imgDoc.url.includes(process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME)) {
-            skipped++; continue;
-          }
-
-          try {
-            const fetchRes = await fetch(imgDoc.url);
-            const arrayBuffer = await fetchRes.arrayBuffer();
-            const base64 = Buffer.from(arrayBuffer).toString('base64');
-            const mimeType = fetchRes.headers.get('content-type') || 'image/jpeg';
-            const dataUrl = `data:${mimeType};base64,${base64}`;
-
-            const { url, publicId } = await cloudinaryArchiveUpload(dataUrl);
-            imgDoc.url = url;
-            imgDoc.publicId = publicId;
-            await imgDoc.save();
-            migrated++;
-          } catch (e) {
-            failed++;
-            errors.push({ item: item.name, error: e.message });
-          }
-        }
-      }
-    }
-
-    res.json({ success: true, student: student.name, migrated, skipped, failed, errors });
+    const result = await migrateStudentImages(student, 'archive');
+    res.json({ success: true, student: student.name, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── RESTORE STUDENT: move images back to main Cloudinary ─────────────────────
-app.post('/api/archive/restore/:batchId/:studentId', async (req, res) => {
+app.post('/api/archive/restore/:batchId/:studentId', requireAdmin, async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
     if (!batch) return res.status(404).json({ error: 'Batch not found' });
     const student = batch.students.id(req.params.studentId);
     if (!student) return res.status(404).json({ error: 'Student not found' });
-
-    let migrated = 0, skipped = 0, failed = 0;
-    const errors = [];
-
-    for (const cat of student.categories) {
-      for (const item of cat.items) {
-        for (let i = 0; i < (item.images || []).length; i++) {
-          const imgRef = item.images[i];
-          if (!/^[a-f\d]{24}$/i.test(imgRef)) { skipped++; continue; }
-
-          const imgDoc = await Image.findById(imgRef);
-          if (!imgDoc?.url) { skipped++; continue; }
-
-          if (!imgDoc.url.includes(process.env.CLOUDINARY_ARCHIVE_CLOUD_NAME)) {
-            skipped++; continue;
-          }
-
-          try {
-            const fetchRes = await fetch(imgDoc.url);
-            const arrayBuffer = await fetchRes.arrayBuffer();
-            const base64 = Buffer.from(arrayBuffer).toString('base64');
-            const mimeType = fetchRes.headers.get('content-type') || 'image/jpeg';
-            const dataUrl = `data:${mimeType};base64,${base64}`;
-
-            const { url, publicId } = await cloudinaryUpload(dataUrl);
-            imgDoc.url = url;
-            imgDoc.publicId = publicId;
-            await imgDoc.save();
-            migrated++;
-          } catch (e) {
-            failed++;
-            errors.push({ item: item.name, error: e.message });
-          }
-        }
-      }
-    }
-
-    res.json({ success: true, student: student.name, migrated, skipped, failed, errors });
+    const result = await migrateStudentImages(student, 'restore');
+    res.json({ success: true, student: student.name, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── PERMANENT DELETE STUDENT: delete all images + student record ──────────────
-app.delete('/api/archive/permanent/:batchId/:studentId', async (req, res) => {
+app.delete('/api/archive/permanent/:batchId/:studentId', requireAdmin, async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
     if (!batch) return res.status(404).json({ error: 'Batch not found' });
@@ -744,7 +810,7 @@ app.delete('/api/archive/permanent/:batchId/:studentId', async (req, res) => {
 });
 
 // ── CLOUDINARY STORAGE USAGE ──────────────────────────────────────────────────
-app.get('/api/admin/storage-usage', async (req, res) => {
+app.get('/api/admin/storage-usage', requireAdmin, async (req, res) => {
   try {
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey    = process.env.CLOUDINARY_API_KEY;
@@ -781,24 +847,7 @@ app.get('/api/admin/storage-usage', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// ── SERVER MONITOR ────────────────────────────────────────────────────────────
-// Tracks request counts since server started
-let requestCount = 0;
-let requestCountThisHour = 0;
-let hourStart = Date.now();
-
-app.use((req, res, next) => {
-  requestCount++;
-  // Reset hourly counter every 60 minutes
-  if (Date.now() - hourStart > 60 * 60 * 1000) {
-    requestCountThisHour = 0;
-    hourStart = Date.now();
-  }
-  requestCountThisHour++;
-  next();
-});
-
-app.get('/api/admin/server-stats', async (req, res) => {
+app.get('/api/admin/server-stats', requireAdmin, async (req, res) => {
   try {
     const memUsage = process.memoryUsage();
     const uptimeSeconds = process.uptime();
@@ -860,9 +909,6 @@ app.get('/api/admin/server-stats', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log('Server running on port ' + PORT));
-
 // ── TRANSLATE ROUTE (Taglish map + MyMemory + post-processing) ───────────────
 
 const TAGLISH_MAP = [
@@ -1136,10 +1182,12 @@ const postProcess = (text) => {
   return result;
 };
 
-app.post('/api/translate', async (req, res) => {
+app.post('/api/translate', rateLimit({ windowMs: 60_000, max: 10, message: 'Translation rate limit exceeded. Please wait a moment.' }), async (req, res) => {
   try {
-    const { text } = req.body;
-    if (!text || !text.trim()) return res.json({ translation: '' });
+    const raw = req.body.text;
+    if (!raw || typeof raw !== 'string') return res.json({ translation: '' });
+    const text = raw.trim().slice(0, 1000); // S3: cap at 1000 chars
+    if (!text) return res.json({ translation: '' });
 
     const taglishMatch = matchTaglish(text);
     if (taglishMatch) return res.json({ translation: taglishMatch });
@@ -1175,7 +1223,7 @@ app.post('/api/translate', async (req, res) => {
 
 // ── FIX: patch empty Image documents that have no URL ───────────────────────
 // Matches imageId in batch → finds its Cloudinary URL via publicId or deletes if unfixable
-app.post('/api/admin/fix-empty-images', async (req, res) => {
+app.post('/api/admin/fix-empty-images', requireAdmin, async (req, res) => {
   try {
     // Find all Image docs with no URL
     const emptyImgs = await Image.find({ $or: [{ url: null }, { url: { $exists: false } }, { url: '' }] });
@@ -1206,7 +1254,7 @@ app.post('/api/admin/fix-empty-images', async (req, res) => {
 });
 
 // ── DIAGNOSTIC: check image format ──────────────────────────────────────────
-app.get('/api/diagnostic/images', async (req, res) => {
+app.get('/api/diagnostic/images', requireAdmin, async (req, res) => {
   try {
     const batches = await Batch.find();
     const result = [];
@@ -1237,3 +1285,7 @@ app.get('/api/diagnostic/images', async (req, res) => {
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ── SERVER START ─────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
