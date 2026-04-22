@@ -3260,6 +3260,7 @@ function App() {
             </button>
           </div>
         </div>
+      </div>{/* end header-banner */}
       </div>{/* end sticky-header */}
       <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
       {(isViewer
