@@ -718,7 +718,7 @@ function ProgressChart({ student, batch, onClose }) {
                     <span style={{
                       width: 36, height: 36, borderRadius: '50%',
                       background: exam.percentage >= 80 ? 'var(--green-soft, #e8f5e9)' : exam.percentage >= 60 ? 'var(--amber-soft, #fff8e1)' : 'var(--red-soft, #ffebee)',
-                      color: exam.percentage >= 80 ? 'var(--green, #2e7d32)' : exam.percentage >= 60 ? 'var(--amber, #f57c00)' : 'var(--red, #c62828)',
+                      color: exam.percentage >= 60 ? 'var(--green, #2e7d32)' : 'var(--red, #c62828)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 13, fontWeight: 700
                     }}>{exam.percentage}%</span>
