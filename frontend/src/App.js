@@ -717,8 +717,8 @@ function ProgressChart({ student, batch, onClose }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{
                       width: 36, height: 36, borderRadius: '50%',
-                      background: exam.percentage >= 80 ? 'var(--green-soft, #e8f5e9)' : exam.percentage >= 60 ? 'var(--amber-soft, #fff8e1)' : 'var(--red-soft, #ffebee)',
-                      color: exam.percentage >= 80 ? 'var(--green, #2e7d32)' : exam.percentage >= 60 ? 'var(--amber, #f57c00)' : 'var(--red, #c62828)',
+                      background: exam.percentage >= 60 ? 'var(--green-soft, #e8f5e9)' : 'var(--red-soft, #ffebee)',
+                      color: exam.percentage >= 60 ? 'var(--green, #2e7d32)' : 'var(--red, #c62828)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 13, fontWeight: 700
                     }}>{exam.percentage}%</span>
@@ -3804,8 +3804,8 @@ function App() {
             const score = item.score ?? 0;
             const total = item.totalScore ?? 100;
             const pct = Math.round((score / total) * 100);
-            const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
-            const bg   = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
+            const color = pct >= 60 ? 'var(--green)' : 'var(--red)';
+            const bg   = pct >= 60 ? 'var(--green-soft)' : 'var(--red-soft)';
             return (
               <div key={item._id} className="exam-list-card clickable" onClick={() => goToExamDetail(item)}>
                 {/* Score badge */}
@@ -3862,8 +3862,8 @@ function App() {
     const score = selectedExam.score ?? 0;
     const total = selectedExam.totalScore ?? 100;
     const pct = Math.round((score / total) * 100);
-    const pctColor = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
-    const pctBg    = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
+    const pctColor = pct >= 60 ? 'var(--green)' : 'var(--red)';
+    const pctBg    = pct >= 60 ? 'var(--green-soft)' : 'var(--red-soft)';
 
     return (
       <>
