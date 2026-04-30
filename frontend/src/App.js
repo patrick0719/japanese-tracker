@@ -63,12 +63,27 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
 // ── IMAGE VIEWER COMPONENT ──────────────────────────────────────────────────
 function ImageViewer({ images, startIndex, onClose }) {
   const [current, setCurrent] = useState(startIndex || 0);
-  const touchStartX = useRef(null);
 
-  const prev = () => setCurrent(i => Math.max(0, i - 1));
-  const next = () => setCurrent(i => Math.min(images.length - 1, i + 1));
+  // ── Pinch-zoom-snap state ─────────────────────────────────────────────────
+  // scale: current live zoom level while fingers are down
+  // When fingers lift → animate back to scale=1 instantly (snap back)
+  const [scale, setScale] = useState(1);
+  const [origin, setOrigin] = useState({ x: 50, y: 50 }); // transform-origin in %
+  const isPinching = useRef(false);
+  const initialDist = useRef(null);
+  const initialMid = useRef({ x: 0, y: 0 });
+  const imgRef = useRef(null);
 
-  // Keyboard navigation: Escape closes, Left/Right arrows navigate
+  // Swipe state (only when NOT pinching)
+  const swipeStartX = useRef(null);
+
+  const prev = () => { if (scale === 1) setCurrent(i => Math.max(0, i - 1)); };
+  const next = () => { if (scale === 1) setCurrent(i => Math.min(images.length - 1, i + 1)); };
+
+  // Reset zoom when image changes
+  useEffect(() => { setScale(1); setOrigin({ x: 50, y: 50 }); }, [current]);
+
+  // Keyboard nav
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
@@ -77,14 +92,61 @@ function ImageViewer({ images, startIndex, onClose }) {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, scale]);
 
-  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
+  // ── Touch handlers ────────────────────────────────────────────────────────
+  const getDist = (t) => {
+    const dx = t[0].clientX - t[1].clientX;
+    const dy = t[0].clientY - t[1].clientY;
+    return Math.hypot(dx, dy);
+  };
+
+  const getMid = (t, rect) => ({
+    x: ((t[0].clientX + t[1].clientX) / 2 - rect.left) / rect.width * 100,
+    y: ((t[0].clientY + t[1].clientY) / 2 - rect.top) / rect.height * 100,
+  });
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      // Pinch start
+      isPinching.current = true;
+      swipeStartX.current = null;
+      initialDist.current = getDist(e.touches);
+      const rect = imgRef.current?.getBoundingClientRect() || { left: 0, top: 0, width: 1, height: 1 };
+      initialMid.current = getMid(e.touches, rect);
+    } else if (e.touches.length === 1 && !isPinching.current) {
+      swipeStartX.current = e.touches[0].clientX;
+    }
+  };
+
+  const onTouchMove = (e) => {
+    if (e.touches.length === 2 && initialDist.current) {
+      e.preventDefault();
+      const newDist = getDist(e.touches);
+      const raw = newDist / initialDist.current;
+      // Clamp scale: 1x minimum (no pinch-in below normal), 4x max
+      const clamped = Math.min(4, Math.max(1, raw));
+      setScale(clamped);
+      setOrigin(initialMid.current);
+    }
+  };
+
   const onTouchEnd = (e) => {
-    if (touchStartX.current === null) return;
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
-    touchStartX.current = null;
+    if (isPinching.current) {
+      // Snap back to normal on finger lift
+      setScale(1);
+      setOrigin({ x: 50, y: 50 });
+      isPinching.current = false;
+      initialDist.current = null;
+      swipeStartX.current = null;
+      return;
+    }
+    // Single-finger swipe for page navigation
+    if (swipeStartX.current !== null && e.changedTouches.length > 0) {
+      const diff = swipeStartX.current - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
+      swipeStartX.current = null;
+    }
   };
 
   return (
@@ -94,13 +156,15 @@ function ImageViewer({ images, startIndex, onClose }) {
       aria-label={`Image viewer, ${images.length} pages`}
       style={{
         position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
-        display: 'flex', flexDirection: 'column'
+        display: 'flex', flexDirection: 'column',
+        // Block native browser pinch-zoom inside the viewer
+        touchAction: 'none',
       }}
     >
       {/* Top bar */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '12px 20px', background: 'rgba(0,0,0,0.8)'
+        padding: '12px 20px', background: 'rgba(0,0,0,0.8)', flexShrink: 0,
       }}>
         <button onClick={onClose} aria-label="Close image viewer" style={{
           background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1
@@ -111,23 +175,51 @@ function ImageViewer({ images, startIndex, onClose }) {
         <div style={{ width: 32 }} />
       </div>
 
-      {/* Image */}
+      {/* Image area */}
       <div
-        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+        style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden', position: 'relative',
+        }}
         onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
         <img
+          ref={imgRef}
           src={images[current]}
           alt={`Page ${current + 1} of ${images.length}`}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          draggable={false}
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            userSelect: 'none',
+            // Smooth snap-back when scale returns to 1, instant zoom while pinching
+            transform: `scale(${scale})`,
+            transformOrigin: `${origin.x}% ${origin.y}%`,
+            transition: scale === 1 ? 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)' : 'none',
+            willChange: 'transform',
+          }}
         />
+
+        {/* Zoom hint — only when not zoomed */}
+        {scale === 1 && (
+          <div style={{
+            position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.55)',
+            fontSize: 11, fontWeight: 500, padding: '4px 12px', borderRadius: 20,
+            pointerEvents: 'none', whiteSpace: 'nowrap',
+          }}>
+            Pinch to zoom · Release to snap back
+          </div>
+        )}
       </div>
 
       {/* Bottom nav */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '16px 24px', background: 'rgba(0,0,0,0.8)'
+        padding: '16px 24px', background: 'rgba(0,0,0,0.8)', flexShrink: 0,
       }}>
         <button
           onClick={prev}
@@ -2306,7 +2398,6 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [progressChartStudent, setProgressChartStudent] = useState(null);
-  const [studentPhotoViewer, setStudentPhotoViewer] = useState(null); // photo URL to fullscreen view
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
@@ -2498,38 +2589,17 @@ function App() {
     }
   };
 
-  // ── ZOOM RESET ────────────────────────────────────────────────────────────
-  // Resets accidental zoom when navigating between pages WITHOUT disabling
-  // pinch-to-zoom (so users can still zoom images etc normally).
-  // Technique: briefly set maximum-scale=1 to snap browser back, then
-  // immediately restore maximum-scale=5 to re-allow pinch zoom.
-  const resetZoom = () => {
-    try {
-      const meta = document.querySelector('meta[name="viewport"]');
-      if (!meta) return;
-      // Snap to scale=1
-      meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1');
-      // Re-allow pinch zoom after a short tick
-      requestAnimationFrame(() => {
-        meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=5');
-      });
-    } catch {}
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  };
-
-  const goToStudents = (batch) => { resetZoom(); setSelectedBatch(batch); setView('students'); };
+  const goToStudents = (batch) => { setSelectedBatch(batch); setView('students'); };
   const goToCategories = (student) => {
-    resetZoom();
     // Always resolve the freshest student from selectedBatch so categories/exams are current
     const freshStudent = selectedBatch?.students.find(s => s._id === student._id) || student;
     setSelectedStudent(freshStudent);
     setView('categories');
   };
-  const goToExamItems = (cat) => { resetZoom(); setSelectedCategory(cat); setView('examItems'); };
-  const goToExamDetail = (exam) => { resetZoom(); setSelectedExam(exam); setView('examDetail'); resolveExamImages(exam); };
-  const goToEvaluations = () => { resetZoom(); fetchEvaluations(); setView('evaluations'); };
+  const goToExamItems = (cat) => { setSelectedCategory(cat); setView('examItems'); };
+  const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); resolveExamImages(exam); };
+  const goToEvaluations = () => { fetchEvaluations(); setView('evaluations'); };
   const goToEvaluationDetail = (ev) => {
-    resetZoom();
     setSelectedEvaluation(ev);
     setEvalFields(ev.fields || {});
     setView('evaluationDetail');
@@ -2544,7 +2614,6 @@ function App() {
   };
 
   const goBack = () => {
-    resetZoom();
     const role = safeLocalGet(ROLE_KEY);
     const isKumiai = ['setouchi','wbc','gyoumusuishin','greenservices'].includes(role);
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
@@ -3393,13 +3462,7 @@ function App() {
       </div>
       <div className="student-profile-header">
   {selectedStudent.photo
-    ? <img
-        src={selectedStudent.photo}
-        alt={selectedStudent.name}
-        className="student-profile-avatar"
-        onClick={() => setStudentPhotoViewer(selectedStudent.photo)}
-        style={{ cursor: 'zoom-in' }}
-      />
+    ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
     : <span className="student-profile-icon">👤</span>
   }
   <h1 className="student-profile-name">{selectedStudent.name}</h1>
@@ -3531,13 +3594,7 @@ function App() {
       </div>
       <div className="student-profile-header">
         {selectedStudent.photo
-          ? <img
-              src={selectedStudent.photo}
-              alt={selectedStudent.name}
-              className="student-profile-avatar"
-              onClick={() => setStudentPhotoViewer(selectedStudent.photo)}
-              style={{ cursor: 'zoom-in' }}
-            />
+          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
           : <span className="student-profile-icon">👤</span>
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
@@ -4635,50 +4692,6 @@ function App() {
           batch={selectedBatch}
           onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
         />
-      )}
-
-      {/* ── Student Photo Fullscreen Viewer ── */}
-      {studentPhotoViewer && (
-        <div
-          onClick={() => setStudentPhotoViewer(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 99999,
-            background: 'rgba(0,0,0,0.92)',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          {/* Close button */}
-          <button
-            onClick={() => setStudentPhotoViewer(null)}
-            style={{
-              position: 'absolute', top: 'env(safe-area-inset-top, 16px)', right: 16,
-              background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
-              borderRadius: '50%', width: 40, height: 40, fontSize: 20,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              backdropFilter: 'blur(8px)',
-            }}
-          >✕</button>
-
-          {/* Photo — pinch-to-zoom works natively on mobile */}
-          <img
-            src={studentPhotoViewer}
-            alt="Student photo"
-            onClick={e => e.stopPropagation()}
-            style={{
-              maxWidth: '92vw',
-              maxHeight: '82vh',
-              objectFit: 'contain',
-              borderRadius: 16,
-              boxShadow: '0 8px 48px rgba(0,0,0,0.6)',
-              userSelect: 'none',
-            }}
-          />
-          <p style={{
-            color: 'rgba(255,255,255,0.4)', fontSize: 12,
-            marginTop: 16, textAlign: 'center'
-          }}>Tap outside to close · Pinch to zoom</p>
-        </div>
       )}
     </div>
   );
