@@ -746,7 +746,7 @@ function ProgressChart({ student, batch, onClose }) {
 }
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
-function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRetake, magicFilter, onToggleMagic }) {
+function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRetake }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const draggingRef = useRef(null);
@@ -933,27 +933,8 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
           Use ✓
         </button>
       </div>
-      {/* Hint + Magic Color toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 16px', flexShrink: 0 }}>
-        <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Drag the green corners to adjust</span>
-        <button
-          onClick={onToggleMagic}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: magicFilter ? 'linear-gradient(135deg,#f7971e,#ffd200)' : 'rgba(255,255,255,0.12)',
-            border: 'none', borderRadius: 20,
-            padding: '6px 14px', cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-        >
-          <span style={{ fontSize: 15 }}>✨</span>
-          <span style={{
-            fontSize: 12, fontWeight: 700,
-            color: magicFilter ? '#000' : 'rgba(255,255,255,0.7)',
-          }}>
-            Magic Color {magicFilter ? 'ON' : 'OFF'}
-          </span>
-        </button>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center', padding: '5px 0', flexShrink: 0 }}>
+        Drag the green corners to adjust
       </div>
       {/* Wrapper gives the canvas measurable dimensions */}
       <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#000' }}>
@@ -1007,7 +988,6 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   const [status, setStatus] = useState('Initializing camera...');
   const [detected, setDetected] = useState(false);
   const capturingRef = useRef(false);
-  const [magicFilter, setMagicFilter] = useState(true);
 
   // Bulk scan pages accumulator
   const [scannedPages, setScannedPages] = useState([]);
@@ -1290,67 +1270,6 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
         }
       }
       dst.getContext('2d').putImageData(outData, 0, 0);
-
-      // ── Magic Color Filter (CamScanner-style) ────────────────────
-      if (magicFilter) {
-        const magicCtx = dst.getContext('2d');
-        const magicData = magicCtx.getImageData(0, 0, outW, outH);
-        const d = magicData.data;
-
-        // Build a local brightness histogram to find white-point
-        // (the brightest ~5% of pixels = paper background)
-        const hist = new Int32Array(256);
-        for (let i = 0; i < d.length; i += 4) {
-          const lum = Math.round(0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
-          hist[lum]++;
-        }
-        const totalPx = outW * outH;
-        let cumulative = 0;
-        let whitePoint = 255;
-        for (let v = 255; v >= 0; v--) {
-          cumulative += hist[v];
-          if (cumulative / totalPx > 0.05) { whitePoint = v; break; }
-        }
-        // Scale factor so the paper white maps to 255
-        const whiteScale = whitePoint > 0 ? 255 / whitePoint : 1;
-
-        // S-curve lookup table for contrast boost
-        const lut = new Uint8Array(256);
-        for (let v = 0; v < 256; v++) {
-          const n = v / 255;
-          // Gentle S-curve: lifts brights, crushes darks
-          const s = n < 0.5
-            ? 2 * n * n
-            : 1 - Math.pow(-2 * n + 2, 2) / 2;
-          lut[v] = Math.min(255, Math.max(0, Math.round(255 * (s * 0.65 + n * 0.35))));
-        }
-
-        for (let i = 0; i < d.length; i += 4) {
-          let r = d[i], g = d[i+1], b = d[i+2];
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-
-          // Step 1: White-balance — normalize to paper white
-          r = Math.min(255, r * whiteScale);
-          g = Math.min(255, g * whiteScale);
-          b = Math.min(255, b * whiteScale);
-
-          // Step 2: Saturation boost (makes text richer, paper whiter)
-          const newLum = 0.299 * r + 0.587 * g + 0.114 * b;
-          const sat = 1.5;
-          r = Math.min(255, Math.max(0, newLum + sat * (r - newLum)));
-          g = Math.min(255, Math.max(0, newLum + sat * (g - newLum)));
-          b = Math.min(255, Math.max(0, newLum + sat * (b - newLum)));
-
-          // Step 3: S-curve contrast via LUT
-          d[i]   = lut[Math.round(r)];
-          d[i+1] = lut[Math.round(g)];
-          d[i+2] = lut[Math.round(b)];
-        }
-
-        magicCtx.putImageData(magicData, 0, 0);
-      }
-      // ── End Magic Color Filter ───────────────────────────────────
-
       const croppedUrl = dst.toDataURL('image/jpeg', 0.92);
       if (bulkMode) {
         setScannedPages(prev => [...prev, croppedUrl]);
@@ -1458,8 +1377,6 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
       setCorners={setCorners}
       onConfirm={confirmCrop}
       onRetake={retake}
-      magicFilter={magicFilter}
-      onToggleMagic={() => setMagicFilter(f => !f)}
     />;
   }
 
@@ -2580,17 +2497,36 @@ function App() {
     }
   };
 
-  const goToStudents = (batch) => { setSelectedBatch(batch); setView('students'); };
+  // ── ZOOM RESET ────────────────────────────────────────────────────────────
+  // Resets any browser zoom back to 1.0 on every page navigation.
+  // Works by temporarily swapping the viewport meta content, which forces
+  // iOS Safari and Android Chrome to snap back to the default scale.
+  const resetZoom = () => {
+    try {
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (!meta) return;
+      // Force scale reset by removing user-scalable then restoring
+      meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+      // Small timeout then re-allow pinch if needed (optional — remove if you want to fully lock zoom)
+      // Keeping it locked is fine for a document scanner app
+    } catch {}
+    // Also scroll to top on navigation
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const goToStudents = (batch) => { resetZoom(); setSelectedBatch(batch); setView('students'); };
   const goToCategories = (student) => {
+    resetZoom();
     // Always resolve the freshest student from selectedBatch so categories/exams are current
     const freshStudent = selectedBatch?.students.find(s => s._id === student._id) || student;
     setSelectedStudent(freshStudent);
     setView('categories');
   };
-  const goToExamItems = (cat) => { setSelectedCategory(cat); setView('examItems'); };
-  const goToExamDetail = (exam) => { setSelectedExam(exam); setView('examDetail'); resolveExamImages(exam); };
-  const goToEvaluations = () => { fetchEvaluations(); setView('evaluations'); };
+  const goToExamItems = (cat) => { resetZoom(); setSelectedCategory(cat); setView('examItems'); };
+  const goToExamDetail = (exam) => { resetZoom(); setSelectedExam(exam); setView('examDetail'); resolveExamImages(exam); };
+  const goToEvaluations = () => { resetZoom(); fetchEvaluations(); setView('evaluations'); };
   const goToEvaluationDetail = (ev) => {
+    resetZoom();
     setSelectedEvaluation(ev);
     setEvalFields(ev.fields || {});
     setView('evaluationDetail');
@@ -2605,6 +2541,7 @@ function App() {
   };
 
   const goBack = () => {
+    resetZoom();
     const role = safeLocalGet(ROLE_KEY);
     const isKumiai = ['setouchi','wbc','gyoumusuishin','greenservices'].includes(role);
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
@@ -2850,7 +2787,7 @@ function App() {
       setSelectedStudent(updatedStudent);
       setSelectedBatch(updatedBatch);
       setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
-      if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
+      if (view === 'examDetail') { resetZoom(); setView('examItems'); setSelectedExam(null); }
     } catch { alert('Error deleting exam.'); }
   };
 
@@ -3205,7 +3142,7 @@ function App() {
       const students = selectedCompany.students.filter(s => !s.isArchived).slice().sort((a, b) => a.name.localeCompare(b.name));
       return (
         <>
-          <button className="back-btn" onClick={() => setSelectedCompany(null)}>←</button>
+          <button className="back-btn" onClick={() => { resetZoom(); setSelectedCompany(null); }}>←</button>
           <div className="header-with-back">
             <h1 className="title">🏢 {selectedCompany.name}</h1>
           </div>
@@ -3279,7 +3216,7 @@ function App() {
           const students = groups[groupKey];
           return (
             <div key={groupKey} className="card clickable"
-              onClick={() => setSelectedCompany({ name: groupKey, students })}>
+              onClick={() => { resetZoom(); setSelectedCompany({ name: groupKey, students }); }}>
               <div className="card-content">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <span style={{ fontSize: 32 }}>🏢</span>
