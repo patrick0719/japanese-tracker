@@ -71,7 +71,12 @@
    
    /* ── RESET ───────────────────────────────────────────── */
    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-   html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+   html {
+     font-size: 16px;
+     -webkit-text-size-adjust: 100%;
+     /* Prevent double-tap zoom on iOS/Android */
+     touch-action: manipulation;
+   }
    body {
      font-family: var(--font);
      background: var(--bg);
@@ -79,9 +84,35 @@
      line-height: 1.55;
      min-height: 100dvh;
      overscroll-behavior-y: contain;
+     /* Prevent text size inflation on orientation change */
+     -webkit-text-size-adjust: none;
+     text-size-adjust: none;
+   }
+
+   /* ── PREVENT iOS AUTO-ZOOM ON INPUT FOCUS ────────────────
+      iOS Safari zooms in whenever an input has font-size < 16px.
+      Setting font-size to 16px stops this completely.
+   ─────────────────────────────────────────────────────── */
+   input,
+   input[type="text"],
+   input[type="number"],
+   input[type="date"],
+   input[type="password"],
+   input[type="email"],
+   input[type="tel"],
+   input[type="search"],
+   textarea,
+   select {
+     font-size: 16px !important;
+     touch-action: manipulation;
    }
    ::-webkit-scrollbar { width: 3px; }
    ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
+
+   /* All buttons: prevent double-tap zoom, remove tap delay */
+   button, a, [role="button"] {
+     touch-action: manipulation;
+   }
    
    /* ── PAGE SHELL ──────────────────────────────────────── */
    #root > div {
@@ -157,6 +188,8 @@
      overflow: hidden;
      transition: transform 0.14s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.14s ease;
      will-change: transform;
+     /* Prevent double-tap zoom on cards */
+     touch-action: manipulation;
    }
    
    .card.clickable { cursor: pointer; }
