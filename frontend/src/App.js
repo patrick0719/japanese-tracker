@@ -2306,6 +2306,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [progressChartStudent, setProgressChartStudent] = useState(null);
+  const [studentPhotoViewer, setStudentPhotoViewer] = useState(null); // photo URL to fullscreen view
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
@@ -2498,19 +2499,21 @@ function App() {
   };
 
   // ── ZOOM RESET ────────────────────────────────────────────────────────────
-  // Resets any browser zoom back to 1.0 on every page navigation.
-  // Works by temporarily swapping the viewport meta content, which forces
-  // iOS Safari and Android Chrome to snap back to the default scale.
+  // Resets accidental zoom when navigating between pages WITHOUT disabling
+  // pinch-to-zoom (so users can still zoom images etc normally).
+  // Technique: briefly set maximum-scale=1 to snap browser back, then
+  // immediately restore maximum-scale=5 to re-allow pinch zoom.
   const resetZoom = () => {
     try {
       const meta = document.querySelector('meta[name="viewport"]');
       if (!meta) return;
-      // Force scale reset by removing user-scalable then restoring
-      meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
-      // Small timeout then re-allow pinch if needed (optional — remove if you want to fully lock zoom)
-      // Keeping it locked is fine for a document scanner app
+      // Snap to scale=1
+      meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1');
+      // Re-allow pinch zoom after a short tick
+      requestAnimationFrame(() => {
+        meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=5');
+      });
     } catch {}
-    // Also scroll to top on navigation
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
@@ -2787,7 +2790,7 @@ function App() {
       setSelectedStudent(updatedStudent);
       setSelectedBatch(updatedBatch);
       setBatches(prev => prev.map(b => b._id === updatedBatch._id ? updatedBatch : b));
-      if (view === 'examDetail') { resetZoom(); setView('examItems'); setSelectedExam(null); }
+      if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
     } catch { alert('Error deleting exam.'); }
   };
 
@@ -3142,7 +3145,7 @@ function App() {
       const students = selectedCompany.students.filter(s => !s.isArchived).slice().sort((a, b) => a.name.localeCompare(b.name));
       return (
         <>
-          <button className="back-btn" onClick={() => { resetZoom(); setSelectedCompany(null); }}>←</button>
+          <button className="back-btn" onClick={() => setSelectedCompany(null)}>←</button>
           <div className="header-with-back">
             <h1 className="title">🏢 {selectedCompany.name}</h1>
           </div>
@@ -3216,7 +3219,7 @@ function App() {
           const students = groups[groupKey];
           return (
             <div key={groupKey} className="card clickable"
-              onClick={() => { resetZoom(); setSelectedCompany({ name: groupKey, students }); }}>
+              onClick={() => setSelectedCompany({ name: groupKey, students })}>
               <div className="card-content">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <span style={{ fontSize: 32 }}>🏢</span>
@@ -3390,7 +3393,13 @@ function App() {
       </div>
       <div className="student-profile-header">
   {selectedStudent.photo
-    ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+    ? <img
+        src={selectedStudent.photo}
+        alt={selectedStudent.name}
+        className="student-profile-avatar"
+        onClick={() => setStudentPhotoViewer(selectedStudent.photo)}
+        style={{ cursor: 'zoom-in' }}
+      />
     : <span className="student-profile-icon">👤</span>
   }
   <h1 className="student-profile-name">{selectedStudent.name}</h1>
@@ -3522,7 +3531,13 @@ function App() {
       </div>
       <div className="student-profile-header">
         {selectedStudent.photo
-          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+          ? <img
+              src={selectedStudent.photo}
+              alt={selectedStudent.name}
+              className="student-profile-avatar"
+              onClick={() => setStudentPhotoViewer(selectedStudent.photo)}
+              style={{ cursor: 'zoom-in' }}
+            />
           : <span className="student-profile-icon">👤</span>
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
@@ -4620,6 +4635,50 @@ function App() {
           batch={selectedBatch}
           onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
         />
+      )}
+
+      {/* ── Student Photo Fullscreen Viewer ── */}
+      {studentPhotoViewer && (
+        <div
+          onClick={() => setStudentPhotoViewer(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 99999,
+            background: 'rgba(0,0,0,0.92)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {/* Close button */}
+          <button
+            onClick={() => setStudentPhotoViewer(null)}
+            style={{
+              position: 'absolute', top: 'env(safe-area-inset-top, 16px)', right: 16,
+              background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
+              borderRadius: '50%', width: 40, height: 40, fontSize: 20,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backdropFilter: 'blur(8px)',
+            }}
+          >✕</button>
+
+          {/* Photo — pinch-to-zoom works natively on mobile */}
+          <img
+            src={studentPhotoViewer}
+            alt="Student photo"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: '92vw',
+              maxHeight: '82vh',
+              objectFit: 'contain',
+              borderRadius: 16,
+              boxShadow: '0 8px 48px rgba(0,0,0,0.6)',
+              userSelect: 'none',
+            }}
+          />
+          <p style={{
+            color: 'rgba(255,255,255,0.4)', fontSize: 12,
+            marginTop: 16, textAlign: 'center'
+          }}>Tap outside to close · Pinch to zoom</p>
+        </div>
       )}
     </div>
   );
