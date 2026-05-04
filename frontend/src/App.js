@@ -3225,7 +3225,9 @@ function App() {
             <div className="card-content">
               <div className="student-card-left">
                 {student.photo
-                  ? <img src={student.photo} alt={student.name} className="student-avatar" />
+                  ? <img src={student.photo} alt={student.name} className="student-avatar"
+                      onClick={(e) => { e.stopPropagation(); setImageViewer({ images: [student.photo], index: 0 }); }}
+                      style={{ cursor: 'pointer' }} />
                   : <span className="student-avatar-icon">👤</span>
                 }
                 <div>
@@ -3402,7 +3404,9 @@ function App() {
           <div className="card-content">
             <div className="student-card-left">
               {student.photo
-                ? <img src={student.photo} alt={student.name} className="student-avatar" />
+                ? <img src={student.photo} alt={student.name} className="student-avatar"
+                    onClick={(e) => { e.stopPropagation(); setImageViewer({ images: [student.photo], index: 0 }); }}
+                    style={{ cursor: 'pointer' }} />
                 : <span className="student-avatar-icon">👤</span>
               }
               <div>
@@ -3462,7 +3466,9 @@ function App() {
       </div>
       <div className="student-profile-header">
   {selectedStudent.photo
-    ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+    ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
+        onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
+        style={{ cursor: 'pointer' }} />
     : <span className="student-profile-icon">👤</span>
   }
   <h1 className="student-profile-name">{selectedStudent.name}</h1>
@@ -3594,7 +3600,9 @@ function App() {
       </div>
       <div className="student-profile-header">
         {selectedStudent.photo
-          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
+              onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
+              style={{ cursor: 'pointer' }} />
           : <span className="student-profile-icon">👤</span>
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
