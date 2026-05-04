@@ -1,8 +1,8 @@
-import { usePushNotifications } from './usePushNotifications';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
+import { usePushNotifications } from './usePushNotifications';
 
 // Returns correct name based on role — JA for kumiai, EN for admin/PHGIC
 function displayName(item) {
@@ -2032,6 +2032,232 @@ useEffect(() => {
   );
 }
 
+// ── SMART REMINDERS COMPONENT ────────────────────────────────────────────────
+function SmartReminders({ batches, onNavigate }) {
+  const [expanded, setExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sage_dismissed_reminders') || '[]'); } catch { return []; }
+  });
+
+  const now = new Date();
+  const cutoff30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  // Compute reminders across all batches
+  const reminders = [];
+
+  batches.forEach(batch => {
+    batch.students
+      .filter(s => !s.isArchived)
+      .forEach(student => {
+        // ── Exam reminder: no exam entry in last 30 days ──────────────────
+        let latestExamDate = null;
+        (student.categories || []).forEach(cat => {
+          (cat.items || []).forEach(item => {
+            if (item.date) {
+              const d = new Date(item.date);
+              if (!latestExamDate || d > latestExamDate) latestExamDate = d;
+            }
+          });
+        });
+
+        const hasNoRecentExam = !latestExamDate || latestExamDate < cutoff30;
+        if (hasNoRecentExam) {
+          const id = `exam-${batch._id}-${student._id}`;
+          const daysSince = latestExamDate
+            ? Math.floor((now - latestExamDate) / (1000 * 60 * 60 * 24))
+            : null;
+          reminders.push({
+            id,
+            type: 'exam',
+            student: student.name,
+            batch: batch.name,
+            batchObj: batch,
+            studentObj: student,
+            daysSince,
+            label: daysSince
+              ? `No exam for ${daysSince} days`
+              : 'No exam recorded yet',
+          });
+        }
+      });
+  });
+
+  // Filter out dismissed
+  const active = reminders.filter(r => !dismissed.includes(r.id));
+  const examReminders = active.filter(r => r.type === 'exam');
+
+  if (active.length === 0) return null;
+
+  const dismiss = (id, e) => {
+    e.stopPropagation();
+    const next = [...dismissed, id];
+    setDismissed(next);
+    try { localStorage.setItem('sage_dismissed_reminders', JSON.stringify(next)); } catch {}
+  };
+
+  const dismissAll = () => {
+    const next = [...dismissed, ...active.map(r => r.id)];
+    setDismissed(next);
+    try { localStorage.setItem('sage_dismissed_reminders', JSON.stringify(next)); } catch {}
+  };
+
+  const urgentCount = active.filter(r => r.daysSince === null || r.daysSince >= 45).length;
+  const bannerColor = urgentCount > 0
+    ? 'linear-gradient(135deg, #c0392b, #e74c3c)'
+    : 'linear-gradient(135deg, #e67e22, #f39c12)';
+
+  return (
+    <div style={{ margin: '12px 16px 0', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+      {/* Collapsed banner */}
+      <div
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          background: bannerColor,
+          borderRadius: expanded ? '14px 14px 0 0' : 14,
+          padding: '12px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          cursor: 'pointer',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+          transition: 'border-radius 0.2s',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 20 }}>🔔</span>
+          <div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 14, lineHeight: 1.2 }}>
+              Smart Reminders
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 }}>
+              {active.length} student{active.length !== 1 ? 's' : ''} need attention
+              {urgentCount > 0 && ` · ${urgentCount} urgent`}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            background: 'rgba(255,255,255,0.25)',
+            borderRadius: 20, minWidth: 26, height: 26,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 800, fontSize: 13,
+          }}>
+            {active.length}
+          </div>
+          <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 18, transition: 'transform 0.2s', display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'none' }}>
+            ›
+          </span>
+        </div>
+      </div>
+
+      {/* Expanded list */}
+      {expanded && (
+        <div style={{
+          background: 'var(--bg-card, #fff)',
+          borderRadius: '0 0 14px 14px',
+          border: '1px solid var(--border-color, #e5e5ea)',
+          borderTop: 'none',
+          overflow: 'hidden',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+        }}>
+          {/* Section header */}
+          <div style={{
+            padding: '10px 16px 6px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            borderBottom: '1px solid var(--border-color, #f0f0f0)',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary, #8e8e93)', letterSpacing: 0.3 }}>
+              📝 NO EXAM IN 30+ DAYS — {examReminders.length}
+            </span>
+            <button
+              onClick={dismissAll}
+              style={{
+                background: 'none', border: 'none', color: '#8e8e93',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '2px 6px',
+              }}
+            >
+              Clear all
+            </button>
+          </div>
+
+          {examReminders.length === 0 && (
+            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary, #8e8e93)', fontSize: 13 }}>
+              All caught up! 🎉
+            </div>
+          )}
+
+          {examReminders.map((r, i) => {
+            const isUrgent = r.daysSince === null || r.daysSince >= 45;
+            return (
+              <div
+                key={r.id}
+                style={{
+                  padding: '12px 16px',
+                  borderBottom: i < examReminders.length - 1 ? '1px solid var(--border-color, #f5f5f7)' : 'none',
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  cursor: onNavigate ? 'pointer' : 'default',
+                  background: isUrgent ? 'rgba(255,59,48,0.03)' : 'transparent',
+                  transition: 'background 0.15s',
+                }}
+                onClick={() => onNavigate && onNavigate(r.batchObj, r.studentObj)}
+              >
+                <div style={{
+                  width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+                  background: isUrgent ? '#fff0f0' : '#fff8ee',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 18,
+                }}>
+                  {isUrgent ? '🚨' : '⚠️'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 14, fontWeight: 700,
+                    color: 'var(--text-primary, #1c1c1e)',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {r.student}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary, #8e8e93)', marginTop: 2 }}>
+                    🎌 {r.batch} · {r.label}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {isUrgent && (
+                    <span style={{
+                      background: '#ff3b30', color: '#fff',
+                      fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+                    }}>
+                      URGENT
+                    </span>
+                  )}
+                  <button
+                    onClick={(e) => dismiss(r.id, e)}
+                    style={{
+                      background: 'rgba(0,0,0,0.06)', border: 'none',
+                      borderRadius: '50%', width: 24, height: 24,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 13, color: '#8e8e93', flexShrink: 0,
+                    }}
+                    title="Dismiss"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          <div style={{
+            padding: '10px 16px', background: 'var(--bg-secondary, #f9f9f9)',
+            borderTop: '1px solid var(--border-color, #f0f0f0)',
+            fontSize: 11, color: 'var(--text-tertiary, #8e8e93)', textAlign: 'center',
+          }}>
+            Tap a student to go to their profile · Dismissals reset on next session
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── LOGIN SCREEN ─────────────────────────────────────────────────────────────
 const ADMIN_USER = 'sagebulacan97';
 const ADMIN_PASS = 'July142018';
@@ -2058,19 +2284,47 @@ function TeacherSelect({ onSelect }) {
   const [loadingT, setLoadingT] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newEmoji, setNewEmoji] = useState('👩‍🏫');
+  const [newEmoji, setNewEmoji] = useState('👩\u200d🏫');
   const [saving, setSaving] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
-  const EMOJIS = ['👩‍🏫','👨‍🏫','👩','👨','🧑‍🏫'];
+  const [globalQuery, setGlobalQuery] = useState('');
+  const [allBatches, setAllBatches] = useState([]);
+  const EMOJIS = ['\u{1F469}\u200d\u{1F3EB}','\u{1F468}\u200d\u{1F3EB}','\u{1F469}','\u{1F468}','\u{1F9D1}\u200d\u{1F3EB}'];
 
   useEffect(() => {
     fetch(`${API}/teachers`)
       .then(r => r.json())
       .then(data => { setTeachers(data); setLoadingT(false); })
       .catch(() => setLoadingT(false));
+    // Fetch ALL batches for global search (no teacher filter)
+    fetch(`${API}/batches`)
+      .then(r => r.json())
+      .then(data => setAllBatches(Array.isArray(data) ? data : []))
+      .catch(() => {});
   }, []);
+
+  // Global search across ALL teachers and batches
+  const searchResults = globalQuery.trim().length >= 1 ? (() => {
+    const q = globalQuery.trim().toLowerCase();
+    const results = [];
+    allBatches.forEach(batch => {
+      batch.students
+        .filter(s => !s.isArchived)
+        .forEach(s => {
+          if (
+            s.name?.toLowerCase().includes(q) ||
+            s.companyName?.toLowerCase().includes(q) ||
+            s.kumiai?.toLowerCase().includes(q) ||
+            batch.name?.toLowerCase().includes(q)
+          ) {
+            results.push({ student: s, batch });
+          }
+        });
+    });
+    return results.sort((a, b) => a.student.name.localeCompare(b.student.name));
+  })() : null;
 
   const addTeacher = async () => {
     if (!newName.trim()) return;
@@ -2114,7 +2368,92 @@ function TeacherSelect({ onSelect }) {
     <div className="teacher-screen">
       <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" />
       <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('selectTeacher')}</h2>
-      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>{t('tapNameToContinue')}</p>
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16 }}>{t('tapNameToContinue')}</p>
+
+      {/* ── Global Search Bar ── */}
+      <div style={{ width: '100%', maxWidth: 400, position: 'relative', marginBottom: 20 }}>
+        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'var(--text-tertiary)' }}>🔍</span>
+        <input
+          type="text"
+          value={globalQuery}
+          onChange={e => setGlobalQuery(e.target.value)}
+          placeholder="Search any student across all teachers..."
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '11px 36px 11px 38px',
+            borderRadius: 12, border: '1.5px solid var(--border-color, #e5e5ea)',
+            background: 'var(--bg-card, #fff)', color: 'var(--text-primary)',
+            fontSize: 15, outline: 'none',
+          }}
+        />
+        {globalQuery && (
+          <button onClick={() => setGlobalQuery('')} style={{
+            position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+            background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: '50%',
+            width: 22, height: 22, cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>✕</button>
+        )}
+      </div>
+
+      {/* ── Search Results ── */}
+      {searchResults !== null && (
+        <div style={{ width: '100%', maxWidth: 400, marginBottom: 16 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 8, fontWeight: 600 }}>
+            {searchResults.length === 0
+              ? `No results for "${globalQuery}"`
+              : `${searchResults.length} student${searchResults.length !== 1 ? 's' : ''} found`}
+          </p>
+          {searchResults.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-tertiary)', fontSize: 14 }}>
+              😕 No students found
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {searchResults.map(({ student, batch }) => {
+                // Find which teacher owns this batch
+                const teacher = teachers.find(tc => tc._id === batch.teacherId);
+                return (
+                  <button
+                    key={student._id}
+                    onClick={() => {
+                      if (teacher) onSelect(teacher);
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '10px 14px', borderRadius: 12,
+                      border: '1.5px solid var(--border-color, #e5e5ea)',
+                      background: 'var(--bg-card, #fff)', cursor: 'pointer',
+                      textAlign: 'left', width: '100%',
+                    }}
+                  >
+                    <div style={{
+                      width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                      background: 'var(--accent-light, #f0f0ff)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 18, fontWeight: 700, color: 'var(--accent)',
+                    }}>
+                      {student.photo
+                        ? <img src={student.photo} alt={student.name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                        : student.name?.[0]?.toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {student.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                        🎌 {batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : ''}
+                      </div>
+                    </div>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 18 }}>›</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loadingT && <p className="loading-text">{t('loading')}</p>}
         {teachers.map(teacher => (
@@ -2410,7 +2749,8 @@ function App() {
     const s = safeLocalGet(TEACHER_KEY);
     return s ? JSON.parse(s) : null;
   });
-  
+
+  // ── Smart push notifications (teachers + admin only) ──────────────────────
   usePushNotifications(isLoggedIn, isViewer);
 
   const fileInputRef = useRef(null);
@@ -3420,6 +3760,18 @@ function App() {
 
       </div>{/* end header-banner */}
       </div>{/* end sticky-header */}
+
+      {/* ── Smart Reminders (teacher/admin only) ── */}
+      {!isViewer && (
+        <SmartReminders
+          batches={batches}
+          onNavigate={(batch, student) => {
+            setGlobalSearch('');
+            setSelectedBatch(batch);
+            goToCategories(student);
+          }}
+        />
+      )}
 
       {/* ── Search results ── */}
       {searchResults !== null ? (
