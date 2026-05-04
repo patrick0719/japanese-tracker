@@ -1424,7 +1424,8 @@ app.get('/api/push/test', async (req, res) => {
     for (const doc of tokens) {
       try {
         const result = await sendFcmNotification(doc.token, title, body);
-        if (result.error) { failed++; } else { sent++; }
+console.log('[SAGE Test] FCM result:', JSON.stringify(result));
+if (result.error) { failed++; } else { sent++; }
       } catch { failed++; }
     }
 
