@@ -1286,6 +1286,236 @@ app.get('/api/diagnostic/images', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── PUSH NOTIFICATION (FCM) ───────────────────────────────────────────────────
+// Requires these Railway environment variables:
+//   FCM_PROJECT_ID     — from Firebase service account JSON
+//   FCM_CLIENT_EMAIL   — from Firebase service account JSON
+//   FCM_PRIVATE_KEY    — from Firebase service account JSON (keep newlines as \n)
+
+const pushTokenSchema = new mongoose.Schema({
+  token:       { type: String, required: true, unique: true },
+  role:        { type: String, default: 'admin' },   // 'admin' or teacher role
+  teacherId:   { type: String, default: null },
+  teacherName: { type: String, default: '' },
+  updatedAt:   { type: Date, default: Date.now },
+});
+const PushToken = mongoose.model('PushToken', pushTokenSchema);
+
+// POST /api/push/register — save or update FCM token from a logged-in device
+app.post('/api/push/register', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const { token, role, teacherId, teacherName } = req.body;
+    if (!token) return res.status(400).json({ error: 'token required' });
+
+    // Upsert — one record per token
+    await PushToken.findOneAndUpdate(
+      { token },
+      { role, teacherId, teacherName: sanitizeStr(teacherName, 100), updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── FCM HTTP v1 send helper ───────────────────────────────────────────────────
+let _fcmAccessToken = null;
+let _fcmTokenExpiry = 0;
+
+async function getFcmAccessToken() {
+  // Return cached token if still valid (expiry minus 60s buffer)
+  if (_fcmAccessToken && Date.now() < _fcmTokenExpiry - 60_000) return _fcmAccessToken;
+
+  const projectId   = process.env.FCM_PROJECT_ID;
+  const clientEmail = process.env.FCM_CLIENT_EMAIL;
+  const privateKey  = (process.env.FCM_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error('FCM environment variables not configured (FCM_PROJECT_ID, FCM_CLIENT_EMAIL, FCM_PRIVATE_KEY)');
+  }
+
+  // Build JWT for Google OAuth2
+  const now = Math.floor(Date.now() / 1000);
+  const header  = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    iss:   clientEmail,
+    scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud:   'https://oauth2.googleapis.com/token',
+    iat:   now,
+    exp:   now + 3600,
+  })).toString('base64url');
+
+  const toSign = `${header}.${payload}`;
+  const sign   = crypto.createSign('RSA-SHA256');
+  sign.update(toSign);
+  const signature = sign.sign(privateKey, 'base64url');
+  const jwt = `${toSign}.${signature}`;
+
+  // Exchange JWT for access token
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion:  jwt,
+    }),
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) throw new Error('Failed to get FCM access token: ' + JSON.stringify(tokenData));
+
+  _fcmAccessToken = tokenData.access_token;
+  _fcmTokenExpiry = Date.now() + (tokenData.expires_in || 3600) * 1000;
+  return _fcmAccessToken;
+}
+
+async function sendFcmNotification(token, title, body) {
+  const projectId   = process.env.FCM_PROJECT_ID;
+  const accessToken = await getFcmAccessToken();
+
+  const res = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        message: {
+          token,
+          notification: { title, body },
+          webpush: {
+            notification: {
+              icon:    '/logo192.png',
+              badge:   '/logo192.png',
+              vibrate: [200, 100, 200],
+              tag:     'sage-reminder',
+              renotify: true,
+              actions: [
+                { action: 'open',    title: '📂 Buksan ang App' },
+                { action: 'dismiss', title: 'Dismiss' },
+              ],
+            },
+          },
+        },
+      }),
+    }
+  );
+  return res.json();
+}
+
+// ── SMART REMINDER CRON — runs every day at 8:00 AM Philippine Time (UTC+8) ──
+// Checks on 15th and 30th of the month which students have no exam in 30 days
+// and sends push notifications to all registered teachers/admins.
+function scheduleDailyReminder() {
+  const checkAndSend = async () => {
+    const now = new Date();
+    // Philippine time = UTC + 8
+    const phHour = (now.getUTCHours() + 8) % 24;
+    const phDay  = new Date(now.getTime() + 8 * 60 * 60 * 1000).getUTCDate();
+
+    // Only run at 8 AM Philippine time, on the 15th or 30th of the month
+    if (phHour !== 8) return;
+    if (phDay !== 15 && phDay !== 30) return;
+
+    console.log(`[SAGE Cron] Running smart reminder check — ${now.toISOString()}`);
+
+    try {
+      const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const batches = await Batch.find();
+
+      const flagged = []; // { studentName, batchName, daysSince }
+      batches.forEach(batch => {
+        batch.students
+          .filter(s => !s.isArchived)
+          .forEach(student => {
+            let latestExamDate = null;
+            (student.categories || []).forEach(cat => {
+              (cat.items || []).forEach(item => {
+                if (item.date) {
+                  const d = new Date(item.date);
+                  if (!latestExamDate || d > latestExamDate) latestExamDate = d;
+                }
+              });
+            });
+
+            const hasNoRecentExam = !latestExamDate || latestExamDate < cutoff;
+            if (hasNoRecentExam) {
+              const daysSince = latestExamDate
+                ? Math.floor((now - latestExamDate) / (1000 * 60 * 60 * 24))
+                : null;
+              flagged.push({
+                studentName: student.name,
+                batchName:   batch.name,
+                daysSince,
+              });
+            }
+          });
+      });
+
+      if (flagged.length === 0) {
+        console.log('[SAGE Cron] No students to flag — no notifications sent.');
+        return;
+      }
+
+      // Build notification message
+      const title = `🔔 SAGE Reminder — ${flagged.length} student${flagged.length !== 1 ? 's' : ''} need attention`;
+      const preview = flagged.slice(0, 3).map(f =>
+        `${f.studentName} (${f.batchName})${f.daysSince ? ` — ${f.daysSince}d` : ' — no exam yet'}`
+      ).join('\n');
+      const body = preview + (flagged.length > 3 ? `\n+${flagged.length - 3} more` : '');
+
+      // Fetch all registered tokens (teachers + admins only — viewers never register)
+      const tokens = await PushToken.find();
+      console.log(`[SAGE Cron] Sending to ${tokens.length} device(s) — ${flagged.length} student(s) flagged`);
+
+      let sent = 0, failed = 0;
+      const staleTokens = [];
+
+      for (const doc of tokens) {
+        try {
+          const result = await sendFcmNotification(doc.token, title, body);
+          if (result.error) {
+            // Token no longer valid — remove it
+            if (
+              result.error.status === 'UNREGISTERED' ||
+              result.error.status === 'INVALID_ARGUMENT'
+            ) {
+              staleTokens.push(doc._id);
+            }
+            console.warn(`[SAGE Cron] FCM error for ${doc.teacherName}:`, result.error);
+            failed++;
+          } else {
+            sent++;
+          }
+        } catch (err) {
+          console.error(`[SAGE Cron] Send error for ${doc.teacherName}:`, err.message);
+          failed++;
+        }
+      }
+
+      // Clean up stale tokens
+      if (staleTokens.length > 0) {
+        await PushToken.deleteMany({ _id: { $in: staleTokens } });
+        console.log(`[SAGE Cron] Removed ${staleTokens.length} stale token(s)`);
+      }
+
+      console.log(`[SAGE Cron] Done — sent: ${sent}, failed: ${failed}`);
+    } catch (err) {
+      console.error('[SAGE Cron] Error:', err.message);
+    }
+  };
+
+  // Check every hour — the function itself guards day/time
+  setInterval(checkAndSend, 60 * 60 * 1000);
+
+  // Also run once on startup (harmless if not the right time)
+  checkAndSend();
+}
+
+scheduleDailyReminder();
+
 // ── SERVER START ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
