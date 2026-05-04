@@ -1423,15 +1423,25 @@ app.get('/api/push/test', async (req, res) => {
       return res.json({ success: false, message: 'Walang registered tokens.' });
     }
 
-    const title = '🔔 SAGE Test Notification';
-    const body  = 'Gumagana ang push notifications! ✅';
+    const examTitle = '📝 Exam Upload Reminder — 2 students';
+    const examBody  = '• Juan dela Cruz (Batch A · Teacher Santos) — 35 days no exam\n• Maria Reyes (Batch B · Teacher Cruz) — no exam yet';
+    const evalTitle = '📊 Evaluation Reminder — 2 students to evaluate';
+    const evalBody  = '• Juan dela Cruz (Batch A · Teacher Santos) needs evaluation\n• Maria Reyes (Batch B · Teacher Cruz) needs evaluation';
+
     let sent = 0, failed = 0;
 
     for (const doc of tokens) {
       try {
-        const result = await sendFcmNotification(doc.token, title, body);
-        console.log('[SAGE Test] FCM result:', JSON.stringify(result));
-        if (result.error) { failed++; } else { sent++; }
+        const r1 = await sendFcmNotification(doc.token, examTitle, examBody);
+        console.log('[SAGE Test] Exam notif:', JSON.stringify(r1));
+        if (!r1.error) sent++;
+
+        await new Promise(r => setTimeout(r, 3000));
+
+        const r2 = await sendFcmNotification(doc.token, evalTitle, evalBody);
+        console.log('[SAGE Test] Eval notif:', JSON.stringify(r2));
+        if (!r2.error) sent++;
+        else failed++;
       } catch (err) {
         console.log('[SAGE Test] Send error:', err.message);
         failed++;
@@ -1461,11 +1471,12 @@ function scheduleDailyReminder() {
       const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const batches = await Batch.find();
 
-      const flagged = []; // { studentName, batchName, daysSince }
+      const flagged = []; // { studentName, batchName, teacherName, daysSince, needsEval }
       batches.forEach(batch => {
         batch.students
           .filter(s => !s.isArchived)
           .forEach(student => {
+            // ── Check latest exam date ────────────────────────────────────────
             let latestExamDate = null;
             (student.categories || []).forEach(cat => {
               (cat.items || []).forEach(item => {
@@ -1476,15 +1487,29 @@ function scheduleDailyReminder() {
               });
             });
 
+            // ── Check latest evaluation date ──────────────────────────────────
+            let latestEvalDate = null;
+            (student.evaluations || []).forEach(ev => {
+              if (ev.date) {
+                const d = new Date(ev.date);
+                if (!latestEvalDate || d > latestEvalDate) latestEvalDate = d;
+              }
+            });
+
             const hasNoRecentExam = !latestExamDate || latestExamDate < cutoff;
-            if (hasNoRecentExam) {
-              const daysSince = latestExamDate
+            const hasNoRecentEval = !latestEvalDate || latestEvalDate < cutoff;
+
+            if (hasNoRecentExam || hasNoRecentEval) {
+              const daysSinceExam = latestExamDate
                 ? Math.floor((now - latestExamDate) / (1000 * 60 * 60 * 24))
                 : null;
               flagged.push({
-                studentName: student.name,
-                batchName:   batch.name,
-                daysSince,
+                studentName:  student.name,
+                batchName:    batch.name,
+                teacherName:  batch.teacherName || 'Unassigned',
+                daysSinceExam,
+                hasNoRecentExam,
+                hasNoRecentEval,
               });
             }
           });
@@ -1495,35 +1520,54 @@ function scheduleDailyReminder() {
         return;
       }
 
-      // Build notification message
-      const title = `🔔 SAGE Reminder — ${flagged.length} student${flagged.length !== 1 ? 's' : ''} need attention`;
-      const preview = flagged.slice(0, 3).map(f =>
-        `${f.studentName} (${f.batchName})${f.daysSince ? ` — ${f.daysSince}d` : ' — no exam yet'}`
+      // ── Notification 1: Exam Upload Reminder ──────────────────────────────
+      const examFlagged = flagged.filter(f => f.hasNoRecentExam);
+      const examTitle = `📝 Exam Upload Reminder — ${examFlagged.length} student${examFlagged.length !== 1 ? 's' : ''}`;
+      const examPreview = examFlagged.slice(0, 3).map(f =>
+        `• ${f.studentName} (${f.batchName} · ${f.teacherName}) — ${f.daysSinceExam ? `${f.daysSinceExam} days no exam` : 'no exam yet'}`
       ).join('\n');
-      const body = preview + (flagged.length > 3 ? `\n+${flagged.length - 3} more` : '');
+      const examBody = examPreview + (examFlagged.length > 3 ? `\n+${examFlagged.length - 3} more students` : '');
+
+      // ── Notification 2: Evaluation Reminder ───────────────────────────────
+      const evalFlagged = flagged.filter(f => f.hasNoRecentEval);
+      const evalTitle = `📊 Evaluation Reminder — ${evalFlagged.length} student${evalFlagged.length !== 1 ? 's' : ''} to evaluate`;
+      const evalPreview = evalFlagged.slice(0, 3).map(f =>
+        `• ${f.studentName} (${f.batchName} · ${f.teacherName}) needs evaluation`
+      ).join('\n');
+      const evalBody = evalPreview + (evalFlagged.length > 3 ? `\n+${evalFlagged.length - 3} more students` : '');
 
       // Fetch all registered tokens (teachers + admins only — viewers never register)
       const tokens = await PushToken.find();
-      console.log(`[SAGE Cron] Sending to ${tokens.length} device(s) — ${flagged.length} student(s) flagged`);
+      console.log(`[SAGE Cron] Sending to ${tokens.length} device(s) — ${examFlagged.length} exam, ${evalFlagged.length} eval flagged`);
 
       let sent = 0, failed = 0;
       const staleTokens = [];
 
       for (const doc of tokens) {
         try {
-          const result = await sendFcmNotification(doc.token, title, body);
-          if (result.error) {
-            // Token no longer valid — remove it
-            if (
-              result.error.status === 'UNREGISTERED' ||
-              result.error.status === 'INVALID_ARGUMENT'
-            ) {
-              staleTokens.push(doc._id);
+          // Send exam notification
+          if (examFlagged.length > 0) {
+            const r1 = await sendFcmNotification(doc.token, examTitle, examBody);
+            if (r1.error) {
+              if (r1.error.status === 'UNREGISTERED' || r1.error.status === 'INVALID_ARGUMENT') {
+                staleTokens.push(doc._id);
+              }
+              console.warn(`[SAGE Cron] Exam notif error for ${doc.teacherName}:`, r1.error);
+              failed++;
+            } else {
+              sent++;
             }
-            console.warn(`[SAGE Cron] FCM error for ${doc.teacherName}:`, result.error);
-            failed++;
-          } else {
-            sent++;
+          }
+
+          // Send eval notification after 5 seconds
+          if (evalFlagged.length > 0) {
+            await new Promise(r => setTimeout(r, 5000));
+            const r2 = await sendFcmNotification(doc.token, evalTitle, evalBody);
+            if (r2.error) {
+              console.warn(`[SAGE Cron] Eval notif error for ${doc.teacherName}:`, r2.error);
+            } else {
+              sent++;
+            }
           }
         } catch (err) {
           console.error(`[SAGE Cron] Send error for ${doc.teacherName}:`, err.message);
