@@ -1329,7 +1329,9 @@ async function getFcmAccessToken() {
 
   const projectId   = process.env.FCM_PROJECT_ID;
   const clientEmail = process.env.FCM_CLIENT_EMAIL;
-  const privateKey  = (process.env.FCM_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  const privateKey = (process.env.FCM_PRIVATE_KEY || '')
+  .replace(/\\n/g, '\n')
+  .replace(/^"|"$/g, '');
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error('FCM environment variables not configured (FCM_PROJECT_ID, FCM_CLIENT_EMAIL, FCM_PRIVATE_KEY)');
