@@ -63,27 +63,25 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
 // ── IMAGE VIEWER COMPONENT ──────────────────────────────────────────────────
 function ImageViewer({ images, startIndex, onClose }) {
   const [current, setCurrent] = useState(startIndex || 0);
-  const [scale, setScale] = useState(1);
-  const [origin, setOrigin] = useState({ x: 50, y: 50 });
 
-  // Use refs for all touch state to avoid stale closures in native listeners
-  const scaleRef = useRef(1);
+  // ── Pinch-zoom-snap state ─────────────────────────────────────────────────
+  // scale: current live zoom level while fingers are down
+  // When fingers lift → animate back to scale=1 instantly (snap back)
+  const [scale, setScale] = useState(1);
+  const [origin, setOrigin] = useState({ x: 50, y: 50 }); // transform-origin in %
   const isPinching = useRef(false);
   const initialDist = useRef(null);
-  const initialMid = useRef({ x: 50, y: 50 });
-  const swipeStartX = useRef(null);
-  const containerRef = useRef(null);
+  const initialMid = useRef({ x: 0, y: 0 });
   const imgRef = useRef(null);
 
-  const prev = () => setCurrent(i => Math.max(0, i - 1));
-  const next = () => setCurrent(i => Math.min(images.length - 1, i + 1));
+  // Swipe state (only when NOT pinching)
+  const swipeStartX = useRef(null);
 
-  // Reset zoom when switching images
-  useEffect(() => {
-    scaleRef.current = 1;
-    setScale(1);
-    setOrigin({ x: 50, y: 50 });
-  }, [current]);
+  const prev = () => { if (scale === 1) setCurrent(i => Math.max(0, i - 1)); };
+  const next = () => { if (scale === 1) setCurrent(i => Math.min(images.length - 1, i + 1)); };
+
+  // Reset zoom when image changes
+  useEffect(() => { setScale(1); setOrigin({ x: 50, y: 50 }); }, [current]);
 
   // Keyboard nav
   useEffect(() => {
@@ -94,85 +92,62 @@ function ImageViewer({ images, startIndex, onClose }) {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, scale]);
 
-  // ── Native touch listeners with passive:false ─────────────────────────────
-  // MUST be native (not React synthetic) so e.preventDefault() actually works
-  // to block the browser's own pinch-zoom taking over.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+  // ── Touch handlers ────────────────────────────────────────────────────────
+  const getDist = (t) => {
+    const dx = t[0].clientX - t[1].clientX;
+    const dy = t[0].clientY - t[1].clientY;
+    return Math.hypot(dx, dy);
+  };
 
-    const getDist = (t) => Math.hypot(
-      t[0].clientX - t[1].clientX,
-      t[0].clientY - t[1].clientY
-    );
+  const getMid = (t, rect) => ({
+    x: ((t[0].clientX + t[1].clientX) / 2 - rect.left) / rect.width * 100,
+    y: ((t[0].clientY + t[1].clientY) / 2 - rect.top) / rect.height * 100,
+  });
 
-    const handleTouchStart = (e) => {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        isPinching.current = true;
-        swipeStartX.current = null;
-        initialDist.current = getDist(e.touches);
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      // Pinch start
+      isPinching.current = true;
+      swipeStartX.current = null;
+      initialDist.current = getDist(e.touches);
+      const rect = imgRef.current?.getBoundingClientRect() || { left: 0, top: 0, width: 1, height: 1 };
+      initialMid.current = getMid(e.touches, rect);
+    } else if (e.touches.length === 1 && !isPinching.current) {
+      swipeStartX.current = e.touches[0].clientX;
+    }
+  };
 
-        // Calculate pinch midpoint relative to the image element
-        const rect = imgRef.current?.getBoundingClientRect();
-        if (rect) {
-          initialMid.current = {
-            x: ((e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left) / rect.width * 100,
-            y: ((e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top) / rect.height * 100,
-          };
-        }
-      } else if (e.touches.length === 1 && !isPinching.current) {
-        swipeStartX.current = e.touches[0].clientX;
-      }
-    };
+  const onTouchMove = (e) => {
+    if (e.touches.length === 2 && initialDist.current) {
+      e.preventDefault();
+      const newDist = getDist(e.touches);
+      const raw = newDist / initialDist.current;
+      // Clamp scale: 1x minimum (no pinch-in below normal), 4x max
+      const clamped = Math.min(4, Math.max(1, raw));
+      setScale(clamped);
+      setOrigin(initialMid.current);
+    }
+  };
 
-    const handleTouchMove = (e) => {
-      if (e.touches.length === 2 && initialDist.current !== null) {
-        e.preventDefault(); // blocks native browser zoom — only works with passive:false
-        const newDist = getDist(e.touches);
-        const raw = newDist / initialDist.current;
-        // Clamp: 1x min (can't pinch below normal), 4x max
-        const clamped = Math.min(4, Math.max(1, raw));
-        scaleRef.current = clamped;
-        setScale(clamped);
-        setOrigin({ ...initialMid.current });
-      }
-    };
-
-    const handleTouchEnd = (e) => {
-      if (isPinching.current) {
-        // ── SNAP BACK ──
-        scaleRef.current = 1;
-        setScale(1);
-        setOrigin({ x: 50, y: 50 });
-        isPinching.current = false;
-        initialDist.current = null;
-        swipeStartX.current = null;
-        return;
-      }
-      // Single-finger swipe → page navigation (only when not zoomed)
-      if (swipeStartX.current !== null && e.changedTouches.length > 0 && scaleRef.current === 1) {
-        const diff = swipeStartX.current - e.changedTouches[0].clientX;
-        if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
-        swipeStartX.current = null;
-      }
-    };
-
-    // passive: false is the critical flag — without it, preventDefault() is ignored
-    el.addEventListener('touchstart',  handleTouchStart, { passive: false });
-    el.addEventListener('touchmove',   handleTouchMove,  { passive: false });
-    el.addEventListener('touchend',    handleTouchEnd,   { passive: true  });
-    el.addEventListener('touchcancel', handleTouchEnd,   { passive: true  });
-
-    return () => {
-      el.removeEventListener('touchstart',  handleTouchStart);
-      el.removeEventListener('touchmove',   handleTouchMove);
-      el.removeEventListener('touchend',    handleTouchEnd);
-      el.removeEventListener('touchcancel', handleTouchEnd);
-    };
-  }, [current]); // re-attach when image changes so next/prev closures are fresh
+  const onTouchEnd = (e) => {
+    if (isPinching.current) {
+      // Snap back to normal on finger lift
+      setScale(1);
+      setOrigin({ x: 50, y: 50 });
+      isPinching.current = false;
+      initialDist.current = null;
+      swipeStartX.current = null;
+      return;
+    }
+    // Single-finger swipe for page navigation
+    if (swipeStartX.current !== null && e.changedTouches.length > 0) {
+      const diff = swipeStartX.current - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
+      swipeStartX.current = null;
+    }
+  };
 
   return (
     <div
@@ -182,7 +157,7 @@ function ImageViewer({ images, startIndex, onClose }) {
       style={{
         position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
         display: 'flex', flexDirection: 'column',
-        // Prevent the OUTER page from zooming while viewer is open
+        // Block native browser pinch-zoom inside the viewer
         touchAction: 'none',
       }}
     >
@@ -200,15 +175,15 @@ function ImageViewer({ images, startIndex, onClose }) {
         <div style={{ width: 32 }} />
       </div>
 
-      {/* Image area — native listeners attached here */}
+      {/* Image area */}
       <div
-        ref={containerRef}
         style={{
           flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden', position: 'relative',
-          // pan-y lets vertical scroll still work; pinch-zoom blocked via preventDefault above
-          touchAction: 'pan-y',
         }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
         <img
           ref={imgRef}
@@ -220,24 +195,20 @@ function ImageViewer({ images, startIndex, onClose }) {
             maxHeight: '100%',
             objectFit: 'contain',
             userSelect: 'none',
-            WebkitUserSelect: 'none',
-            // While pinching: instant scale tracking (no lag)
-            // When released: spring snap-back animation
+            // Smooth snap-back when scale returns to 1, instant zoom while pinching
             transform: `scale(${scale})`,
             transformOrigin: `${origin.x}% ${origin.y}%`,
-            transition: scale === 1
-              ? 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
-              : 'none',
+            transition: scale === 1 ? 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)' : 'none',
             willChange: 'transform',
           }}
         />
 
-        {/* Hint badge */}
+        {/* Zoom hint — only when not zoomed */}
         {scale === 1 && (
           <div style={{
             position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)',
-            background: 'rgba(0,0,0,0.5)', color: 'rgba(255,255,255,0.6)',
-            fontSize: 11, fontWeight: 500, padding: '5px 14px', borderRadius: 20,
+            background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.55)',
+            fontSize: 11, fontWeight: 500, padding: '4px 12px', borderRadius: 20,
             pointerEvents: 'none', whiteSpace: 'nowrap',
           }}>
             Pinch to zoom · Release to snap back
@@ -2426,6 +2397,7 @@ function App() {
   const PULL_THRESHOLD = 80;
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
   const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
@@ -2654,7 +2626,7 @@ function App() {
         setView('batches'); setSelectedStudent(null); setSelectedBatch(null);
       } else { setView('students'); setSelectedStudent(null); }
     }
-    else if (view === 'students') { setView('batches'); setSelectedBatch(null); }
+    else if (view === 'students') { setView('batches'); setSelectedBatch(null); setGlobalSearch(''); }
   };
 
   const openModal = (type) => {
@@ -3338,7 +3310,29 @@ function App() {
   };
 
 
-  const renderBatches = () => (
+  const renderBatches = () => {
+    // ── Global search logic ───────────────────────────────────────────────
+    const query = globalSearch.trim().toLowerCase();
+    const searchResults = query.length >= 1 ? (() => {
+      const results = [];
+      batches.forEach(batch => {
+        batch.students
+          .filter(s => !s.isArchived)
+          .filter(s => isViewer ? s.status === 'Selected' : true)
+          .forEach(s => {
+            const nameMatch   = s.name?.toLowerCase().includes(query);
+            const compMatch   = s.companyName?.toLowerCase().includes(query);
+            const kumiaiMatch = s.kumiai?.toLowerCase().includes(query);
+            const batchMatch  = batch.name?.toLowerCase().includes(query);
+            if (nameMatch || compMatch || kumiaiMatch || batchMatch) {
+              results.push({ student: s, batch });
+            }
+          });
+      });
+      return results.slice().sort((a, b) => a.student.name.localeCompare(b.student.name));
+    })() : null;
+
+    return (
     <>
       <div className="sticky-header">
       <div className="header-banner">
@@ -3383,31 +3377,153 @@ function App() {
             </button>
           </div>
         </div>
-      </div>{/* end header-banner */}
-      </div>{/* end sticky-header */}
-      <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
-      {(isViewer
-        ? batches.filter(b => safeLocalGet(ROLE_KEY) === 'sulop'
-            ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
-            : b.students.some(s => s.status === 'Selected'))
-        : batches).map(batch => (
-        <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
-          <div className="card-content">
-            <div>
-              <h2 className="card-title">🎌 {displayName(batch)}</h2>
-              <p className="card-subtitle">
-                {isViewer
-                  ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
-                  : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
-              </p>
-            </div>
-            {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>}
+
+        {/* ── Search bar ── */}
+        <div style={{ padding: '10px 16px 14px', position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
+            <span style={{
+              position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+              fontSize: 16, pointerEvents: 'none', opacity: 0.55,
+            }}>🔍</span>
+            <input
+              type="text"
+              value={globalSearch}
+              onChange={e => setGlobalSearch(e.target.value)}
+              placeholder="Search students, company, batch..."
+              className="search-input"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '10px 36px 10px 38px',
+                borderRadius: 12, border: 'none',
+                background: 'rgba(255,255,255,0.18)',
+                color: '#fff', fontSize: 15,
+                outline: 'none',
+              }}
+            />
+            {globalSearch && (
+              <button
+                onClick={() => setGlobalSearch('')}
+                style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff',
+                  borderRadius: '50%', width: 20, height: 20, fontSize: 12,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  lineHeight: 1, padding: 0,
+                }}
+              >✕</button>
+            )}
           </div>
         </div>
-      ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
+
+      </div>{/* end header-banner */}
+      </div>{/* end sticky-header */}
+
+      {/* ── Search results ── */}
+      {searchResults !== null ? (
+        <>
+          <h2 className="section-title">
+            {searchResults.length === 0
+              ? 'No students found'
+              : `${searchResults.length} student${searchResults.length !== 1 ? 's' : ''} found`}
+          </h2>
+          {searchResults.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-tertiary)' }}>
+              <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
+              <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>No results for "{globalSearch}"</p>
+              <p style={{ fontSize: 13, marginTop: 6, color: 'var(--text-tertiary)' }}>Try searching by name, company, or batch</p>
+            </div>
+          ) : (
+            searchResults.map(({ student, batch }) => {
+              // Highlight matching text
+              const highlight = (text) => {
+                if (!text || !query) return text;
+                const idx = text.toLowerCase().indexOf(query);
+                if (idx === -1) return text;
+                return (
+                  <>
+                    {text.slice(0, idx)}
+                    <mark style={{ background: '#fff3cd', color: '#856404', borderRadius: 3, padding: '0 2px' }}>
+                      {text.slice(idx, idx + query.length)}
+                    </mark>
+                    {text.slice(idx + query.length)}
+                  </>
+                );
+              };
+              return (
+                <div
+                  key={`${batch._id}-${student._id}`}
+                  className="card student-card clickable"
+                  onClick={() => {
+                    setGlobalSearch('');
+                    setSelectedBatch(batch);
+                    goToCategories(student);
+                  }}
+                >
+                  <div className="card-content">
+                    <div className="student-card-left">
+                      {student.photo
+                        ? <img src={student.photo} alt={student.name} className="student-avatar" />
+                        : <span className="student-avatar-icon">👤</span>
+                      }
+                      <div>
+                        <h3 className="card-title" style={{ margin: 0 }}>
+                          {highlight(student.name)}
+                        </h3>
+                        <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
+                          🎌 {highlight(batch.name)}
+                        </p>
+                        {student.companyName && (
+                          <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
+                            🏢 {highlight(student.companyName)}
+                          </p>
+                        )}
+                        {student.kumiai && (
+                          <span style={{
+                            display: 'inline-block', marginTop: 4,
+                            background: '#fff3cd', color: '#856404',
+                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                          }}>
+                            {highlight(student.kumiai)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span style={{ color: '#c7c7cc', fontSize: 20, flexShrink: 0 }}>›</span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </>
+      ) : (
+        <>
+          {/* ── Normal batch list ── */}
+          <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
+          {(isViewer
+            ? batches.filter(b => safeLocalGet(ROLE_KEY) === 'sulop'
+                ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
+                : b.students.some(s => s.status === 'Selected'))
+            : batches).map(batch => (
+            <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
+              <div className="card-content">
+                <div>
+                  <h2 className="card-title">🎌 {displayName(batch)}</h2>
+                  <p className="card-subtitle">
+                    {isViewer
+                      ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
+                      : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
+                  </p>
+                </div>
+                {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>}
+              </div>
+            </div>
+          ))}
+          {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
+        </>
+      )}
     </>
-  );
+    );
+  };
 
   const renderStudents = () => {
     const role = safeLocalGet(ROLE_KEY);
@@ -4692,6 +4808,8 @@ function App() {
       })()}
       <style>{`
         @keyframes ptr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .search-input::placeholder { color: rgba(255,255,255,0.55) !important; }
+        .search-input:focus { outline: none; background: rgba(255,255,255,0.25) !important; }
       `}</style>
       {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
       {view === 'students' && renderStudents()}
