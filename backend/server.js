@@ -1412,29 +1412,36 @@ async function sendFcmNotification(token, title, body) {
 // Usage: open https://japanese-tracker-production.up.railway.app/api/push/test in browser
 app.get('/api/push/test', async (req, res) => {
   try {
+    console.log('[SAGE Test] FCM_PROJECT_ID:', process.env.FCM_PROJECT_ID);
+    console.log('[SAGE Test] FCM_CLIENT_EMAIL:', process.env.FCM_CLIENT_EMAIL);
+    console.log('[SAGE Test] KEY starts:', (process.env.FCM_PRIVATE_KEY || '').substring(0, 40));
+
     const tokens = await PushToken.find();
     if (tokens.length === 0) {
-      return res.json({ success: false, message: 'Walang registered tokens. Mag-login muna sa app.' });
+      return res.json({ success: false, message: 'Walang registered tokens.' });
     }
 
     const title = '🔔 SAGE Test Notification';
     const body  = 'Gumagana ang push notifications! ✅';
-
     let sent = 0, failed = 0;
+
     for (const doc of tokens) {
       try {
         const result = await sendFcmNotification(doc.token, title, body);
-console.log('[SAGE Test] FCM result:', JSON.stringify(result));
-if (result.error) { failed++; } else { sent++; }
-      } catch { failed++; }
+        console.log('[SAGE Test] FCM result:', JSON.stringify(result));
+        if (result.error) { failed++; } else { sent++; }
+      } catch (err) {
+        console.log('[SAGE Test] Send error:', err.message);
+        failed++;
+      }
     }
 
     res.json({ success: true, sent, failed, totalTokens: tokens.length });
   } catch (err) {
+    console.log('[SAGE Test] Top error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
-
 function scheduleDailyReminder() {
   const checkAndSend = async () => {
     const now = new Date();
