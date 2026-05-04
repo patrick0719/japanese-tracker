@@ -1,3 +1,4 @@
+import { usePushNotifications } from './usePushNotifications';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 import './index.css';
@@ -2409,6 +2410,8 @@ function App() {
     const s = safeLocalGet(TEACHER_KEY);
     return s ? JSON.parse(s) : null;
   });
+  
+  usePushNotifications(isLoggedIn, isViewer);
 
   const fileInputRef = useRef(null);
   const studentPhotoInputRef = useRef(null);
