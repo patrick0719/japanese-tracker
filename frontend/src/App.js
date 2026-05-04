@@ -2417,7 +2417,7 @@ function TeacherSelect({ onSelect }) {
                   <button
                     key={student._id}
                     onClick={() => {
-                      if (teacher) onSelect(teacher);
+                      if (teacher) onSelect(teacher, student, batch);
                     }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12,
@@ -2830,6 +2830,7 @@ function App() {
       // Sort by most recently created first (MongoDB _id contains timestamp)
       data.sort((a, b) => (b._id > a._id ? 1 : -1));
       setBatches(data);
+      return data; // allow callers to .then(batches => ...)
       // Fetch all teachers to resolve signatures
       try {
         const tRes = await fetch(`${API}/teachers/with-signatures`);
@@ -3516,10 +3517,20 @@ function App() {
   );
 
   if (!isViewer && !selectedTeacher) return (
-    <TeacherSelect onSelect={(t) => {
+    <TeacherSelect onSelect={(t, pendingStudent, pendingBatch) => {
       safeLocalSet(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
-      fetchBatches(t._id);
+      if (pendingStudent && pendingBatch) {
+        fetchBatches(t._id).then(loadedBatches => {
+          const freshBatch = (loadedBatches || []).find(b => b._id === pendingBatch._id) || pendingBatch;
+          const freshStudent = freshBatch.students?.find(s => s._id === pendingStudent._id) || pendingStudent;
+          setSelectedBatch(freshBatch);
+          setSelectedStudent(freshStudent);
+          setView('categories');
+        });
+      } else {
+        fetchBatches(t._id);
+      }
     }} />
   );
 
