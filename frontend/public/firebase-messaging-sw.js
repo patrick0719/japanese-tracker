@@ -7,13 +7,13 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-comp
 // ── REPLACE these values with your Firebase project config ───────────────────
 // Get these from: Firebase Console → Project Settings → General → Your apps
 firebase.initializeApp({
-  apiKey:            "AIzaSyCkLAC0AfLo_JDEK3AYEqhPPgR9UnF_QOQ",
-  authDomain:        "sage-bulacan.firebaseapp.com",
-  projectId:         "sage-bulacan",
-  storageBucket:     "sage-bulacan.firebasestorage.app",
-  messagingSenderId: "1024431867859",
-  appId:             "1:1024431867859:web:1566304d863f86838e1126",
-});
+    apiKey:            "AIzaSyCkLAC0AfLo_JDEK3AYEqhPPgR9UnF_QOQ",
+    authDomain:        "sage-bulacan.firebaseapp.com",
+    projectId:         "sage-bulacan",
+    storageBucket:     "sage-bulacan.firebasestorage.app",
+    messagingSenderId: "1024431867859",
+    appId:             "1:1024431867859:web:1566304d863f86838e1126",
+  });
 
 const messaging = firebase.messaging();
 
