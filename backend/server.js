@@ -1408,6 +1408,32 @@ async function sendFcmNotification(token, title, body) {
 // ── SMART REMINDER CRON — runs every day at 8:00 AM Philippine Time (UTC+8) ──
 // Checks on 15th and 30th of the month which students have no exam in 30 days
 // and sends push notifications to all registered teachers/admins.
+// GET /api/push/test — manually trigger a test notification to all registered devices
+// Usage: open https://japanese-tracker-production.up.railway.app/api/push/test in browser
+app.get('/api/push/test', async (req, res) => {
+  try {
+    const tokens = await PushToken.find();
+    if (tokens.length === 0) {
+      return res.json({ success: false, message: 'Walang registered tokens. Mag-login muna sa app.' });
+    }
+
+    const title = '🔔 SAGE Test Notification';
+    const body  = 'Gumagana ang push notifications! ✅';
+
+    let sent = 0, failed = 0;
+    for (const doc of tokens) {
+      try {
+        const result = await sendFcmNotification(doc.token, title, body);
+        if (result.error) { failed++; } else { sent++; }
+      } catch { failed++; }
+    }
+
+    res.json({ success: true, sent, failed, totalTokens: tokens.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 function scheduleDailyReminder() {
   const checkAndSend = async () => {
     const now = new Date();
