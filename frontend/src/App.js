@@ -3329,19 +3329,19 @@ function App() {
     } catch { alert('Error saving image.'); }
   };
 
-  // ── OCR: Auto-detect score from exam paper image (Tesseract, free) ─────────
-  // Scans MULTIPLE regions of the image so scores in any corner/position are found.
-  // Regions tried (in priority order):
-  //   1. Top-right    2. Top-left    3. Bottom-right    4. Bottom-left
-  //   5. Top-center   6. Full image (fallback)
-  // Each region is upscaled 3× and processed with adaptive contrast before OCR.
+  // ── OCR: Auto-detect score from exam paper image (red-ink + circle aware) ──
+  // Strategy:
+  //   1. Convert image to canvas, isolate RED pixels (ballpen ink)
+  //   2. Find the bounding box of the largest red-ink cluster (the circled score)
+  //   3. Expand the bounding box slightly and crop that region
+  //   4. Run Tesseract on the cropped red-ink region (upscaled, black on white)
+  //   5. Fallback: scan standard regions of the original image if red detection fails
   const runOCR = async (file) => {
     setOcrStatus('scanning');
     setOcrPreview(null);
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    // Load file → Image element
     const loadImage = (f) => new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -3354,143 +3354,269 @@ function App() {
       reader.readAsDataURL(f);
     });
 
-    // Crop a region from img, upscale 3×, apply adaptive contrast, return dataURL
-    // rx,ry = top-left corner as fraction of image size; rw,rh = size as fraction
-    const cropAndProcess = (img, rx, ry, rw, rh) => {
-      const SCALE = 3;
-      const srcX = Math.round(img.width  * rx);
-      const srcY = Math.round(img.height * ry);
-      const srcW = Math.round(img.width  * rw);
-      const srcH = Math.round(img.height * rh);
-
-      const canvas = document.createElement('canvas');
-      canvas.width  = srcW * SCALE;
-      canvas.height = srcH * SCALE;
-      const ctx = canvas.getContext('2d');
-
-      // White background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
-
-      // Adaptive contrast: compute mean brightness, threshold around it
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const d = imageData.data;
-
-      // Pass 1 — compute average luminance
-      let sum = 0;
-      for (let i = 0; i < d.length; i += 4) {
-        sum += (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114);
-      }
-      const mean = sum / (d.length / 4);
-      // Threshold = midpoint between mean and 255 (pulls toward white background)
-      const threshold = Math.min(Math.max(mean * 0.75, 80), 180);
-
-      // Pass 2 — binarize
-      for (let i = 0; i < d.length; i += 4) {
-        const lum = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
-        const val = lum < threshold ? 0 : 255;
-        d[i] = d[i+1] = d[i+2] = val;
-      }
-      ctx.putImageData(imageData, 0, 0);
-
-      return canvas.toDataURL('image/png');
+    // Returns true if pixel at index i is "red ink" (ballpen/marker red)
+    // Tuned for red ballpen: high R, low-mid G, low-mid B
+    const isRedInk = (r, g, b) => {
+      return (
+        r > 140 &&          // strong red channel
+        g < 100 &&          // low green
+        b < 120 &&          // low blue
+        r > g * 1.8 &&      // red dominates green
+        r > b * 1.5         // red dominates blue
+      );
     };
 
     // Parse OCR text → { score, total } or null
-    // Handles: "85/100", "85 / 100", "85\100", "85-100", "85 100" (space), "Score: 85"
     const parseScore = (text) => {
-      const t = text.replace(/[oO]/g, '0').replace(/[lI|]/g, '1'); // common OCR misreads
+      // Fix common Tesseract misreads for digits
+      const t = text
+        .replace(/[oO]/g, '0')
+        .replace(/[lI|!]/g, '1')
+        .replace(/[sS]/g, '5')
+        .replace(/[gq]/g, '9');
       const patterns = [
-        /(\d{1,3})\s*[\/\\]\s*(\d{1,3})/,   // 85/100 or 85\100
-        /(\d{1,3})\s*[-–]\s*(\d{1,3})/,      // 85-100
-        /(\d{1,3})\s+out\s+of\s+(\d{1,3})/i, // 85 out of 100
-        /(\d{1,3})\s+(\d{1,3})/,              // 85 100 (space separated, last resort)
+        /(\d{1,3})\s*[\/\\]\s*(\d{1,3})/,
+        /(\d{1,3})\s*[-–]\s*(\d{1,3})/,
+        /(\d{1,3})\s+out\s+of\s+(\d{1,3})/i,
+        /(\d{1,3})\s+(\d{1,3})/,
       ];
       for (const pat of patterns) {
         const m = t.match(pat);
         if (m) {
           const score = parseInt(m[1]);
           const total = parseInt(m[2]);
-          if (score >= 0 && total > 0 && score <= total && total <= 999) {
+          if (score >= 0 && total > 0 && score <= total && total <= 999)
             return { score, total };
-          }
         }
       }
       return null;
     };
 
+    // Build a high-contrast black-on-white canvas from a region for Tesseract
+    const buildOcrCanvas = (srcCanvas, x, y, w, h, scale = 3) => {
+      const dst = document.createElement('canvas');
+      dst.width  = w * scale;
+      dst.height = h * scale;
+      const ctx = dst.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, dst.width, dst.height);
+      ctx.drawImage(srcCanvas, x, y, w, h, 0, 0, dst.width, dst.height);
+
+      // Binarize using adaptive threshold
+      const id = ctx.getImageData(0, 0, dst.width, dst.height);
+      const d = id.data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4)
+        sum += d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+      const thresh = Math.min(Math.max((sum / (d.length / 4)) * 0.72, 70), 185);
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+        const v = lum < thresh ? 0 : 255;
+        d[i] = d[i+1] = d[i+2] = v;
+      }
+      ctx.putImageData(id, 0, 0);
+      return dst;
+    };
+
     try {
-      // Load image once
       const img = await loadImage(file);
 
-      // Regions to scan: [rx, ry, rw, rh, label]
-      // Priority: corners first (most common), then top-center, then full page
-      const regions = [
-        [0.62, 0.00, 0.38, 0.22, 'top-right'],
-        [0.00, 0.00, 0.38, 0.22, 'top-left'],
-        [0.62, 0.78, 0.38, 0.22, 'bottom-right'],
-        [0.00, 0.78, 0.38, 0.22, 'bottom-left'],
-        [0.25, 0.00, 0.50, 0.18, 'top-center'],
-        [0.30, 0.30, 0.40, 0.40, 'center'],
-        [0.00, 0.00, 1.00, 1.00, 'full'],  // last resort: whole page
-      ];
-
-      // Load Tesseract once
-      if (!window.Tesseract) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
+      // ── Step 1: Draw full image to canvas ──────────────────────────────────
+      // Downscale very large images to keep processing fast
+      const MAX = 1600;
+      let dw = img.width, dh = img.height;
+      if (dw > MAX || dh > MAX) {
+        if (dw > dh) { dh = Math.round(dh * MAX / dw); dw = MAX; }
+        else          { dw = Math.round(dw * MAX / dh); dh = MAX; }
       }
+      const fullCanvas = document.createElement('canvas');
+      fullCanvas.width = dw; fullCanvas.height = dh;
+      const fullCtx = fullCanvas.getContext('2d');
+      fullCtx.fillStyle = '#ffffff';
+      fullCtx.fillRect(0, 0, dw, dh);
+      fullCtx.drawImage(img, 0, 0, dw, dh);
 
-      // Create one worker and reuse across regions
-      const worker = await window.Tesseract.createWorker('eng', 1, {
-        logger: () => {},
-      });
+      // ── Step 2: Isolate red pixels, find clusters ──────────────────────────
+      const fullData = fullCtx.getImageData(0, 0, dw, dh);
+      const d = fullData.data;
 
-      // Two passes per region: digits-only (fast), then lenient (catches misreads)
-      const paramSets = [
-        { tessedit_char_whitelist: '0123456789/\\ .-', tessedit_pageseg_mode: '6' },
-        { tessedit_char_whitelist: '',                  tessedit_pageseg_mode: '6' },
-      ];
+      // Mark red pixels and find their bounding boxes via simple row/col scan
+      // We collect all red pixel coordinates then cluster by proximity
+      const GRID = 20; // grid cell size for coarse clustering
+      const gridW = Math.ceil(dw / GRID);
+      const gridH = Math.ceil(dh / GRID);
+      const redGrid = new Uint8Array(gridW * gridH); // 1 = has red pixels
 
-      let foundResult = null;
-      let bestCrop = null;
-
-      outer:
-      for (const [rx, ry, rw, rh, label] of regions) {
-        const cropUrl = cropAndProcess(img, rx, ry, rw, rh);
-
-        for (const params of paramSets) {
-          await worker.setParameters(params);
-          const { data: { text } } = await worker.recognize(cropUrl);
-          console.log(`[OCR] ${label}:`, JSON.stringify(text));
-
-          const result = parseScore(text);
-          if (result) {
-            foundResult = result;
-            bestCrop = cropUrl;
-            console.log(`[OCR] ✅ Found in ${label}:`, result);
-            break outer;
+      for (let py = 0; py < dh; py++) {
+        for (let px = 0; px < dw; px++) {
+          const i = (py * dw + px) * 4;
+          if (isRedInk(d[i], d[i+1], d[i+2])) {
+            const gx = Math.floor(px / GRID);
+            const gy = Math.floor(py / GRID);
+            redGrid[gy * gridW + gx] = 1;
           }
         }
       }
 
-      await worker.terminate();
+      // Find connected components in the red grid (simple flood-fill)
+      const visited = new Uint8Array(gridW * gridH);
+      const clusters = [];
 
-      if (bestCrop) setOcrPreview(bestCrop);
+      const floodFill = (startIdx) => {
+        const stack = [startIdx];
+        const cells = [];
+        while (stack.length) {
+          const idx = stack.pop();
+          if (visited[idx] || !redGrid[idx]) continue;
+          visited[idx] = 1;
+          cells.push(idx);
+          const gx = idx % gridW;
+          const gy = Math.floor(idx / gridW);
+          if (gx > 0)        stack.push(idx - 1);
+          if (gx < gridW-1)  stack.push(idx + 1);
+          if (gy > 0)        stack.push(idx - gridW);
+          if (gy < gridH-1)  stack.push(idx + gridW);
+        }
+        return cells;
+      };
+
+      for (let i = 0; i < redGrid.length; i++) {
+        if (redGrid[i] && !visited[i]) {
+          const cells = floodFill(i);
+          if (cells.length >= 2) clusters.push(cells); // ignore tiny noise
+        }
+      }
+
+      // ── Step 3: Find the best cluster (largest = most likely the circle) ───
+      let bestCropUrl = null;
+      let foundResult = null;
+
+      // Sort clusters by size descending
+      clusters.sort((a, b) => b.length - a.length);
+
+      // Load Tesseract
+      if (!window.Tesseract) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+          s.onload = resolve; s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+      const worker = await window.Tesseract.createWorker('eng', 1, { logger: () => {} });
+
+      // Try up to 3 largest red clusters
+      for (const cells of clusters.slice(0, 3)) {
+        // Get pixel bounding box of this cluster
+        let minGx = gridW, maxGx = 0, minGy = gridH, maxGy = 0;
+        for (const idx of cells) {
+          const gx = idx % gridW;
+          const gy = Math.floor(idx / gridW);
+          if (gx < minGx) minGx = gx;
+          if (gx > maxGx) maxGx = gx;
+          if (gy < minGy) minGy = gy;
+          if (gy > maxGy) maxGy = gy;
+        }
+
+        // Convert grid coords → pixel coords, add padding
+        const PAD = Math.round(GRID * 2.5);
+        const cx = Math.max(0,  minGx * GRID - PAD);
+        const cy = Math.max(0,  minGy * GRID - PAD);
+        const cw = Math.min(dw - cx, (maxGx - minGx + 1) * GRID + PAD * 2);
+        const ch = Math.min(dh - cy, (maxGy - minGy + 1) * GRID + PAD * 2);
+
+        // Skip if the crop region is unreasonably small or huge
+        if (cw < 20 || ch < 15 || cw > dw * 0.7 || ch > dh * 0.7) continue;
+
+        // Build red-isolated version: red pixels → black, everything else → white
+        const redCanvas = document.createElement('canvas');
+        const SCALE = 4;
+        redCanvas.width  = cw * SCALE;
+        redCanvas.height = ch * SCALE;
+        const rCtx = redCanvas.getContext('2d');
+        rCtx.fillStyle = '#ffffff';
+        rCtx.fillRect(0, 0, redCanvas.width, redCanvas.height);
+
+        // Draw original crop upscaled
+        rCtx.drawImage(fullCanvas, cx, cy, cw, ch, 0, 0, redCanvas.width, redCanvas.height);
+
+        // Re-read pixels and force non-red to white, red to black
+        const rid = rCtx.getImageData(0, 0, redCanvas.width, redCanvas.height);
+        const rd = rid.data;
+        for (let i = 0; i < rd.length; i += 4) {
+          if (isRedInk(rd[i], rd[i+1], rd[i+2])) {
+            rd[i] = rd[i+1] = rd[i+2] = 0;   // red ink → black
+          } else {
+            rd[i] = rd[i+1] = rd[i+2] = 255;  // everything else → white
+          }
+        }
+        rCtx.putImageData(rid, 0, 0);
+
+        const redUrl = redCanvas.toDataURL('image/png');
+
+        // Also build a normal high-contrast version as fallback
+        const normalCanvas = buildOcrCanvas(fullCanvas, cx, cy, cw, ch, SCALE);
+        const normalUrl = normalCanvas.toDataURL('image/png');
+
+        // OCR on red-isolated first, then normal
+        for (const [url, label] of [[redUrl, 'red-isolated'], [normalUrl, 'normal-contrast']]) {
+          for (const psgMode of ['7', '6', '13']) {
+            await worker.setParameters({
+              tessedit_char_whitelist: '0123456789/\\ .',
+              tessedit_pageseg_mode: psgMode,
+            });
+            const { data: { text } } = await worker.recognize(url);
+            console.log(`[OCR] cluster ${label} psm${psgMode}:`, JSON.stringify(text));
+            const result = parseScore(text);
+            if (result) {
+              foundResult = result;
+              bestCropUrl = url;
+              break;
+            }
+          }
+          if (foundResult) break;
+        }
+        if (foundResult) break;
+      }
+
+      // ── Step 4: Fallback — scan standard regions if red detection found nothing
+      if (!foundResult) {
+        console.log('[OCR] Red detection failed, falling back to region scan…');
+        const regions = [
+          [0.62, 0.00, 0.38, 0.22],
+          [0.00, 0.00, 0.38, 0.22],
+          [0.62, 0.78, 0.38, 0.22],
+          [0.00, 0.78, 0.38, 0.22],
+          [0.25, 0.00, 0.50, 0.18],
+          [0.00, 0.00, 1.00, 1.00],
+        ];
+        for (const [rx, ry, rw, rh] of regions) {
+          const x = Math.round(dw * rx), y = Math.round(dh * ry);
+          const w = Math.round(dw * rw), h = Math.round(dh * rh);
+          const canvas = buildOcrCanvas(fullCanvas, x, y, w, h, 3);
+          const url = canvas.toDataURL('image/png');
+          for (const psgMode of ['6', '7']) {
+            await worker.setParameters({
+              tessedit_char_whitelist: '0123456789/\\ .',
+              tessedit_pageseg_mode: psgMode,
+            });
+            const { data: { text } } = await worker.recognize(url);
+            console.log(`[OCR] fallback region psm${psgMode}:`, JSON.stringify(text));
+            const result = parseScore(text);
+            if (result) { foundResult = result; bestCropUrl = url; break; }
+          }
+          if (foundResult) break;
+        }
+      }
+
+      await worker.terminate();
+      if (bestCropUrl) setOcrPreview(bestCropUrl);
 
       if (foundResult) {
         setNewScore(String(foundResult.score));
         setNewTotalScore(String(foundResult.total));
         setOcrStatus('found');
       } else {
-        // Show first region crop as preview so user can see what was scanned
-        setOcrPreview(cropAndProcess(img, 0.62, 0.00, 0.38, 0.22));
         setOcrStatus('notfound');
       }
 
