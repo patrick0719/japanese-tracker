@@ -2703,10 +2703,7 @@ function App() {
   const [editingCategory, setEditingCategory] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
   const [newExamDate, setNewExamDate] = useState('');
-  // OCR state
-  const [ocrStatus, setOcrStatus] = useState('idle'); // 'idle' | 'scanning' | 'found' | 'notfound' | 'error'
-  const [ocrPreview, setOcrPreview] = useState(null); // cropped image dataURL for preview
-  const ocrFileRef = useRef(null);
+
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem('sage_dark') === 'true'; } catch { return false; }
   });
@@ -3329,177 +3326,6 @@ function App() {
     } catch { alert('Error saving image.'); }
   };
 
-  // ── OCR: Auto-detect score from exam paper image (red ink, circle-aware) ───
-  // Based on exam format: score is handwritten red ink inside a circle,
-  // located in the top-right area (てんすう label). Strategy:
-  //   1. Crop candidate zones (top-right priority, then other corners)
-  //   2. In each zone, isolate red pixels → black on white canvas
-  //   3. Run Tesseract on the red-only canvas (4× upscale)
-  //   4. Parse X/Y score pattern
-  const runOCR = async (file) => {
-    setOcrStatus('scanning');
-    setOcrPreview(null);
-
-    const loadImage = (f) => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = e.target.result;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(f);
-    });
-
-    // Red ballpen ink detector — tuned for the exam paper format
-    const isRedInk = (r, g, b) => (
-      r > 130 && g < 110 && b < 120 &&
-      r > g * 1.6 && r > b * 1.4 &&
-      r - g > 40
-    );
-
-    const parseScore = (text) => {
-      const t = text
-        .replace(/[oO@]/g, '0')
-        .replace(/[lI|!]/g, '1')
-        .replace(/[sS$]/g, '5')
-        .replace(/[B]/g, '8')
-        .replace(/\s+/g, ' ')
-        .trim();
-      const patterns = [
-        /(\d{1,3})\s*[\/\\]\s*(\d{1,3})/,
-        /(\d{1,3})\s*[-–]\s*(\d{1,3})/,
-        /(\d{1,3})\s+(\d{1,3})/,
-      ];
-      for (const pat of patterns) {
-        const m = t.match(pat);
-        if (m) {
-          const score = parseInt(m[1]), total = parseInt(m[2]);
-          if (score >= 0 && total > 0 && score <= total && total <= 999)
-            return { score, total };
-        }
-      }
-      return null;
-    };
-
-    try {
-      const img = await loadImage(file);
-
-      // Draw full image to canvas (cap at 2000px for performance)
-      const MAX = 2000;
-      let dw = img.width, dh = img.height;
-      if (dw > MAX || dh > MAX) {
-        if (dw > dh) { dh = Math.round(dh * MAX / dw); dw = MAX; }
-        else          { dw = Math.round(dw * MAX / dh); dh = MAX; }
-      }
-      const full = document.createElement('canvas');
-      full.width = dw; full.height = dh;
-      const fCtx = full.getContext('2d');
-      fCtx.fillStyle = '#fff';
-      fCtx.fillRect(0, 0, dw, dh);
-      fCtx.drawImage(img, 0, 0, dw, dh);
-      const fullPixels = fCtx.getImageData(0, 0, dw, dh).data;
-
-      // Candidate zones to check — [rx, ry, rw, rh]
-      // Score circle is typically top-right on this exam format
-      const zones = [
-        [0.55, 0.03, 0.42, 0.22],  // top-right (primary — てんすう area)
-        [0.45, 0.03, 0.55, 0.28],  // top-right wider
-        [0.00, 0.03, 0.45, 0.22],  // top-left
-        [0.55, 0.75, 0.42, 0.22],  // bottom-right
-        [0.00, 0.75, 0.42, 0.22],  // bottom-left
-        [0.20, 0.03, 0.60, 0.30],  // top-center wide
-      ];
-
-      // Load Tesseract
-      if (!window.Tesseract) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          s.onload = resolve; s.onerror = reject;
-          document.head.appendChild(s);
-        });
-      }
-      const worker = await window.Tesseract.createWorker('eng', 1, { logger: () => {} });
-
-      let foundResult = null;
-      let bestPreview = null;
-
-      for (const [rx, ry, rw, rh] of zones) {
-        if (foundResult) break;
-
-        const zx = Math.round(dw * rx), zy = Math.round(dh * ry);
-        const zw = Math.round(dw * rw), zh = Math.round(dh * rh);
-
-        // ── Build red-isolated canvas for this zone ─────────────────────────
-        const SCALE = 4;
-        const redCanvas = document.createElement('canvas');
-        redCanvas.width  = zw * SCALE;
-        redCanvas.height = zh * SCALE;
-        const rCtx = redCanvas.getContext('2d');
-
-        // Draw zone upscaled
-        rCtx.fillStyle = '#fff';
-        rCtx.fillRect(0, 0, redCanvas.width, redCanvas.height);
-        rCtx.drawImage(full, zx, zy, zw, zh, 0, 0, redCanvas.width, redCanvas.height);
-
-        // Remap: red pixels → black, all else → white
-        const rid = rCtx.getImageData(0, 0, redCanvas.width, redCanvas.height);
-        const rd = rid.data;
-        let redCount = 0;
-        for (let i = 0; i < rd.length; i += 4) {
-          if (isRedInk(rd[i], rd[i+1], rd[i+2])) {
-            rd[i] = rd[i+1] = rd[i+2] = 0;
-            redCount++;
-          } else {
-            rd[i] = rd[i+1] = rd[i+2] = 255;
-          }
-          rd[i+3] = 255;
-        }
-        rCtx.putImageData(rid, 0, 0);
-
-        // Skip zones with almost no red (no score there)
-        const totalPx = (redCanvas.width * redCanvas.height);
-        if (redCount < 30 || redCount > totalPx * 0.4) continue;
-
-        const redUrl = redCanvas.toDataURL('image/png');
-        if (!bestPreview) bestPreview = redUrl;
-
-        // ── OCR with multiple page-seg modes ────────────────────────────────
-        for (const psm of ['6', '7', '12', '13']) {
-          await worker.setParameters({
-            tessedit_char_whitelist: '0123456789/\\. ',
-            tessedit_pageseg_mode: psm,
-          });
-          const { data: { text } } = await worker.recognize(redUrl);
-          console.log(`[OCR] zone[${rx},${ry}] psm${psm}:`, JSON.stringify(text));
-          const result = parseScore(text);
-          if (result) {
-            foundResult = result;
-            bestPreview = redUrl;
-            console.log('[OCR] ✅ Found:', result);
-            break;
-          }
-        }
-      }
-
-      await worker.terminate();
-      if (bestPreview) setOcrPreview(bestPreview);
-
-      if (foundResult) {
-        setNewScore(String(foundResult.score));
-        setNewTotalScore(String(foundResult.total));
-        setOcrStatus('found');
-      } else {
-        setOcrStatus('notfound');
-      }
-
-    } catch (err) {
-      console.error('[OCR] Error:', err);
-      setOcrStatus('error');
-    }
-  };
 
   const triggerFileInput = (examId) => {
     fileInputRef.current.setAttribute('data-exam-id', examId);
@@ -4796,103 +4622,6 @@ function App() {
                 <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：小テスト１、中間試験、期末試験" />
               </div>
 
-              {/* ── OCR Score Scanner ── */}
-              {modalType === 'exam' && (
-                <div style={{
-                  background: '#f9f9f9', borderRadius: 12,
-                  padding: '12px 14px', marginBottom: 4,
-                  border: '1.5px solid #e5e5ea',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <div>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#3a3a3c' }}>
-                        🔍 Auto-detect Score
-                      </p>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#8e8e93' }}>
-                        Mag-upload ng exam paper para i-detect ang score
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => ocrFileRef.current?.click()}
-                      disabled={ocrStatus === 'scanning'}
-                      style={{
-                        background: ocrStatus === 'scanning' ? '#e5e5ea' : '#8B0000',
-                        color: ocrStatus === 'scanning' ? '#8e8e93' : '#fff',
-                        border: 'none', borderRadius: 10,
-                        padding: '8px 14px', fontSize: 13, fontWeight: 700,
-                        cursor: ocrStatus === 'scanning' ? 'default' : 'pointer',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {ocrStatus === 'scanning' ? '⏳ Reading...' : '📷 Scan'}
-                    </button>
-                    <input
-                      ref={ocrFileRef}
-                      type="file"
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={async (e) => {
-                        const file = e.target.files[0];
-                        if (file) await runOCR(file);
-                        e.target.value = '';
-                      }}
-                    />
-                  </div>
-
-                  {/* OCR status feedback */}
-                  {ocrStatus === 'scanning' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        {[0,1,2].map(i => (
-                          <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#8B0000', animation: `dotPulse 1.1s ease-in-out ${i*0.18}s infinite` }} />
-                        ))}
-                      </div>
-                      <span style={{ fontSize: 12, color: '#8e8e93' }}>Scanning top-right corner...</span>
-                    </div>
-                  )}
-
-                  {ocrStatus === 'found' && (
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                      {ocrPreview && (
-                        <img src={ocrPreview} alt="Scanned area" style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6, border: '1.5px solid #34C759', flexShrink: 0 }} />
-                      )}
-                      <div style={{ background: '#f0fff4', borderRadius: 8, padding: '8px 12px', flex: 1 }}>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#2e7d32' }}>
-                          ✅ Score detected!
-                        </p>
-                        <p style={{ margin: '2px 0 0', fontSize: 12, color: '#4caf50' }}>
-                          {newScore}/{newTotalScore} — i-edit kung mali
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {ocrStatus === 'notfound' && (
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                      {ocrPreview && (
-                        <img src={ocrPreview} alt="Scanned area" style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6, border: '1.5px solid #ff9500', flexShrink: 0 }} />
-                      )}
-                      <div style={{ background: '#fff8e1', borderRadius: 8, padding: '8px 12px', flex: 1 }}>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#e65100' }}>
-                          ⚠️ Hindi na-detect
-                        </p>
-                        <p style={{ margin: '2px 0 0', fontSize: 12, color: '#ef6c00' }}>
-                          I-type na lang manually ang score
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {ocrStatus === 'error' && (
-                    <div style={{ background: '#fff3f3', borderRadius: 8, padding: '8px 12px' }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#c62828' }}>
-                        ❌ Error sa OCR. I-type na lang manually.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
 
               <div style={{ display: 'flex', gap: 10 }}>
                 <div className="form-group" style={{ flex: 1 }}>
@@ -4900,10 +4629,9 @@ function App() {
                   <input
                     type="number"
                     value={newScore}
-                    onChange={(e) => { setNewScore(e.target.value); if (ocrStatus !== 'idle') setOcrStatus('idle'); }}
+                    onChange={(e) => setNewScore(e.target.value)}
                     placeholder={t('scorePlaceholder')}
                     min="0"
-                    style={{ borderColor: ocrStatus === 'found' ? '#34C759' : undefined }}
                   />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
@@ -4911,10 +4639,9 @@ function App() {
                   <input
                     type="number"
                     value={newTotalScore}
-                    onChange={(e) => { setNewTotalScore(e.target.value); if (ocrStatus !== 'idle') setOcrStatus('idle'); }}
+                    onChange={(e) => setNewTotalScore(e.target.value)}
                     placeholder={t('totalScorePlaceholder')}
                     min="1"
-                    style={{ borderColor: ocrStatus === 'found' ? '#34C759' : undefined }}
                   />
                 </div>
               </div>
