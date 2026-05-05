@@ -3329,65 +3329,114 @@ function App() {
     } catch { alert('Error saving image.'); }
   };
 
-  // ── OCR: Auto-detect score from exam paper image ─────────────────────────
-  // 1. Crops top-right 28% x 18% of the image (where score usually is)
-  // 2. Runs Tesseract.js OCR on the cropped region
-  // 3. Searches for slash-format score: "85/100", "85 / 100", etc.
-  // 4. Pre-fills score + totalScore fields if found
+  // ── OCR: Auto-detect score from exam paper image (Tesseract, free) ─────────
+  // Scans MULTIPLE regions of the image so scores in any corner/position are found.
+  // Regions tried (in priority order):
+  //   1. Top-right    2. Top-left    3. Bottom-right    4. Bottom-left
+  //   5. Top-center   6. Full image (fallback)
+  // Each region is upscaled 3× and processed with adaptive contrast before OCR.
   const runOCR = async (file) => {
     setOcrStatus('scanning');
     setOcrPreview(null);
 
-    try {
-      // Step 1: Load image and crop top-right corner (28% wide, 18% tall)
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+    // ── helpers ──────────────────────────────────────────────────────────────
 
-      const croppedDataUrl = await new Promise((resolve, reject) => {
+    // Load file → Image element
+    const loadImage = (f) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
         const img = new Image();
-        img.onload = () => {
-          const cropW = Math.round(img.width  * 0.28);
-          const cropH = Math.round(img.height * 0.18);
-          const cropX = img.width - cropW; // right edge
-          const cropY = 0;                 // top edge
-
-          const canvas = document.createElement('canvas');
-          // Scale up 2x for better OCR accuracy
-          canvas.width  = cropW * 2;
-          canvas.height = cropH * 2;
-          const ctx = canvas.getContext('2d');
-
-          // White background (helps OCR on transparent images)
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Draw the cropped region scaled up
-          ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
-
-          // Increase contrast for handwritten scores
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const d = imageData.data;
-          for (let i = 0; i < d.length; i += 4) {
-            // Threshold: push pixels toward black or white
-            const avg = (d[i] + d[i+1] + d[i+2]) / 3;
-            const val = avg < 140 ? 0 : 255;
-            d[i] = d[i+1] = d[i+2] = val;
-          }
-          ctx.putImageData(imageData, 0, 0);
-
-          resolve(canvas.toDataURL('image/png'));
-        };
+        img.onload = () => resolve(img);
         img.onerror = reject;
-        img.src = dataUrl;
-      });
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(f);
+    });
 
-      setOcrPreview(croppedDataUrl);
+    // Crop a region from img, upscale 3×, apply adaptive contrast, return dataURL
+    // rx,ry = top-left corner as fraction of image size; rw,rh = size as fraction
+    const cropAndProcess = (img, rx, ry, rw, rh) => {
+      const SCALE = 3;
+      const srcX = Math.round(img.width  * rx);
+      const srcY = Math.round(img.height * ry);
+      const srcW = Math.round(img.width  * rw);
+      const srcH = Math.round(img.height * rh);
 
-      // Step 2: Load Tesseract.js from CDN if not already loaded
+      const canvas = document.createElement('canvas');
+      canvas.width  = srcW * SCALE;
+      canvas.height = srcH * SCALE;
+      const ctx = canvas.getContext('2d');
+
+      // White background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+
+      // Adaptive contrast: compute mean brightness, threshold around it
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imageData.data;
+
+      // Pass 1 — compute average luminance
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        sum += (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114);
+      }
+      const mean = sum / (d.length / 4);
+      // Threshold = midpoint between mean and 255 (pulls toward white background)
+      const threshold = Math.min(Math.max(mean * 0.75, 80), 180);
+
+      // Pass 2 — binarize
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+        const val = lum < threshold ? 0 : 255;
+        d[i] = d[i+1] = d[i+2] = val;
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    // Parse OCR text → { score, total } or null
+    // Handles: "85/100", "85 / 100", "85\100", "85-100", "85 100" (space), "Score: 85"
+    const parseScore = (text) => {
+      const t = text.replace(/[oO]/g, '0').replace(/[lI|]/g, '1'); // common OCR misreads
+      const patterns = [
+        /(\d{1,3})\s*[\/\\]\s*(\d{1,3})/,   // 85/100 or 85\100
+        /(\d{1,3})\s*[-–]\s*(\d{1,3})/,      // 85-100
+        /(\d{1,3})\s+out\s+of\s+(\d{1,3})/i, // 85 out of 100
+        /(\d{1,3})\s+(\d{1,3})/,              // 85 100 (space separated, last resort)
+      ];
+      for (const pat of patterns) {
+        const m = t.match(pat);
+        if (m) {
+          const score = parseInt(m[1]);
+          const total = parseInt(m[2]);
+          if (score >= 0 && total > 0 && score <= total && total <= 999) {
+            return { score, total };
+          }
+        }
+      }
+      return null;
+    };
+
+    try {
+      // Load image once
+      const img = await loadImage(file);
+
+      // Regions to scan: [rx, ry, rw, rh, label]
+      // Priority: corners first (most common), then top-center, then full page
+      const regions = [
+        [0.62, 0.00, 0.38, 0.22, 'top-right'],
+        [0.00, 0.00, 0.38, 0.22, 'top-left'],
+        [0.62, 0.78, 0.38, 0.22, 'bottom-right'],
+        [0.00, 0.78, 0.38, 0.22, 'bottom-left'],
+        [0.25, 0.00, 0.50, 0.18, 'top-center'],
+        [0.30, 0.30, 0.40, 0.40, 'center'],
+        [0.00, 0.00, 1.00, 1.00, 'full'],  // last resort: whole page
+      ];
+
+      // Load Tesseract once
       if (!window.Tesseract) {
         await new Promise((resolve, reject) => {
           const script = document.createElement('script');
@@ -3398,35 +3447,53 @@ function App() {
         });
       }
 
-      // Step 3: Run OCR — digits+slash mode for speed
+      // Create one worker and reuse across regions
       const worker = await window.Tesseract.createWorker('eng', 1, {
-        logger: () => {}, // silence progress logs
+        logger: () => {},
       });
-      await worker.setParameters({
-        tessedit_char_whitelist: '0123456789/\\ .',
-        tessedit_pageseg_mode: '7', // treat as single line
-      });
-      const { data: { text } } = await worker.recognize(croppedDataUrl);
-      await worker.terminate();
 
-      // Step 4: Parse score — match patterns like "85/100", "85 / 100", "85\\100"
-      const clean = text.replace(/\s+/g, ' ').trim();
-      const match = clean.match(/(\d{1,3})\s*[\/\\]\s*(\d{1,3})/);
+      // Two passes per region: digits-only (fast), then lenient (catches misreads)
+      const paramSets = [
+        { tessedit_char_whitelist: '0123456789/\\ .-', tessedit_pageseg_mode: '6' },
+        { tessedit_char_whitelist: '',                  tessedit_pageseg_mode: '6' },
+      ];
 
-      if (match) {
-        const score = parseInt(match[1]);
-        const total = parseInt(match[2]);
-        // Sanity check: score <= total, total > 0, both reasonable
-        if (score >= 0 && total > 0 && score <= total && total <= 999) {
-          setNewScore(String(score));
-          setNewTotalScore(String(total));
-          setOcrStatus('found');
-          return;
+      let foundResult = null;
+      let bestCrop = null;
+
+      outer:
+      for (const [rx, ry, rw, rh, label] of regions) {
+        const cropUrl = cropAndProcess(img, rx, ry, rw, rh);
+
+        for (const params of paramSets) {
+          await worker.setParameters(params);
+          const { data: { text } } = await worker.recognize(cropUrl);
+          console.log(`[OCR] ${label}:`, JSON.stringify(text));
+
+          const result = parseScore(text);
+          if (result) {
+            foundResult = result;
+            bestCrop = cropUrl;
+            console.log(`[OCR] ✅ Found in ${label}:`, result);
+            break outer;
+          }
         }
       }
 
-      // Not found
-      setOcrStatus('notfound');
+      await worker.terminate();
+
+      if (bestCrop) setOcrPreview(bestCrop);
+
+      if (foundResult) {
+        setNewScore(String(foundResult.score));
+        setNewTotalScore(String(foundResult.total));
+        setOcrStatus('found');
+      } else {
+        // Show first region crop as preview so user can see what was scanned
+        setOcrPreview(cropAndProcess(img, 0.62, 0.00, 0.38, 0.22));
+        setOcrStatus('notfound');
+      }
+
     } catch (err) {
       console.error('[OCR] Error:', err);
       setOcrStatus('error');
