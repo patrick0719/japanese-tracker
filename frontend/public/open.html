@@ -3,10 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Opening...</title>
+  <title>SAGE Bulacan</title>
+  <!-- PWA meta tags — tells iOS/Android this is an installable app -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/manifest.json" />
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -15,7 +20,6 @@
       background: #f2f2f7;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       padding: 24px;
-      box-sizing: border-box;
     }
     .card {
       background: #fff;
@@ -26,26 +30,26 @@
       box-shadow: 0 4px 24px rgba(0,0,0,0.10);
       text-align: center;
     }
-    .icon { font-size: 56px; margin-bottom: 16px; }
-    h2 { font-size: 20px; font-weight: 700; color: #1c1c1e; margin: 0 0 8px; }
-    p  { font-size: 14px; color: #8e8e93; margin: 0 0 24px; line-height: 1.5; }
-    .btn {
-      display: block;
-      width: 100%;
-      padding: 14px;
-      border-radius: 12px;
-      border: none;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      text-decoration: none;
-      box-sizing: border-box;
-      margin-bottom: 12px;
+    .logo {
+      width: 72px; height: 72px;
+      background: #8B0000;
+      border-radius: 18px;
+      margin: 0 auto 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
     }
-    .btn-primary { background: #8B0000; color: #fff; }
+    h2 { font-size: 20px; font-weight: 700; color: #1c1c1e; margin-bottom: 8px; }
+    p  { font-size: 14px; color: #8e8e93; line-height: 1.55; margin-bottom: 24px; }
+    .btn {
+      display: block; width: 100%;
+      padding: 14px; border-radius: 12px; border: none;
+      font-size: 16px; font-weight: 700; cursor: pointer;
+      margin-bottom: 12px; text-decoration: none;
+    }
+    .btn-primary   { background: #8B0000; color: #fff; }
     .btn-secondary { background: #f2f2f7; color: #1c1c1e; }
     .spinner {
-      width: 40px; height: 40px;
+      width: 44px; height: 44px;
       border: 3px solid #e5e5ea;
       border-top-color: #8B0000;
       border-radius: 50%;
@@ -53,92 +57,123 @@
       margin: 0 auto 20px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .step { text-align: left; margin-bottom: 12px; display: flex; gap: 12px; align-items: flex-start; }
+    .step-num {
+      background: #8B0000; color: #fff;
+      border-radius: 50%; width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+    }
+    .step-text { font-size: 14px; color: #3a3a3c; line-height: 1.5; }
     .hidden { display: none !important; }
+    .badge {
+      display: inline-block;
+      background: #e5f1ff; color: #007AFF;
+      border-radius: 6px; padding: 2px 8px;
+      font-size: 12px; font-weight: 600;
+    }
   </style>
 </head>
 <body>
 <div class="card">
-  <!-- State 1: Auto-redirecting (PWA detected) -->
+
+  <!-- Loading state -->
   <div id="state-loading">
     <div class="spinner"></div>
-    <h2>Opening App...</h2>
-    <p>Please wait while we open the student record.</p>
+    <h2>Opening SAGE...</h2>
+    <p>Please wait...</p>
   </div>
 
-  <!-- State 2: PWA not installed — prompt to install or open in browser -->
+  <!-- Already in PWA — should not be seen, redirects instantly -->
+
+  <!-- Fallback: not in PWA -->
   <div id="state-fallback" class="hidden">
-    <div class="icon">📱</div>
-    <h2>Open Student Record</h2>
-    <p>For the best experience, add this app to your Home Screen first. Or continue in your browser.</p>
-    <button class="btn btn-primary" onclick="openInBrowser()">Open in Browser</button>
-    <button class="btn btn-secondary" onclick="showInstallGuide()">How to Add to Home Screen</button>
+    <div class="logo">📚</div>
+    <h2>Open in SAGE App</h2>
+    <p>You have SAGE installed on your home screen.<br/>Please open it from there, then scan this QR code again — or tap below to continue in browser.</p>
+    <button class="btn btn-primary" onclick="openInBrowser()">Continue in Browser</button>
+    <button class="btn btn-secondary" onclick="showGuide()">How to use the app instead →</button>
   </div>
 
-  <!-- State 3: Install guide -->
-  <div id="state-guide" class="hidden">
-    <div class="icon">🏠</div>
-    <h2>Add to Home Screen</h2>
+  <!-- Not installed guide -->
+  <div id="state-not-installed" class="hidden">
+    <div class="logo">📱</div>
+    <h2>Install SAGE App</h2>
+    <p>Add SAGE to your home screen for the best experience — then scan this QR again from inside the app.</p>
     <div id="guide-ios" class="hidden">
-      <p>
-        1. Tap the <strong>Share</strong> button (□↑) at the bottom of Safari<br/>
-        2. Scroll down and tap <strong>"Add to Home Screen"</strong><br/>
-        3. Tap <strong>Add</strong> — then open the app from your home screen<br/>
-        4. Scan the QR code again from inside the app
-      </p>
+      <div class="step"><div class="step-num">1</div><div class="step-text">Open this page in <strong>Safari</strong></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text">Tap the <strong>Share</strong> button <span class="badge">□↑</span> at the bottom</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text">Tap <strong>"Add to Home Screen"</strong></div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-text">Open the app from your home screen, then scan the QR again</div></div>
     </div>
     <div id="guide-android" class="hidden">
-      <p>
-        1. Tap the <strong>⋮ menu</strong> in Chrome<br/>
-        2. Tap <strong>"Add to Home Screen"</strong> or <strong>"Install App"</strong><br/>
-        3. Open the app from your home screen<br/>
-        4. Scan the QR code again from inside the app
-      </p>
+      <div class="step"><div class="step-num">1</div><div class="step-text">Open this page in <strong>Chrome</strong></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text">Tap <strong>⋮</strong> menu (top right)</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text">Tap <strong>"Add to Home Screen"</strong> or <strong>"Install App"</strong></div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-text">Open the app, then scan the QR again</div></div>
     </div>
-    <button class="btn btn-primary" onclick="openInBrowser()">Continue in Browser Instead</button>
-    <button class="btn btn-secondary" onclick="document.getElementById('state-guide').classList.add('hidden'); document.getElementById('state-fallback').classList.remove('hidden');">← Back</button>
+    <br/>
+    <button class="btn btn-primary" style="margin-top:16px" onclick="openInBrowser()">Continue in Browser for Now</button>
   </div>
+
+  <!-- Guide for already-installed users -->
+  <div id="state-guide" class="hidden">
+    <div class="logo">🏠</div>
+    <h2>Use the Home Screen App</h2>
+    <div class="step"><div class="step-num">1</div><div class="step-text">Press your phone's <strong>Home button</strong></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Find and open <strong>SAGE</strong> from your home screen</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">Scan this QR code again from inside the app</div></div>
+    <br/>
+    <button class="btn btn-primary" style="margin-top:16px" onclick="openInBrowser()">Continue in Browser Instead</button>
+    <button class="btn btn-secondary" onclick="back()">← Back</button>
+  </div>
+
 </div>
 
 <script>
-  // Parse query params — pass them through to the main app
-  const params = new URLSearchParams(window.location.search);
-  const appOrigin = window.location.origin;
-  const appPath   = '/'; // React app root
-  const destUrl   = appOrigin + appPath + '?' + params.toString();
+  var params  = new URLSearchParams(window.location.search);
+  var destUrl = window.location.origin + '/?' + params.toString();
+  var isIos   = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var isAndroid = /android/i.test(navigator.userAgent);
 
-  function openInBrowser() {
-    window.location.href = destUrl;
+  function show(id) {
+    ['state-loading','state-fallback','state-not-installed','state-guide']
+      .forEach(function(s){ document.getElementById(s).classList.add('hidden'); });
+    document.getElementById(id).classList.remove('hidden');
   }
 
-  function showInstallGuide() {
-    document.getElementById('state-fallback').classList.add('hidden');
-    document.getElementById('state-guide').classList.remove('hidden');
-    // Show platform-specific guide
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    document.getElementById('guide-ios').classList.toggle('hidden', !isIos);
-    document.getElementById('guide-android').classList.toggle('hidden', isIos);
-  }
+  function openInBrowser() { window.location.href = destUrl; }
+  function showGuide()      { show('state-guide'); }
+  function back()           { show('state-fallback'); }
 
-  function isRunningAsPwa() {
-    // iOS Safari standalone mode
+  function isPwa() {
     if (window.navigator.standalone === true) return true;
-    // Android Chrome / other browsers
-    if (window.matchMedia('(display-mode: standalone)').matches) return true;
-    if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
-    if (window.matchMedia('(display-mode: minimal-ui)').matches) return true;
+    if (window.matchMedia('(display-mode: standalone)').matches)  return true;
+    if (window.matchMedia('(display-mode: fullscreen)').matches)  return true;
+    if (window.matchMedia('(display-mode: minimal-ui)').matches)  return true;
     return false;
   }
 
-  // Main logic
-  if (isRunningAsPwa()) {
-    // Already inside the PWA — just redirect immediately to the app with params
+  // Check localStorage to see if user has ever logged in via the PWA
+  // (localStorage is SHARED between browser and PWA on same origin)
+  function hasInstalledBefore() {
+    try { return !!localStorage.getItem('sage_auth'); } catch(e) { return false; }
+  }
+
+  if (isPwa()) {
+    // Running inside the installed PWA — go straight to the app
     window.location.replace(destUrl);
   } else {
-    // Not in PWA — check if we can trigger it via a custom scheme or just fallback
-    // Try to open PWA via location replace with a short delay to detect if it worked
-    // Since web PWAs don't have a custom URI scheme, we show the fallback UI
-    document.getElementById('state-loading').classList.add('hidden');
-    document.getElementById('state-fallback').classList.remove('hidden');
+    // Running in browser
+    // If they have login data saved, they likely have the PWA installed
+    if (hasInstalledBefore()) {
+      show('state-fallback'); // "Open from home screen" message
+    } else {
+      // Likely not installed yet
+      show('state-not-installed');
+      if (isIos)     document.getElementById('guide-ios').classList.remove('hidden');
+      if (isAndroid) document.getElementById('guide-android').classList.remove('hidden');
+    }
   }
 </script>
 </body>
