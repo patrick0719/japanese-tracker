@@ -2997,7 +2997,6 @@ function App() {
     setEditingCategory(null);
     setEditingExam(null);
     setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai(''); setNewNameJa(''); setNewExamDate(''); setNewScholarship('no'); setNewScholarshipType('');
-    setOcrStatus('idle'); setOcrPreview(null);
   };
 
   const updateStudent = async () => {
