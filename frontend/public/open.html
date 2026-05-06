@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SAGE Bulacan</title>
-  <!-- PWA meta tags — tells iOS/Android this is an installable app -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -13,167 +12,155 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
       background: #f2f2f7;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       padding: 24px;
     }
     .card {
-      background: #fff;
-      border-radius: 20px;
-      padding: 36px 28px;
-      max-width: 360px;
-      width: 100%;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-      text-align: center;
+      background: #fff; border-radius: 20px;
+      padding: 36px 28px; max-width: 360px; width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10); text-align: center;
     }
     .logo {
-      width: 72px; height: 72px;
-      background: #8B0000;
-      border-radius: 18px;
-      margin: 0 auto 20px;
+      width: 72px; height: 72px; background: #8B0000;
+      border-radius: 18px; margin: 0 auto 20px;
       display: flex; align-items: center; justify-content: center;
       font-size: 36px;
     }
     h2 { font-size: 20px; font-weight: 700; color: #1c1c1e; margin-bottom: 8px; }
     p  { font-size: 14px; color: #8e8e93; line-height: 1.55; margin-bottom: 24px; }
-    .btn {
-      display: block; width: 100%;
-      padding: 14px; border-radius: 12px; border: none;
-      font-size: 16px; font-weight: 700; cursor: pointer;
-      margin-bottom: 12px; text-decoration: none;
+    .input-wrap { position: relative; margin-bottom: 10px; }
+    input[type=password], input[type=text] {
+      width: 100%; padding: 13px 44px 13px 14px;
+      border-radius: 10px; border: 1.5px solid #e5e5ea;
+      font-size: 16px; outline: none; color: #1c1c1e;
+      transition: border-color 0.15s;
     }
-    .btn-primary   { background: #8B0000; color: #fff; }
-    .btn-secondary { background: #f2f2f7; color: #1c1c1e; }
+    input:focus { border-color: #8B0000; }
+    input.error { border-color: #ff3b30; }
+    .eye-btn {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; font-size: 18px; color: #8e8e93;
+    }
+    .error-msg { color: #ff3b30; font-size: 13px; margin-bottom: 10px; }
+    .btn {
+      display: block; width: 100%; padding: 14px;
+      border-radius: 12px; border: none; font-size: 16px;
+      font-weight: 700; cursor: pointer; margin-bottom: 12px;
+    }
+    .btn-primary { background: #8B0000; color: #fff; }
+    .btn-primary:active { background: #6a0000; }
     .spinner {
       width: 44px; height: 44px;
-      border: 3px solid #e5e5ea;
-      border-top-color: #8B0000;
-      border-radius: 50%;
-      animation: spin 0.75s linear infinite;
+      border: 3px solid #e5e5ea; border-top-color: #8B0000;
+      border-radius: 50%; animation: spin 0.75s linear infinite;
       margin: 0 auto 20px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .step { text-align: left; margin-bottom: 12px; display: flex; gap: 12px; align-items: flex-start; }
-    .step-num {
-      background: #8B0000; color: #fff;
-      border-radius: 50%; width: 24px; height: 24px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 13px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
-    }
-    .step-text { font-size: 14px; color: #3a3a3c; line-height: 1.5; }
     .hidden { display: none !important; }
-    .badge {
-      display: inline-block;
-      background: #e5f1ff; color: #007AFF;
-      border-radius: 6px; padding: 2px 8px;
-      font-size: 12px; font-weight: 600;
-    }
+    .success-icon { font-size: 52px; margin-bottom: 16px; }
   </style>
 </head>
 <body>
 <div class="card">
 
-  <!-- Loading state -->
+  <!-- State: redirecting (already logged in / PWA) -->
   <div id="state-loading">
     <div class="spinner"></div>
     <h2>Opening SAGE...</h2>
     <p>Please wait...</p>
   </div>
 
-  <!-- Already in PWA — should not be seen, redirects instantly -->
-
-  <!-- Fallback: not in PWA -->
-  <div id="state-fallback" class="hidden">
-    <div class="logo">📚</div>
-    <h2>Open in SAGE App</h2>
-    <p>You have SAGE installed on your home screen.<br/>Please open it from there, then scan this QR code again — or tap below to continue in browser.</p>
-    <button class="btn btn-primary" onclick="openInBrowser()">Continue in Browser</button>
-    <button class="btn btn-secondary" onclick="showGuide()">How to use the app instead →</button>
+  <!-- State: password prompt -->
+  <div id="state-password" class="hidden">
+    <div class="logo">🔒</div>
+    <h2>Access Required</h2>
+    <p>Enter the password to view this student's record.</p>
+    <div class="input-wrap">
+      <input id="pass-input" type="password" placeholder="Enter password"
+        oninput="clearError()" onkeydown="if(event.key==='Enter') submit()" autofocus />
+      <button class="eye-btn" onclick="toggleEye()" id="eye-btn">👁</button>
+    </div>
+    <p id="error-msg" class="error-msg hidden">Incorrect password. Please try again.</p>
+    <button class="btn btn-primary" onclick="submit()">View Record</button>
   </div>
 
-  <!-- Not installed guide -->
-  <div id="state-not-installed" class="hidden">
-    <div class="logo">📱</div>
-    <h2>Install SAGE App</h2>
-    <p>Add SAGE to your home screen for the best experience — then scan this QR again from inside the app.</p>
-    <div id="guide-ios" class="hidden">
-      <div class="step"><div class="step-num">1</div><div class="step-text">Open this page in <strong>Safari</strong></div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-text">Tap the <strong>Share</strong> button <span class="badge">□↑</span> at the bottom</div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-text">Tap <strong>"Add to Home Screen"</strong></div></div>
-      <div class="step"><div class="step-num">4</div><div class="step-text">Open the app from your home screen, then scan the QR again</div></div>
-    </div>
-    <div id="guide-android" class="hidden">
-      <div class="step"><div class="step-num">1</div><div class="step-text">Open this page in <strong>Chrome</strong></div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-text">Tap <strong>⋮</strong> menu (top right)</div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-text">Tap <strong>"Add to Home Screen"</strong> or <strong>"Install App"</strong></div></div>
-      <div class="step"><div class="step-num">4</div><div class="step-text">Open the app, then scan the QR again</div></div>
-    </div>
-    <br/>
-    <button class="btn btn-primary" style="margin-top:16px" onclick="openInBrowser()">Continue in Browser for Now</button>
-  </div>
-
-  <!-- Guide for already-installed users -->
-  <div id="state-guide" class="hidden">
-    <div class="logo">🏠</div>
-    <h2>Use the Home Screen App</h2>
-    <div class="step"><div class="step-num">1</div><div class="step-text">Press your phone's <strong>Home button</strong></div></div>
-    <div class="step"><div class="step-num">2</div><div class="step-text">Find and open <strong>SAGE</strong> from your home screen</div></div>
-    <div class="step"><div class="step-num">3</div><div class="step-text">Scan this QR code again from inside the app</div></div>
-    <br/>
-    <button class="btn btn-primary" style="margin-top:16px" onclick="openInBrowser()">Continue in Browser Instead</button>
-    <button class="btn btn-secondary" onclick="back()">← Back</button>
+  <!-- State: success -->
+  <div id="state-success" class="hidden">
+    <div class="success-icon">✅</div>
+    <h2>Access Granted</h2>
+    <p>Redirecting to student record...</p>
+    <div class="spinner"></div>
   </div>
 
 </div>
 
 <script>
+  var ADMIN_PASS = 'July142018';
+  var AUTH_KEY   = 'sage_auth';
+  var ROLE_KEY   = 'sage_role';
+
   var params  = new URLSearchParams(window.location.search);
   var destUrl = window.location.origin + '/?' + params.toString();
-  var isIos   = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  var isAndroid = /android/i.test(navigator.userAgent);
 
   function show(id) {
-    ['state-loading','state-fallback','state-not-installed','state-guide']
+    ['state-loading','state-password','state-success']
       .forEach(function(s){ document.getElementById(s).classList.add('hidden'); });
     document.getElementById(id).classList.remove('hidden');
   }
 
-  function openInBrowser() { window.location.href = destUrl; }
-  function showGuide()      { show('state-guide'); }
-  function back()           { show('state-fallback'); }
-
   function isPwa() {
     if (window.navigator.standalone === true) return true;
-    if (window.matchMedia('(display-mode: standalone)').matches)  return true;
-    if (window.matchMedia('(display-mode: fullscreen)').matches)  return true;
-    if (window.matchMedia('(display-mode: minimal-ui)').matches)  return true;
+    if (window.matchMedia('(display-mode: standalone)').matches) return true;
+    if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
+    if (window.matchMedia('(display-mode: minimal-ui)').matches) return true;
     return false;
   }
 
-  // Check localStorage to see if user has ever logged in via the PWA
-  // (localStorage is SHARED between browser and PWA on same origin)
-  function hasInstalledBefore() {
-    try { return !!localStorage.getItem('sage_auth'); } catch(e) { return false; }
+  function isLoggedIn() {
+    try { return localStorage.getItem(AUTH_KEY) === 'true'; } catch(e) { return false; }
   }
 
+  function toggleEye() {
+    var inp = document.getElementById('pass-input');
+    var btn = document.getElementById('eye-btn');
+    if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+    else { inp.type = 'password'; btn.textContent = '👁'; }
+  }
+
+  function clearError() {
+    document.getElementById('error-msg').classList.add('hidden');
+    document.getElementById('pass-input').classList.remove('error');
+  }
+
+  function submit() {
+    var val = document.getElementById('pass-input').value;
+    if (val === ADMIN_PASS) {
+      try {
+        localStorage.setItem(AUTH_KEY, 'true');
+        localStorage.setItem(ROLE_KEY, 'admin');
+      } catch(e) {}
+      show('state-success');
+      setTimeout(function() { window.location.replace(destUrl); }, 800);
+    } else {
+      document.getElementById('error-msg').classList.remove('hidden');
+      document.getElementById('pass-input').classList.add('error');
+      document.getElementById('pass-input').focus();
+    }
+  }
+
+  // Main logic
   if (isPwa()) {
-    // Running inside the installed PWA — go straight to the app
+    // Inside PWA — redirect straight, app handles auth
+    window.location.replace(destUrl);
+  } else if (isLoggedIn()) {
+    // Already logged in via browser — redirect straight
     window.location.replace(destUrl);
   } else {
-    // Running in browser
-    // If they have login data saved, they likely have the PWA installed
-    if (hasInstalledBefore()) {
-      show('state-fallback'); // "Open from home screen" message
-    } else {
-      // Likely not installed yet
-      show('state-not-installed');
-      if (isIos)     document.getElementById('guide-ios').classList.remove('hidden');
-      if (isAndroid) document.getElementById('guide-android').classList.remove('hidden');
-    }
+    // Not logged in — show password prompt
+    show('state-password');
   }
 </script>
 </body>
