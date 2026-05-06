@@ -2738,10 +2738,12 @@ function App() {
   const PULL_THRESHOLD = 80;
 
   const swipeBackEl = useRef(null);
+  const swipeBackBehindEl = useRef(null);
+  const swipeBackShadowEl = useRef(null);
   const swipeBackStartX = useRef(null);
   const swipeBackStartY = useRef(null);
   const swipeBackEligible = useRef(false);
-  const swipeBackLocked = useRef(false); // true once we know it's a horizontal drag
+  const swipeBackLocked = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
@@ -5062,36 +5064,56 @@ function App() {
   const setRefreshing = (v) => { pullRefreshingRef.current = v; setPullRefreshing(v); };
 
   // ── Swipe-back helpers ───────────────────────────────────────────────────
-  const SWIPE_EDGE = 50;   // px from left edge to arm
-  const SWIPE_COMMIT = 0.35; // fraction of screen width to commit
+  const SWIPE_EDGE = 50;    // px from left edge to arm
+  const SWIPE_COMMIT = 0.25; // fraction of screen width needed to commit
 
   const swipeBackApply = (dx) => {
     const el = swipeBackEl.current;
+    const behind = swipeBackBehindEl.current;
+    const shadow = swipeBackShadowEl.current;
     if (!el) return;
+    const clamped = Math.max(0, dx);
+    const pct = clamped / window.innerWidth; // 0→1
+
     el.style.transition = 'none';
-    el.style.transform = `translateX(${Math.max(0, dx)}px)`;
+    el.style.transform = `translateX(${clamped}px)`;
+
+    // behind layer: slides from -28% toward 0 (parallax)
+    if (behind) {
+      behind.style.transition = 'none';
+      behind.style.opacity = '1';
+      behind.style.transform = `translateX(${-28 * (1 - pct)}%)`;
+    }
+    // left-edge shadow on the sliding page: grows in opacity
+    if (shadow) {
+      shadow.style.opacity = String(pct * 0.5);
+    }
   };
 
   const swipeBackCommit = () => {
     const el = swipeBackEl.current;
-    if (!el) return;
-    el.style.transition = 'transform 0.28s cubic-bezier(0.25,0.46,0.45,0.94)';
-    el.style.transform = `translateX(${window.innerWidth}px)`;
+    const behind = swipeBackBehindEl.current;
+    const shadow = swipeBackShadowEl.current;
+    const ease = 'transform 0.28s cubic-bezier(0.25,0.46,0.45,0.94)';
+    if (el) { el.style.transition = ease; el.style.transform = `translateX(${window.innerWidth}px)`; }
+    if (behind) { behind.style.transition = ease; behind.style.transform = 'translateX(0)'; }
+    if (shadow) { shadow.style.transition = 'opacity 0.28s'; shadow.style.opacity = '0'; }
     haptic('medium');
     setTimeout(() => {
-      if (swipeBackEl.current) {
-        swipeBackEl.current.style.transition = 'none';
-        swipeBackEl.current.style.transform = 'translateX(0)';
-      }
+      if (el) { el.style.transition = 'none'; el.style.transform = 'translateX(0)'; }
+      if (behind) { behind.style.transition = 'none'; behind.style.opacity = '0'; behind.style.transform = 'translateX(-28%)'; }
       goBack();
     }, 280);
   };
 
   const swipeBackCancel = () => {
     const el = swipeBackEl.current;
-    if (!el) return;
-    el.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
-    el.style.transform = 'translateX(0)';
+    const behind = swipeBackBehindEl.current;
+    const shadow = swipeBackShadowEl.current;
+    const ease = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+    if (el) { el.style.transition = ease; el.style.transform = 'translateX(0)'; }
+    if (behind) { behind.style.transition = ease + ', opacity 0.22s'; behind.style.transform = 'translateX(-28%)'; behind.style.opacity = '0'; }
+    if (shadow) { shadow.style.transition = 'opacity 0.22s'; shadow.style.opacity = '0'; }
   };
 
   // ── Pull-to-refresh + swipe-back handlers ───────────────────────────────
@@ -5255,7 +5277,31 @@ function App() {
         .search-input::placeholder { color: rgba(255,255,255,0.55) !important; }
         .search-input:focus { outline: none; background: rgba(255,255,255,0.25) !important; }
       `}</style>
-      <div ref={swipeBackEl} style={{ willChange: 'transform' }}>
+      {/* ── Swipe-back: previous page reveal layer ── */}
+      <div
+        ref={swipeBackBehindEl}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 0,
+          background: 'var(--bg-primary, #f2f2f7)',
+          opacity: 0,
+          transform: 'translateX(-28%)',
+          pointerEvents: 'none',
+          willChange: 'transform, opacity',
+        }}
+      />
+      {/* ── Swipe-back: current page (slides right) ── */}
+      <div ref={swipeBackEl} style={{ position: 'relative', zIndex: 1, willChange: 'transform' }}>
+        {/* left-edge shadow — depth cue */}
+        <div
+          ref={swipeBackShadowEl}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 2,
+            background: 'linear-gradient(to right, rgba(0,0,0,0.35) 0%, transparent 18%)',
+            opacity: 0,
+            pointerEvents: 'none',
+            willChange: 'opacity',
+          }}
+        />
         {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
         {view === 'students' && renderStudents()}
         {view === 'categories' && renderCategories()}
