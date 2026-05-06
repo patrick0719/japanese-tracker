@@ -2959,7 +2959,7 @@ function App() {
     } catch { setEvaluations([]); }
   };
 
-  const goBack = () => {
+  const goBack = useCallback(() => {
     const role = safeLocalGet(ROLE_KEY);
     const isKumiai = ['setouchi','wbc','gyoumusuishin','greenservices'].includes(role);
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
@@ -2972,7 +2972,42 @@ function App() {
       } else { setView('students'); setSelectedStudent(null); }
     }
     else if (view === 'students') { setView('batches'); setSelectedBatch(null); setGlobalSearch(''); }
-  };
+  }, [view]);
+
+  useEffect(() => {
+    if (view === 'batches') return;
+    const EDGE_ZONE = 30;
+    const MIN_SWIPE = 80;
+    let startX = null;
+    let startY = null;
+    let eligible = false;
+
+    const onTouchStart = (e) => {
+      if (showModal || showSettings || imageViewer) return;
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      eligible = startX <= EDGE_ZONE;
+    };
+
+    const onTouchEnd = (e) => {
+      if (!eligible || startX === null) return;
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const dx = endX - startX;
+      const dy = Math.abs(endY - startY);
+      if (dx >= MIN_SWIPE && dy < dx) goBack();
+      startX = null;
+      eligible = false;
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [view, showModal, showSettings, imageViewer, goBack]);
 
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
