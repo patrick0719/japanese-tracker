@@ -1060,6 +1060,136 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
   );
 }
 
+// ── QR SCANNER COMPONENT ─────────────────────────────────────────────────────
+function QRScanner({ onResult, onClose }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const animRef = useRef(null);
+  const [status, setStatus] = useState('Starting camera...');
+  const detectorRef = useRef(null);
+
+  useEffect(() => {
+    const start = async () => {
+      try {
+        // Prefer BarcodeDetector (native, fast) — fallback to jsQR via canvas
+        if ('BarcodeDetector' in window) {
+          detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } }
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          setStatus('Point camera at QR code');
+          animRef.current = requestAnimationFrame(scan);
+        }
+      } catch { setStatus('Camera access denied.'); }
+    };
+
+    const scan = async () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState < 2) {
+        animRef.current = requestAnimationFrame(scan); return;
+      }
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+
+      try {
+        if (detectorRef.current) {
+          const results = await detectorRef.current.detect(video);
+          if (results.length > 0) { onResult(results[0].rawValue); return; }
+        } else {
+          // Fallback: use canvas ImageData + basic URL detection
+          const ctx = canvas.getContext('2d');
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          // Try to load jsQR dynamically if available
+          if (window.jsQR) {
+            const code = window.jsQR(imgData.data, canvas.width, canvas.height);
+            if (code) { onResult(code.data); return; }
+          }
+        }
+      } catch {}
+      animRef.current = requestAnimationFrame(scan);
+    };
+
+    start();
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    };
+  }, []); // eslint-disable-line
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 20px', background: 'rgba(0,0,0,0.7)', flexShrink: 0,
+      }}>
+        <button onClick={onClose} style={{
+          background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1,
+        }}>✕</button>
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Scan QR Code</span>
+        <div style={{ width: 32 }} />
+      </div>
+
+      {/* Camera */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <video ref={videoRef} playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+        {/* Viewfinder overlay */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <div style={{ position: 'relative', width: 240, height: 240 }}>
+            {/* Dimmed corners */}
+            {[
+              { top: 0, left: 0, borderTop: '3px solid #fff', borderLeft: '3px solid #fff', borderRadius: '12px 0 0 0' },
+              { top: 0, right: 0, borderTop: '3px solid #fff', borderRight: '3px solid #fff', borderRadius: '0 12px 0 0' },
+              { bottom: 0, left: 0, borderBottom: '3px solid #fff', borderLeft: '3px solid #fff', borderRadius: '0 0 0 12px' },
+              { bottom: 0, right: 0, borderBottom: '3px solid #fff', borderRight: '3px solid #fff', borderRadius: '0 0 12px 0' },
+            ].map((style, i) => (
+              <div key={i} style={{ position: 'absolute', width: 36, height: 36, ...style }} />
+            ))}
+            {/* Scan line animation */}
+            <div style={{
+              position: 'absolute', left: 8, right: 8, height: 2,
+              background: 'linear-gradient(90deg, transparent, #8B0000, transparent)',
+              animation: 'qr-scan-line 1.8s ease-in-out infinite',
+            }} />
+          </div>
+        </div>
+
+        {/* Status */}
+        <div style={{
+          position: 'absolute', bottom: 40, left: 0, right: 0,
+          textAlign: 'center', color: '#fff', fontSize: 14, fontWeight: 600,
+          textShadow: '0 1px 4px rgba(0,0,0,0.7)',
+        }}>{status}</div>
+      </div>
+
+      <style>{`
+        @keyframes qr-scan-line {
+          0%   { top: 8px; opacity: 1; }
+          50%  { top: calc(100% - 8px); opacity: 1; }
+          100% { top: 8px; opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ── DOCUMENT SCANNER COMPONENT (CamScanner-style) ──────────────────────────
 function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   const videoRef = useRef(null);
@@ -3061,6 +3191,7 @@ function App() {
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
   const [scanningExamId, setScanningExamId] = useState(null);
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
   const [resolvedImages, setResolvedImages] = useState({}); // imageId -> base64
@@ -3724,6 +3855,32 @@ function App() {
     }
     e.target.value = '';
   };
+  const handleQRResult = (url) => {
+    setShowQRScanner(false);
+    try {
+      const u = new URL(url);
+      const batchId   = u.searchParams.get('batch');
+      const studentId = u.searchParams.get('student');
+      const isPhgic   = u.searchParams.get('phgic') === '1';
+      if (batchId && studentId && isPhgic) {
+        // Navigate to the student directly
+        const batch = batches.find(b => b._id === batchId);
+        if (batch) {
+          const student = batch.students.find(s => s._id === studentId);
+          if (student) {
+            setSelectedBatch(batch);
+            setSelectedStudent(student);
+            setView('categories');
+            return;
+          }
+        }
+        // Batch not loaded yet — use deeplink flow
+        setPendingDeepLink({ batchId, studentId });
+        fetchBatches(isViewer ? null : (safeLocalGet(TEACHER_KEY) ? JSON.parse(safeLocalGet(TEACHER_KEY))._id : null));
+      }
+    } catch { alert('Invalid QR code.'); }
+  };
+
   const openScanner = (examId) => {
     setScanningExamId(examId);
     setShowScanner(true);
@@ -4297,6 +4454,18 @@ function App() {
             </div>
           ))}
           {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
+          <button
+            onClick={() => setShowQRScanner(true)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              width: 'calc(100% - 32px)', margin: '0 16px 16px',
+              padding: '14px', borderRadius: 14, border: '2px dashed #8B0000',
+              background: 'rgba(139,0,0,0.06)', color: '#8B0000',
+              fontSize: 15, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontSize: 20 }}>📷</span> Scan Student QR Code
+          </button>
         </>
       )}
     </>
@@ -5751,6 +5920,12 @@ function App() {
       {view === 'examDetail' && renderExamDetail()}
       {renderModal()}
       {renderPrintQRs()}
+      {showQRScanner && (
+        <QRScanner
+          onResult={handleQRResult}
+          onClose={() => setShowQRScanner(false)}
+        />
+      )}
       {showScanner && (
         <DocumentScanner
           bulkMode={true}
