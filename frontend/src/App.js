@@ -3066,6 +3066,14 @@ function App() {
   const [resolvedImages, setResolvedImages] = useState({}); // imageId -> base64
   const imageCache = useRef({}); // in-memory cache
   const [selectedCategory, setSelectedCategory] = useState(null);
+  // ── Exam reorder (long-press drag-and-drop) ───────────────────────────────
+  const [reorderMode, setReorderMode] = useState(false);
+  const [dragItems, setDragItems] = useState([]);
+  const [draggingIdx, setDraggingIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+  const longPressTimer = useRef(null);
+  const dragStartY = useRef(null);
+  const itemRefs = useRef([]);
   const [evaluations, setEvaluations] = useState([]); // per-student evaluations
   const [selectedEvaluation, setSelectedEvaluation] = useState(null);
   const [evalTitle, setEvalTitle] = useState('');
@@ -4797,31 +4805,171 @@ function App() {
     );
   };
 
-  const renderExamItems = () => (
+  // ── Exam drag-and-drop reorder logic ─────────────────────────────────────
+  const enterReorderMode = () => {
+    setDragItems([...(selectedCategory?.items || [])]);
+    setReorderMode(true);
+  };
+  const exitReorderMode = () => {
+    setReorderMode(false);
+    setDraggingIdx(null);
+    setDragOverIdx(null);
+    dragStartY.current = null;
+  };
+  const saveReorder = async () => {
+    try {
+      const orderedIds = dragItems.map(i => i._id);
+      await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/reorder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds }),
+      });
+      const updatedCat = { ...selectedCategory, items: dragItems };
+      const updatedStudent = {
+        ...selectedStudent,
+        categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c),
+      };
+      setSelectedCategory(updatedCat);
+      setSelectedStudent(updatedStudent);
+      setSelectedBatch(prev => ({
+        ...prev,
+        students: prev.students.map(s => s._id === updatedStudent._id ? updatedStudent : s),
+      }));
+      setBatches(prev => prev.map(b => b._id === selectedBatch._id
+        ? { ...b, students: b.students.map(s => s._id === updatedStudent._id ? updatedStudent : s) }
+        : b
+      ));
+    } catch (err) { console.error('Reorder failed:', err); }
+    exitReorderMode();
+  };
+
+  // Touch handlers for drag-and-drop
+  const handleDragTouchStart = (e, idx) => {
+    dragStartY.current = e.touches[0].clientY;
+    setDraggingIdx(idx);
+  };
+  const handleDragTouchMove = (e) => {
+    if (draggingIdx === null) return;
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    // Find which item we're hovering over based on DOM positions
+    let overIdx = draggingIdx;
+    itemRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) overIdx = i;
+    });
+    if (overIdx !== dragOverIdx) setDragOverIdx(overIdx);
+    if (overIdx !== draggingIdx) {
+      setDragItems(prev => {
+        const next = [...prev];
+        const [moved] = next.splice(draggingIdx, 1);
+        next.splice(overIdx, 0, moved);
+        return next;
+      });
+      setDraggingIdx(overIdx);
+    }
+  };
+  const handleDragTouchEnd = () => {
+    setDragOverIdx(null);
+  };
+
+  const renderExamItems = () => {
+    const displayItems = reorderMode ? dragItems : (selectedCategory?.items || []);
+    return (
     <>
       <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}>←</button>
+        <button className="back-btn" onClick={reorderMode ? exitReorderMode : goBack}>
+          {reorderMode ? '✕' : '←'}
+        </button>
         <div className="header-with-back">
           <h1 className="title">📁 {displayName(selectedCategory)}</h1>
         </div>
+        {/* Reorder mode: show Done button in header */}
+        {reorderMode && (
+          <button
+            onClick={saveReorder}
+            style={{
+              marginLeft: 'auto', marginRight: 8,
+              background: '#8B0000', color: '#fff',
+              border: 'none', borderRadius: 10, padding: '6px 16px',
+              fontWeight: 700, fontSize: 14, cursor: 'pointer',
+            }}
+          >Done</button>
+        )}
       </div>
+
+      {/* Reorder mode banner */}
+      {reorderMode && (
+        <div style={{
+          background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+          color: '#fff', textAlign: 'center', padding: '10px 16px',
+          fontSize: 14, fontWeight: 600, letterSpacing: 0.3,
+        }}>
+          ☰ Hold and drag to reorder exams
+        </div>
+      )}
+
       <h2 className="section-title">{t('exams')}</h2>
-      {(selectedCategory?.items || []).length === 0 ? (
+      {displayItems.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">📝</div>
           <p className="empty-state-text">{t('noExamsYet')}</p>
           <p className="empty-state-sub">{t('addExamHint')}</p>
         </div>
       ) : (
-        <div className="exam-list">
-          {(selectedCategory?.items || []).map((item, idx) => {
+        <div
+          className="exam-list"
+          onTouchMove={reorderMode ? handleDragTouchMove : undefined}
+          onTouchEnd={reorderMode ? handleDragTouchEnd : undefined}
+        >
+          {displayItems.map((item, idx) => {
             const score = item.score ?? 0;
             const total = item.totalScore ?? 100;
             const pct = Math.round((score / total) * 100);
             const color = pct >= 60 ? 'var(--green)' : 'var(--red)';
             const bg   = pct >= 60 ? 'var(--green-soft)' : 'var(--red-soft)';
+            const isDragging = reorderMode && draggingIdx === idx;
+            const isOver = reorderMode && dragOverIdx === idx && draggingIdx !== idx;
             return (
-              <div key={item._id} className="exam-list-card clickable" onClick={() => goToExamDetail(item)}>
+              <div
+                key={item._id}
+                ref={el => itemRefs.current[idx] = el}
+                className="exam-list-card clickable"
+                onClick={reorderMode ? undefined : () => goToExamDetail(item)}
+                onTouchStart={reorderMode ? (e) => handleDragTouchStart(e, idx) : undefined}
+                style={{
+                  transition: reorderMode ? 'transform 0.15s, box-shadow 0.15s, opacity 0.15s' : undefined,
+                  opacity: isDragging ? 0.5 : 1,
+                  transform: isOver ? 'scaleY(1.04)' : isDragging ? 'scale(1.03)' : 'none',
+                  boxShadow: isDragging ? '0 8px 24px rgba(139,0,0,0.25)' : undefined,
+                  borderLeft: isOver ? '3px solid #8B0000' : undefined,
+                  cursor: reorderMode ? 'grab' : 'pointer',
+                  userSelect: 'none',
+                  touchAction: reorderMode ? 'none' : undefined,
+                }}
+                // Long press on normal mode to enter reorder
+                onTouchStartCapture={!isViewer && !reorderMode ? (() => {
+                  const handler = () => {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = setTimeout(() => {
+                      if (navigator.vibrate) navigator.vibrate(40);
+                      enterReorderMode();
+                    }, 500);
+                  };
+                  return handler;
+                })() : undefined}
+                onTouchEndCapture={!isViewer && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
+                onTouchMoveCapture={!isViewer && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
+              >
+                {/* Drag handle — visible only in reorder mode */}
+                {reorderMode && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 32, flexShrink: 0, color: '#8B0000', fontSize: 20, fontWeight: 700,
+                    cursor: 'grab',
+                  }}>☰</div>
+                )}
                 {/* Score badge */}
                 <div className="exam-score-badge" style={{ background: bg, color }}>
                   <span className="exam-score-num">{score}</span>
@@ -4835,25 +4983,32 @@ function App() {
                     <span className="exam-photo-chip">📷 {item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
                   )}
                 </div>
-                {/* Pct pill */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-                  <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
-                  {!isViewer && (
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
-                        onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}>✎</button>
-                      <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
-                    </div>
-                  )}
-                </div>
+                {/* Pct pill + action buttons (hidden in reorder mode) */}
+                {!reorderMode && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                    <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
+                    {!isViewer && (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
+                          onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}>✎</button>
+                        <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* In reorder mode, just show % */}
+                {reorderMode && (
+                  <span className="exam-pct-pill" style={{ background: bg, color, flexShrink: 0 }}>{pct}%</span>
+                )}
               </div>
             );
           })}
         </div>
       )}
-      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
+      {!isViewer && !reorderMode && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
     </>
-  );
+    );
+  };
 
   const renderExamDetail = () => {
     const rawImages = selectedExam.images?.length > 0

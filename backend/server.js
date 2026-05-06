@@ -587,6 +587,34 @@ app.delete('/api/batches/:batchId/students/:studentId/categories/:catId/items/:i
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── REORDER EXAM ITEMS (drag-and-drop) ───────────────────────────────────────
+// PATCH /api/batches/:batchId/students/:studentId/categories/:catId/items/reorder
+// Body: { orderedIds: ["id1", "id2", "id3", ...] }
+app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/reorder', async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'orderedIds must be an array' });
+
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const cat = student.categories.id(req.params.catId);
+    if (!cat) return res.status(404).json({ error: 'Category not found' });
+
+    // Re-arrange items based on provided orderedIds
+    const itemMap = new Map(cat.items.map(item => [item._id.toString(), item]));
+    const reordered = orderedIds.map(id => itemMap.get(id)).filter(Boolean);
+    // Preserve any items not included in orderedIds (safety net)
+    const includedIds = new Set(orderedIds);
+    const missing = cat.items.filter(item => !includedIds.has(item._id.toString()));
+    cat.items = [...reordered, ...missing];
+
+    await batch.save();
+    res.json({ success: true, items: cat.items });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/:itemId/image', async (req, res) => {
   try {
     const { url, publicId, image } = req.body;
