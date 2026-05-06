@@ -256,7 +256,98 @@ const teacherSchema = new mongoose.Schema({
 });
 const Teacher = mongoose.model('Teacher', teacherSchema);
 
-app.get('/api/teachers', async (req, res) => {
+// ── PARENT TOKEN MODEL ────────────────────────────────────────────────────────
+const parentTokenSchema = new mongoose.Schema({
+  token:     { type: String, required: true, unique: true, index: true },
+  batchId:   { type: String, required: true },
+  studentId: { type: String, required: true },
+  expiresAt: { type: Date,   required: true },
+  createdAt: { type: Date,   default: Date.now },
+  createdBy: { type: String, default: '' }, // teacher name
+});
+// Auto-delete expired tokens from MongoDB after expiry
+parentTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+const ParentToken = mongoose.model('ParentToken', parentTokenSchema);
+
+// POST /api/parent-token/generate — create a new one-time parent view token
+app.post('/api/parent-token/generate', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const { batchId, studentId, expiresAt, createdBy } = req.body;
+    if (!batchId || !studentId || !expiresAt) {
+      return res.status(400).json({ error: 'batchId, studentId, expiresAt required' });
+    }
+    const expiry = new Date(expiresAt);
+    if (isNaN(expiry) || expiry <= new Date()) {
+      return res.status(400).json({ error: 'expiresAt must be a future date' });
+    }
+    // Generate a cryptographically random token
+    const token = crypto.randomBytes(24).toString('hex');
+    const doc = new ParentToken({
+      token,
+      batchId: sanitizeStr(batchId, 50),
+      studentId: sanitizeStr(studentId, 50),
+      expiresAt: expiry,
+      createdBy: sanitizeStr(createdBy || '', 100),
+    });
+    await doc.save();
+    res.json({ token, expiresAt: expiry });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/parent-token/:token — validate token + return student data
+app.get('/api/parent-token/:token', rateLimit({ windowMs: 60_000, max: 60 }), async (req, res) => {
+  try {
+    const doc = await ParentToken.findOne({ token: req.params.token });
+    if (!doc) return res.status(404).json({ error: 'expired' });
+    if (doc.expiresAt < new Date()) {
+      await ParentToken.deleteOne({ _id: doc._id });
+      return res.status(410).json({ error: 'expired' });
+    }
+    // Fetch student data
+    const batch = await Batch.findById(doc.batchId);
+    if (!batch) return res.status(404).json({ error: 'expired' });
+    const student = batch.students.id(doc.studentId);
+    if (!student) return res.status(404).json({ error: 'expired' });
+
+    // Return safe read-only student data (no evaluations fields that may be sensitive)
+    res.json({
+      valid: true,
+      expiresAt: doc.expiresAt,
+      student: {
+        _id: student._id,
+        name: student.name,
+        photo: student.photo || null,
+        companyName: student.companyName || '',
+        status: student.status,
+        categories: student.categories.map(cat => ({
+          _id: cat._id,
+          name: cat.name,
+          name_ja: cat.name_ja,
+          items: (cat.items || []).map(item => ({
+            _id: item._id,
+            name: item.name,
+            name_ja: item.name_ja,
+            date: item.date,
+            score: item.score,
+            totalScore: item.totalScore,
+            images: item.images || [],
+          })),
+        })),
+      },
+      batch: { _id: batch._id, name: batch.name, name_ja: batch.name_ja },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/parent-token/:token — revoke a token manually
+app.delete('/api/parent-token/:token', async (req, res) => {
+  try {
+    await ParentToken.deleteOne({ token: req.params.token });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
   try { res.json(await Teacher.find().select('-signature')); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/api/teachers/with-signatures', async (req, res) => {

@@ -2677,6 +2677,357 @@ function SplashScreen({ onDone }) {
   );
 }
 
+// ── PARENT QR POPUP ────────────────────────────────────────────────────────────
+function ParentQRPopup({ student, batch, teacher, onClose }) {
+  const [expiresAt, setExpiresAt] = useState(() => {
+    // Default: 7 days from now
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [generating, setGenerating] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState(null);
+  const [tokenInfo, setTokenInfo] = useState(null);
+  const [error, setError] = useState('');
+
+  const generate = async () => {
+    setGenerating(true); setError(''); setQrDataUrl(null); setTokenInfo(null);
+    try {
+      const expiry = new Date(expiresAt);
+      expiry.setHours(23, 59, 59, 999); // end of chosen day
+      const res = await fetch(`${API}/parent-token/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchId: batch._id,
+          studentId: student._id,
+          expiresAt: expiry.toISOString(),
+          createdBy: teacher?.name || 'Admin',
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const url = `${window.location.origin}${window.location.pathname}?view=${data.token}`;
+      const dataUrl = await QRCode.toDataURL(url, { width: 360, margin: 2 });
+      setQrDataUrl(dataUrl);
+      setTokenInfo({ url, expiresAt: new Date(data.expiresAt) });
+    } catch (err) {
+      setError(err.message);
+    }
+    setGenerating(false);
+  };
+
+  const copyLink = () => {
+    if (tokenInfo?.url) {
+      navigator.clipboard.writeText(tokenInfo.url).then(() => alert('Link copied!')).catch(() => {});
+    }
+  };
+
+  const formatDate = (d) => d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+    }} onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-card, #fff)', borderRadius: '20px 20px 0 0',
+          padding: '24px 20px 40px', width: '100%', maxWidth: 480,
+          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 -4px 32px rgba(0,0,0,0.18)',
+        }}
+      >
+        {/* Handle */}
+        <div style={{ width: 36, height: 4, background: '#e5e5ea', borderRadius: 2, margin: '0 auto 20px' }} />
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          {student.photo
+            ? <img src={student.photo} alt={student.name} style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
+            : <span style={{ fontSize: 36 }}>👤</span>
+          }
+          <div>
+            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
+            <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-tertiary, #8e8e93)' }}>🎌 {batch.name}</p>
+          </div>
+        </div>
+
+        {/* Expiry picker */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'block', marginBottom: 6 }}>
+            📅 QR Expiration Date
+          </label>
+          <input
+            type="date"
+            value={expiresAt}
+            min={new Date().toISOString().split('T')[0]}
+            onChange={e => { setExpiresAt(e.target.value); setQrDataUrl(null); setTokenInfo(null); }}
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '11px 14px',
+              borderRadius: 10, border: '1.5px solid #e5e5ea',
+              fontSize: 15, background: 'var(--bg-card, #fff)',
+              color: 'var(--text-primary, #1c1c1e)',
+            }}
+          />
+          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-tertiary, #8e8e93)' }}>
+            ⚠️ After this date, the QR code will no longer work.
+          </p>
+        </div>
+
+        {/* Info box */}
+        <div style={{ background: '#f0f7ff', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1565c0', lineHeight: 1.5 }}>
+          👨‍👩‍👧 The parent can view all exam scores and scanned papers of <strong>{student.name}</strong> without logging in. No editing allowed.
+        </div>
+
+        {error && (
+          <div style={{ background: '#fff3f3', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#c62828', fontWeight: 600 }}>
+            ❌ {error}
+          </div>
+        )}
+
+        {/* Generated QR */}
+        {qrDataUrl && tokenInfo && (
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div style={{
+              background: '#fff', borderRadius: 16, padding: 16, display: 'inline-block',
+              boxShadow: '0 2px 16px rgba(0,0,0,0.1)', marginBottom: 12,
+            }}>
+              <img src={qrDataUrl} alt="Parent QR Code" style={{ width: 200, height: 200, display: 'block' }} />
+            </div>
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: '#2e7d32' }}>
+              ✅ QR ready to share!
+            </p>
+            <p style={{ margin: '0 0 12px', fontSize: 12, color: '#8e8e93' }}>
+              Expires: <strong>{formatDate(tokenInfo.expiresAt)}</strong>
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={copyLink}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 10,
+                  background: '#007AFF', color: '#fff', border: 'none',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                }}
+              >🔗 Copy Link</button>
+              <a
+                href={qrDataUrl}
+                download={`${student.name}-parent-qr.png`}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 10,
+                  background: '#34C759', color: '#fff', border: 'none',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  textDecoration: 'none', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >⬇️ Save QR</a>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={generate}
+          disabled={generating || !expiresAt}
+          style={{
+            width: '100%', padding: '15px',
+            background: generating ? '#e5e5ea' : 'linear-gradient(135deg, #8B0000, #c0392b)',
+            color: generating ? '#8e8e93' : '#fff',
+            border: 'none', borderRadius: 12,
+            fontSize: 16, fontWeight: 700,
+            cursor: generating ? 'default' : 'pointer',
+          }}
+        >
+          {generating ? '⏳ Generating...' : qrDataUrl ? '🔄 Regenerate' : '🔑 Generate Parent QR'}
+        </button>
+
+        <button onClick={onClose} style={{
+          width: '100%', marginTop: 10, padding: '13px',
+          background: 'none', border: '1.5px solid #e5e5ea',
+          borderRadius: 12, fontSize: 15, color: '#8e8e93',
+          cursor: 'pointer', fontWeight: 600,
+        }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ── PARENT VIEW PAGE (no login required) ──────────────────────────────────────
+function ParentView({ data, token }) {
+  const [resolvedImgs, setResolvedImgs] = useState({});
+  const [imageViewer, setImageViewer] = useState(null);
+
+  const { student, batch, expiresAt } = data;
+  const expiry = new Date(expiresAt);
+
+  // Resolve image IDs to URLs
+  useEffect(() => {
+    const allIds = [];
+    student.categories.forEach(cat =>
+      cat.items.forEach(item =>
+        (item.images || []).forEach(id => {
+          if (id && !id.startsWith('data:') && !id.startsWith('http')) allIds.push(id);
+        })
+      )
+    );
+    if (!allIds.length) return;
+    fetch(`${API}/images/bulk`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: allIds }),
+    }).then(r => r.json()).then(map => setResolvedImgs(map)).catch(() => {});
+  }, []);
+
+  const resolveImg = (id) => {
+    if (!id) return null;
+    if (id.startsWith('data:') || id.startsWith('http')) return id;
+    return resolvedImgs[id] || null;
+  };
+
+  const formatDate = (d) => new Date(d).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+  const daysLeft = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
+
+  return (
+    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', background: '#f2f2f7', minHeight: '100vh' }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+        padding: '24px 20px 20px',
+        paddingTop: 'env(safe-area-inset-top, 24px)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+          {student.photo
+            ? <img src={student.photo} alt={student.name} style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(255,255,255,0.3)' }} />
+            : <span style={{ fontSize: 48 }}>👤</span>
+          }
+          <div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#fff' }}>{student.name}</h1>
+            <p style={{ margin: '3px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>🎌 {batch.name}</p>
+            {student.companyName && <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>🏢 {student.companyName}</p>}
+          </div>
+        </div>
+        {/* Expiry badge */}
+        <div style={{
+          background: daysLeft <= 1 ? 'rgba(255,59,48,0.25)' : 'rgba(255,255,255,0.15)',
+          borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#fff',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span>{daysLeft <= 1 ? '⚠️' : '🔒'}</span>
+          <span>
+            {daysLeft <= 0 ? 'Expires today' : `View access expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`} · {formatDate(expiry)}
+          </span>
+        </div>
+      </div>
+
+      {/* Read-only badge */}
+      <div style={{ background: '#fff', padding: '10px 20px', borderBottom: '1px solid #e5e5ea', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 13 }}>👁️</span>
+        <span style={{ fontSize: 13, color: '#8e8e93' }}>View only · Shared by Sage Asian Japanese Language School</span>
+      </div>
+
+      <div style={{ padding: '16px' }}>
+        {student.categories.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
+            <div style={{ fontSize: 48, marginBottom: 10 }}>📝</div>
+            <p>No exam records yet.</p>
+          </div>
+        )}
+
+        {student.categories.map(cat => {
+          const items = cat.items || [];
+          const avg = items.length
+            ? Math.round(items.reduce((s, i) => s + ((i.score / i.totalScore) * 100), 0) / items.length)
+            : null;
+          return (
+            <div key={cat._id} style={{ marginBottom: 20 }}>
+              {/* Category header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📁 {cat.name}</h2>
+                {avg !== null && (
+                  <span style={{
+                    background: avg >= 60 ? '#e8f5e9' : '#ffebee',
+                    color: avg >= 60 ? '#2e7d32' : '#c62828',
+                    fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20,
+                  }}>avg {avg}%</span>
+                )}
+              </div>
+
+              {items.length === 0 && (
+                <p style={{ fontSize: 13, color: '#8e8e93', padding: '10px 0' }}>No exams yet.</p>
+              )}
+
+              {items.map(item => {
+                const pct = Math.round((item.score / item.totalScore) * 100);
+                const pass = pct >= 60;
+                const imgs = (item.images || []).map(resolveImg).filter(Boolean);
+                return (
+                  <div key={item._id} style={{
+                    background: '#fff', borderRadius: 14, padding: '14px 16px',
+                    marginBottom: 10, boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: imgs.length ? 12 : 0 }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1c1c1e' }}>{item.name}</p>
+                        {item.date && <p style={{ margin: '3px 0 0', fontSize: 12, color: '#8e8e93' }}>📅 {item.date}</p>}
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                        <div style={{
+                          fontSize: 20, fontWeight: 800,
+                          color: pass ? '#2e7d32' : '#c62828',
+                        }}>{item.score}<span style={{ fontSize: 13, fontWeight: 500, color: '#8e8e93' }}>/{item.totalScore}</span></div>
+                        <div style={{
+                          fontSize: 12, fontWeight: 700,
+                          background: pass ? '#e8f5e9' : '#ffebee',
+                          color: pass ? '#2e7d32' : '#c62828',
+                          padding: '2px 8px', borderRadius: 12, marginTop: 2,
+                        }}>{pct}%</div>
+                      </div>
+                    </div>
+
+                    {/* Exam paper thumbnails */}
+                    {imgs.length > 0 && (
+                      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                        {imgs.map((src, i) => (
+                          <img
+                            key={i}
+                            src={src}
+                            alt={`Page ${i + 1}`}
+                            onClick={() => setImageViewer({ images: imgs, index: i })}
+                            style={{
+                              width: 80, height: 100, objectFit: 'cover',
+                              borderRadius: 8, flexShrink: 0,
+                              border: '1px solid #e5e5ea', cursor: 'zoom-in',
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer */}
+      <div style={{ textAlign: 'center', padding: '20px', color: '#c7c7cc', fontSize: 12 }}>
+        <img src="data:image/png;base64,iVBORw0KGgo=" alt="" style={{ display: 'none' }} />
+        🎌 Sage Asian Japanese Language School<br />
+        This link expires on {formatDate(expiry)}
+      </div>
+
+      {imageViewer && (
+        <ImageViewer
+          images={imageViewer.images}
+          startIndex={imageViewer.index}
+          onClose={() => setImageViewer(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -2703,7 +3054,6 @@ function App() {
   const [editingCategory, setEditingCategory] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
   const [newExamDate, setNewExamDate] = useState('');
-
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem('sage_dark') === 'true'; } catch { return false; }
   });
@@ -2736,18 +3086,14 @@ function App() {
   const pullStartY = useRef(null);        // finger Y at touchstart, null = disarmed
   const pullScrollY = useRef(0);          // window.scrollY at touchstart
   const PULL_THRESHOLD = 80;
-
-  const swipeBackEl = useRef(null);
-  const swipeBackBehindEl = useRef(null);
-  const swipeBackHapticFired = useRef(false);
-  const swipeBackStartX = useRef(null);
-  const swipeBackStartY = useRef(null);
-  const swipeBackEligible = useRef(false);
-  const swipeBackLocked = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [progressChartStudent, setProgressChartStudent] = useState(null);
+  const [showParentQR, setShowParentQR] = useState(false); // parent QR popup
+  const [parentQRStudent, setParentQRStudent] = useState(null);
+  const [parentViewToken, setParentViewToken] = useState(null); // token from URL for parent view
+  const [parentViewData, setParentViewData] = useState(null); // { student, batch, expiresAt }
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
   const [isStudentView, setIsStudentView] = useState(false);
@@ -2767,6 +3113,22 @@ function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+
+    // ── Parent view via token ─────────────────────────────────────────────
+    const token = params.get('view');
+    if (token) {
+      setParentViewToken(token);
+      // Fetch token data from server
+      fetch(`${API}/parent-token/${token}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.valid) setParentViewData(data);
+          else setParentViewData({ expired: true });
+        })
+        .catch(() => setParentViewData({ expired: true }));
+      return; // don't proceed with normal auth flow
+    }
+
     const batchId = params.get('batch');
     const studentId = params.get('student');
     const isPhgicScan = params.get('phgic') === '1';
@@ -2967,7 +3329,7 @@ function App() {
     } catch { setEvaluations([]); }
   };
 
-  const goBack = useCallback(() => {
+  const goBack = () => {
     const role = safeLocalGet(ROLE_KEY);
     const isKumiai = ['setouchi','wbc','gyoumusuishin','greenservices'].includes(role);
     if (view === 'examDetail') { setView('examItems'); setSelectedExam(null); }
@@ -2980,7 +3342,7 @@ function App() {
       } else { setView('students'); setSelectedStudent(null); }
     }
     else if (view === 'students') { setView('batches'); setSelectedBatch(null); setGlobalSearch(''); }
-  }, [view]);
+  };
 
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
@@ -3333,7 +3695,6 @@ function App() {
     } catch { alert('Error saving image.'); }
   };
 
-
   const triggerFileInput = (examId) => {
     fileInputRef.current.setAttribute('data-exam-id', examId);
     fileInputRef.current.click();
@@ -3443,6 +3804,32 @@ function App() {
     );
     setPrintQRs(results);
   };
+
+  // ── Parent view (token-based, no login) ─────────────────────────────────
+  if (parentViewToken) {
+    if (!parentViewData) return (
+      <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#8B0000', animation: `dotPulse 1.1s ease-in-out ${i*0.18}s infinite` }} />)}
+        </div>
+        <p style={{ color: '#8e8e93', fontSize: 14 }}>Loading student record...</p>
+        <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
+      </div>
+    );
+    if (parentViewData.expired) return (
+      <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '40px 24px', textAlign: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+        <div style={{ fontSize: 72, marginBottom: 20 }}>🔒</div>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', margin: '0 0 10px' }}>Link Expired</h1>
+        <p style={{ fontSize: 15, color: '#8e8e93', margin: 0, lineHeight: 1.6 }}>
+          This QR code has expired or is no longer valid.<br />Please ask the teacher to generate a new one.
+        </p>
+        <div style={{ marginTop: 32, padding: '14px 20px', background: '#fff', borderRadius: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', fontSize: 13, color: '#8e8e93' }}>
+          🎌 Sage Asian Japanese Language School
+        </div>
+      </div>
+    );
+    return <ParentView data={parentViewData} token={parentViewToken} />;
+  }
 
   if (showSplash) return (
     <SplashScreen onDone={() => setShowSplash(false)} />
@@ -3998,8 +4385,6 @@ function App() {
       <button
         onClick={async () => {
           if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
-          try {
-            const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
             const data = await res.json();
             if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
             else alert('Error: ' + (data.error || 'Unknown'));
@@ -4007,6 +4392,12 @@ function App() {
         }}
         style={{ background: 'transparent', color: '#8B2020', border: '1.5px solid #8B2020', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
       >{t('archiveImages')}</button>
+
+      {/* ── Generate Parent QR ── */}
+      <button
+        onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}
+        style={{ background: '#5856D6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >🔑 Parent QR</button>
 
       <button
         onClick={async () => {
@@ -4628,28 +5019,14 @@ function App() {
                 <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
                 <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：小テスト１、中間試験、期末試験" />
               </div>
-
-
               <div style={{ display: 'flex', gap: 10 }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label>{t('score')}</label>
-                  <input
-                    type="number"
-                    value={newScore}
-                    onChange={(e) => setNewScore(e.target.value)}
-                    placeholder={t('scorePlaceholder')}
-                    min="0"
-                  />
+                  <input type="number" value={newScore} onChange={(e) => setNewScore(e.target.value)} placeholder={t('scorePlaceholder')} min="0" />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label>{t('totalScore')}</label>
-                  <input
-                    type="number"
-                    value={newTotalScore}
-                    onChange={(e) => setNewTotalScore(e.target.value)}
-                    placeholder={t('totalScorePlaceholder')}
-                    min="1"
-                  />
+                  <input type="number" value={newTotalScore} onChange={(e) => setNewTotalScore(e.target.value)} placeholder={t('totalScorePlaceholder')} min="1" />
                 </div>
               </div>
               <div className="form-group">
@@ -5063,129 +5440,48 @@ function App() {
   const setTriggered = (v) => { pullTriggeredRef.current = v; setPullTriggered(v); };
   const setRefreshing = (v) => { pullRefreshingRef.current = v; setPullRefreshing(v); };
 
-  // ── Swipe-back helpers ───────────────────────────────────────────────────
-  const SWIPE_EDGE = 50;    // px from left edge to arm
-  const SWIPE_COMMIT = 0.18; // 18% of screen width → commit
-
-  const swipeBackApply = (dx) => {
-    const el = swipeBackEl.current;
-    const behind = swipeBackBehindEl.current;
-    if (!el) return;
-    const clamped = Math.max(0, dx);
-    const pct = clamped / window.innerWidth; // 0 → 1
-
-    // current page follows finger
-    el.style.transition = 'none';
-    el.style.transform = `translateX(${clamped}px)`;
-    // depth shadow grows on left edge as page slides right
-    el.style.boxShadow = `-12px 0 28px rgba(0,0,0,${(pct * 0.45).toFixed(2)})`;
-
-    // behind layer: parallax — starts at -25%, slides to 0
-    if (behind) {
-      behind.style.transition = 'none';
-      behind.style.transform = `translateX(${(-25 * (1 - pct)).toFixed(2)}%)`;
-      behind.style.opacity = '1';
-    }
-
-    // haptic once when crossing commit threshold
-    if (!swipeBackHapticFired.current && pct >= SWIPE_COMMIT) {
-      haptic('light');
-      swipeBackHapticFired.current = true;
-    }
-    if (swipeBackHapticFired.current && pct < SWIPE_COMMIT) {
-      swipeBackHapticFired.current = false;
-    }
-  };
-
-  const swipeBackCommit = () => {
-    const el = swipeBackEl.current;
-    const behind = swipeBackBehindEl.current;
-    const ease = '0.26s cubic-bezier(0.25,0.46,0.45,0.94)';
-    if (el) { el.style.transition = `transform ${ease}, box-shadow ${ease}`; el.style.transform = `translateX(${window.innerWidth}px)`; el.style.boxShadow = 'none'; }
-    if (behind) { behind.style.transition = `transform ${ease}`; behind.style.transform = 'translateX(0)'; }
-    haptic('medium');
-    setTimeout(() => {
-      if (el) { el.style.transition = 'none'; el.style.transform = 'translateX(0)'; el.style.boxShadow = ''; }
-      if (behind) { behind.style.transition = 'none'; behind.style.opacity = '0'; behind.style.transform = 'translateX(-25%)'; }
-      swipeBackHapticFired.current = false;
-      goBack();
-    }, 260);
-  };
-
-  const swipeBackCancel = () => {
-    const el = swipeBackEl.current;
-    const behind = swipeBackBehindEl.current;
-    const ease = '0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
-    if (el) { el.style.transition = `transform ${ease}, box-shadow ${ease}`; el.style.transform = 'translateX(0)'; el.style.boxShadow = 'none'; }
-    if (behind) { behind.style.transition = `transform ${ease}, opacity ${ease}`; behind.style.transform = 'translateX(-25%)'; behind.style.opacity = '0'; }
-    swipeBackHapticFired.current = false;
-  };
-
-  // ── Pull-to-refresh + swipe-back handlers ───────────────────────────────
+  // ── Pull-to-refresh handlers (window scroll — body is the scroller) ───────
   const onTouchStart = (e) => {
-    // ── swipe-back arm ──
-    const touch = e.touches[0];
-    swipeBackStartX.current = touch.clientX;
-    swipeBackStartY.current = touch.clientY;
-    swipeBackLocked.current = false;
-    const canSwipe = view !== 'batches' && !showModal && !showSettings && !imageViewer;
-    swipeBackEligible.current = canSwipe && touch.clientX <= SWIPE_EDGE;
-
-    // ── pull-to-refresh arm ──
     if (pullRefreshingRef.current) return;
+    // Only arm when the page is truly at the very top
     if (window.scrollY > 0) { pullStartY.current = null; return; }
-    pullStartY.current = touch.clientY;
+    pullStartY.current = e.touches[0].clientY;
     pullScrollY.current = window.scrollY;
   };
 
   const onTouchMove = (e) => {
-    // ── swipe-back drag ──
-    if (swipeBackEligible.current) {
-      const dx = e.touches[0].clientX - swipeBackStartX.current;
-      const dy = Math.abs(e.touches[0].clientY - swipeBackStartY.current);
-
-      if (!swipeBackLocked.current) {
-        if (dy > dx) { swipeBackEligible.current = false; } // diagonal → abort
-        else if (dx > 8) { swipeBackLocked.current = true; } // confirmed horizontal
-      }
-
-      if (swipeBackLocked.current) {
-        swipeBackApply(dx);
-        return; // don't run pull-to-refresh while swiping back
-      }
-    }
-
-    // ── pull-to-refresh drag ──
     if (pullStartY.current === null) return;
     if (pullRefreshingRef.current) return;
+
+    // If the page scrolled down since touchstart, the user is scrolling — disarm
     if (window.scrollY > 0) {
       pullStartY.current = null;
       setDist(0); setTriggered(false);
       return;
     }
+
     const dy = e.touches[0].clientY - pullStartY.current;
-    if (dy <= 0) { setDist(0); setTriggered(false); return; }
+
+    // Must be a clear downward drag
+    if (dy <= 0) {
+      setDist(0); setTriggered(false);
+      return;
+    }
+
+    // Rubber-band resistance: feels heavy like native
     const resistance = 0.45;
     const dist = Math.min(dy * resistance, 120);
     setDist(dist);
-    if (dist >= PULL_THRESHOLD && !pullTriggeredRef.current) { setTriggered(true); haptic('medium'); }
-    else if (dist < PULL_THRESHOLD && pullTriggeredRef.current) { setTriggered(false); }
+
+    if (dist >= PULL_THRESHOLD && !pullTriggeredRef.current) {
+      setTriggered(true);
+      haptic('medium');
+    } else if (dist < PULL_THRESHOLD && pullTriggeredRef.current) {
+      setTriggered(false);
+    }
   };
 
-  const onTouchEnd = async (e) => {
-    // ── swipe-back release ──
-    if (swipeBackEligible.current && swipeBackLocked.current) {
-      const dx = e.changedTouches[0].clientX - swipeBackStartX.current;
-      swipeBackEligible.current = false;
-      swipeBackLocked.current = false;
-      if (dx >= window.innerWidth * SWIPE_COMMIT) swipeBackCommit();
-      else swipeBackCancel();
-      return;
-    }
-    swipeBackEligible.current = false;
-    swipeBackLocked.current = false;
-
-    // ── pull-to-refresh release ──
+  const onTouchEnd = async () => {
     if (pullDistanceRef.current >= PULL_THRESHOLD && !pullRefreshingRef.current) {
       pullStartY.current = null;
       setDist(0); setTriggered(false);
@@ -5282,31 +5578,13 @@ function App() {
         .search-input::placeholder { color: rgba(255,255,255,0.55) !important; }
         .search-input:focus { outline: none; background: rgba(255,255,255,0.25) !important; }
       `}</style>
-      {/* ── Swipe-back: overflow wrapper clips the parallax reveal ── */}
-      <div style={{ position: 'relative', overflow: 'hidden', minHeight: '100dvh' }}>
-        {/* Behind layer — previous page silhouette, slides in from left */}
-        <div
-          ref={swipeBackBehindEl}
-          style={{
-            position: 'absolute', inset: 0,
-            background: darkMode ? '#111115' : '#dcdce2',
-            opacity: 0,
-            transform: 'translateX(-25%)',
-            pointerEvents: 'none',
-            willChange: 'transform, opacity',
-          }}
-        />
-        {/* Current page — slides right, box-shadow added via JS */}
-        <div ref={swipeBackEl} style={{ position: 'relative', zIndex: 1, willChange: 'transform' }}>
-          {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
-          {view === 'students' && renderStudents()}
-          {view === 'categories' && renderCategories()}
-          {view === 'evaluations' && renderEvaluations()}
-          {view === 'evaluationDetail' && renderEvaluationDetail()}
-          {view === 'examItems' && renderExamItems()}
-          {view === 'examDetail' && renderExamDetail()}
-        </div>
-      </div>
+      {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
+      {view === 'students' && renderStudents()}
+      {view === 'categories' && renderCategories()}
+      {view === 'evaluations' && renderEvaluations()}
+      {view === 'evaluationDetail' && renderEvaluationDetail()}
+      {view === 'examItems' && renderExamItems()}
+      {view === 'examDetail' && renderExamDetail()}
       {renderModal()}
       {renderPrintQRs()}
       {showScanner && (
@@ -5335,6 +5613,14 @@ function App() {
           student={progressChartStudent}
           batch={selectedBatch}
           onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
+        />
+      )}
+      {showParentQR && parentQRStudent && (
+        <ParentQRPopup
+          student={parentQRStudent}
+          batch={selectedBatch}
+          teacher={selectedTeacher}
+          onClose={() => { setShowParentQR(false); setParentQRStudent(null); }}
         />
       )}
     </div>
