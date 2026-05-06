@@ -3142,16 +3142,23 @@ function App() {
     const isPhgicScan = params.get('phgic') === '1';
     if (batchId && studentId) {
       if (isPhgicScan) {
-        // QR scan — require password before granting access
-        const alreadyAuthed = safeLocalGet(AUTH_KEY) === 'true' && safeLocalGet(ROLE_KEY) === 'viewer';
-        if (alreadyAuthed) {
-          // Already verified this session, let them in
+        // QR scan — if already logged in (any role), go straight in with their existing role
+        const alreadyLoggedIn = safeLocalGet(AUTH_KEY) === 'true';
+        if (alreadyLoggedIn) {
+          const role = safeLocalGet(ROLE_KEY);
+          const viewerRoles = ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'];
+          const asViewer = viewerRoles.includes(role);
           setIsLoggedIn(true);
-          setIsViewer(true);
+          setIsViewer(asViewer);
           setPendingDeepLink({ batchId, studentId });
-          fetchBatches(null);
+          if (asViewer) fetchBatches(null);
+          else {
+            const teacher = safeLocalGet(TEACHER_KEY);
+            if (teacher) fetchBatches(JSON.parse(teacher)._id);
+            else fetchBatches(null);
+          }
         } else {
-          // Show password prompt, store pending link
+          // Not logged in — show password prompt, store pending link
           setQrPasswordPrompt({ batchId, studentId });
         }
       } else {
@@ -3867,11 +3874,11 @@ function App() {
           onChange={e => { setQrPassInput(e.target.value); setQrPassError(''); }}
           onKeyDown={e => {
             if (e.key === 'Enter') {
-              if (qrPassInput === PHGIC_PASS) {
+              if (qrPassInput === ADMIN_PASS) {
                 safeLocalSet(AUTH_KEY, 'true');
-                safeLocalSet(ROLE_KEY, 'viewer');
+                safeLocalSet(ROLE_KEY, 'admin');
                 setIsLoggedIn(true);
-                setIsViewer(true);
+                setIsViewer(false);
                 setPendingDeepLink(qrPasswordPrompt);
                 setQrPasswordPrompt(null);
                 setQrPassInput('');
@@ -3888,11 +3895,11 @@ function App() {
         {qrPassError && <p style={{ color: '#ff3b30', fontSize: 13, margin: '0 0 10px', textAlign: 'center' }}>{qrPassError}</p>}
         <button
           onClick={() => {
-            if (qrPassInput === PHGIC_PASS) {
+            if (qrPassInput === ADMIN_PASS) {
               safeLocalSet(AUTH_KEY, 'true');
-              safeLocalSet(ROLE_KEY, 'viewer');
+              safeLocalSet(ROLE_KEY, 'admin');
               setIsLoggedIn(true);
-              setIsViewer(true);
+              setIsViewer(false);
               setPendingDeepLink(qrPasswordPrompt);
               setQrPasswordPrompt(null);
               setQrPassInput('');
@@ -4368,7 +4375,7 @@ function App() {
         </div>
       ))}
       {!isViewer && <button className="add-button" onClick={() => openModal('student')}>{t('addStudent')}</button>}
-      {selectedBatch.students.length > 0 && (
+      {selectedBatch.students.length > 0 && !isViewer && (
         <button className="print-qr-button" onClick={generateBatchQRs}>{t('printQrCodes')}</button>
       )}
     </>
