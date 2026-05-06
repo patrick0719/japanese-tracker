@@ -2708,7 +2708,7 @@ function ParentQRPopup({ student, batch, teacher, onClose }) {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      const url = `${window.location.origin}${window.location.pathname}?view=${data.token}`;
+      const url = `${window.location.origin}/open.html?view=${data.token}`;
       const dataUrl = await QRCode.toDataURL(url, { width: 360, margin: 2 });
       setQrDataUrl(dataUrl);
       setTokenInfo({ url, expiresAt: new Date(data.expiresAt) });
@@ -3812,7 +3812,7 @@ function App() {
       : selectedBatch.students;
     const results = await Promise.all(
       studentsToGenerate.map(async (student) => {
-        const url = `${window.location.origin}${window.location.pathname}?phgic=1&batch=${selectedBatch._id}&student=${student._id}`;
+        const url = `${window.location.origin}/open.html?phgic=1&batch=${selectedBatch._id}&student=${student._id}`;
         const dataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2 });
         return { name: student.name, photo: student.photo, dataUrl };
       })
