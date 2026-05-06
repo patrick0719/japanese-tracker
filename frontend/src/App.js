@@ -2736,6 +2736,12 @@ function App() {
   const pullStartY = useRef(null);        // finger Y at touchstart, null = disarmed
   const pullScrollY = useRef(0);          // window.scrollY at touchstart
   const PULL_THRESHOLD = 80;
+
+  const swipeBackEl = useRef(null);
+  const swipeBackStartX = useRef(null);
+  const swipeBackStartY = useRef(null);
+  const swipeBackEligible = useRef(false);
+  const swipeBackLocked = useRef(false); // true once we know it's a horizontal drag
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
@@ -2973,41 +2979,6 @@ function App() {
     }
     else if (view === 'students') { setView('batches'); setSelectedBatch(null); setGlobalSearch(''); }
   }, [view]);
-
-  useEffect(() => {
-    if (view === 'batches') return;
-    const EDGE_ZONE = 30;
-    const MIN_SWIPE = 80;
-    let startX = null;
-    let startY = null;
-    let eligible = false;
-
-    const onTouchStart = (e) => {
-      if (showModal || showSettings || imageViewer) return;
-      if (e.touches.length !== 1) return;
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      eligible = startX <= EDGE_ZONE;
-    };
-
-    const onTouchEnd = (e) => {
-      if (!eligible || startX === null) return;
-      const endX = e.changedTouches[0].clientX;
-      const endY = e.changedTouches[0].clientY;
-      const dx = endX - startX;
-      const dy = Math.abs(endY - startY);
-      if (dx >= MIN_SWIPE && dy < dx) goBack();
-      startX = null;
-      eligible = false;
-    };
-
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchend', onTouchEnd, { passive: true });
-    return () => {
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchend', onTouchEnd);
-    };
-  }, [view, showModal, showSettings, imageViewer, goBack]);
 
   const openModal = (type) => {
     setModalType(type); setShowModal(true);
@@ -5090,48 +5061,104 @@ function App() {
   const setTriggered = (v) => { pullTriggeredRef.current = v; setPullTriggered(v); };
   const setRefreshing = (v) => { pullRefreshingRef.current = v; setPullRefreshing(v); };
 
-  // ── Pull-to-refresh handlers (window scroll — body is the scroller) ───────
+  // ── Swipe-back helpers ───────────────────────────────────────────────────
+  const SWIPE_EDGE = 50;   // px from left edge to arm
+  const SWIPE_COMMIT = 0.35; // fraction of screen width to commit
+
+  const swipeBackApply = (dx) => {
+    const el = swipeBackEl.current;
+    if (!el) return;
+    el.style.transition = 'none';
+    el.style.transform = `translateX(${Math.max(0, dx)}px)`;
+  };
+
+  const swipeBackCommit = () => {
+    const el = swipeBackEl.current;
+    if (!el) return;
+    el.style.transition = 'transform 0.28s cubic-bezier(0.25,0.46,0.45,0.94)';
+    el.style.transform = `translateX(${window.innerWidth}px)`;
+    haptic('medium');
+    setTimeout(() => {
+      if (swipeBackEl.current) {
+        swipeBackEl.current.style.transition = 'none';
+        swipeBackEl.current.style.transform = 'translateX(0)';
+      }
+      goBack();
+    }, 280);
+  };
+
+  const swipeBackCancel = () => {
+    const el = swipeBackEl.current;
+    if (!el) return;
+    el.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+    el.style.transform = 'translateX(0)';
+  };
+
+  // ── Pull-to-refresh + swipe-back handlers ───────────────────────────────
   const onTouchStart = (e) => {
+    // ── swipe-back arm ──
+    const touch = e.touches[0];
+    swipeBackStartX.current = touch.clientX;
+    swipeBackStartY.current = touch.clientY;
+    swipeBackLocked.current = false;
+    const canSwipe = view !== 'batches' && !showModal && !showSettings && !imageViewer;
+    swipeBackEligible.current = canSwipe && touch.clientX <= SWIPE_EDGE;
+
+    // ── pull-to-refresh arm ──
     if (pullRefreshingRef.current) return;
-    // Only arm when the page is truly at the very top
     if (window.scrollY > 0) { pullStartY.current = null; return; }
-    pullStartY.current = e.touches[0].clientY;
+    pullStartY.current = touch.clientY;
     pullScrollY.current = window.scrollY;
   };
 
   const onTouchMove = (e) => {
+    // ── swipe-back drag ──
+    if (swipeBackEligible.current) {
+      const dx = e.touches[0].clientX - swipeBackStartX.current;
+      const dy = Math.abs(e.touches[0].clientY - swipeBackStartY.current);
+
+      if (!swipeBackLocked.current) {
+        if (dy > dx) { swipeBackEligible.current = false; } // diagonal → abort
+        else if (dx > 8) { swipeBackLocked.current = true; } // confirmed horizontal
+      }
+
+      if (swipeBackLocked.current) {
+        swipeBackApply(dx);
+        return; // don't run pull-to-refresh while swiping back
+      }
+    }
+
+    // ── pull-to-refresh drag ──
     if (pullStartY.current === null) return;
     if (pullRefreshingRef.current) return;
-
-    // If the page scrolled down since touchstart, the user is scrolling — disarm
     if (window.scrollY > 0) {
       pullStartY.current = null;
       setDist(0); setTriggered(false);
       return;
     }
-
     const dy = e.touches[0].clientY - pullStartY.current;
-
-    // Must be a clear downward drag
-    if (dy <= 0) {
-      setDist(0); setTriggered(false);
-      return;
-    }
-
-    // Rubber-band resistance: feels heavy like native
+    if (dy <= 0) { setDist(0); setTriggered(false); return; }
     const resistance = 0.45;
     const dist = Math.min(dy * resistance, 120);
     setDist(dist);
-
-    if (dist >= PULL_THRESHOLD && !pullTriggeredRef.current) {
-      setTriggered(true);
-      haptic('medium');
-    } else if (dist < PULL_THRESHOLD && pullTriggeredRef.current) {
-      setTriggered(false);
-    }
+    if (dist >= PULL_THRESHOLD && !pullTriggeredRef.current) { setTriggered(true); haptic('medium'); }
+    else if (dist < PULL_THRESHOLD && pullTriggeredRef.current) { setTriggered(false); }
   };
 
-  const onTouchEnd = async () => {
+  const onTouchEnd = async (e) => {
+    // ── swipe-back release ──
+    if (swipeBackEligible.current && swipeBackLocked.current) {
+      const dx = e.changedTouches[0].clientX - swipeBackStartX.current;
+      swipeBackEligible.current = false;
+      swipeBackLocked.current = false;
+      if (dx >= window.innerWidth * SWIPE_COMMIT) swipeBackCommit();
+      else swipeBackCancel();
+      return;
+    }
+    swipeBackEligible.current = false;
+    swipeBackLocked.current = false;
+
+    // ── pull-to-refresh release ──
     if (pullDistanceRef.current >= PULL_THRESHOLD && !pullRefreshingRef.current) {
       pullStartY.current = null;
       setDist(0); setTriggered(false);
@@ -5228,13 +5255,15 @@ function App() {
         .search-input::placeholder { color: rgba(255,255,255,0.55) !important; }
         .search-input:focus { outline: none; background: rgba(255,255,255,0.25) !important; }
       `}</style>
-      {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
-      {view === 'students' && renderStudents()}
-      {view === 'categories' && renderCategories()}
-      {view === 'evaluations' && renderEvaluations()}
-      {view === 'evaluationDetail' && renderEvaluationDetail()}
-      {view === 'examItems' && renderExamItems()}
-      {view === 'examDetail' && renderExamDetail()}
+      <div ref={swipeBackEl} style={{ willChange: 'transform' }}>
+        {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
+        {view === 'students' && renderStudents()}
+        {view === 'categories' && renderCategories()}
+        {view === 'evaluations' && renderEvaluations()}
+        {view === 'evaluationDetail' && renderEvaluationDetail()}
+        {view === 'examItems' && renderExamItems()}
+        {view === 'examDetail' && renderExamDetail()}
+      </div>
       {renderModal()}
       {renderPrintQRs()}
       {showScanner && (
