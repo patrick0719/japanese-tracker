@@ -4385,6 +4385,8 @@ function App() {
       <button
         onClick={async () => {
           if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
             const data = await res.json();
             if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
             else alert('Error: ' + (data.error || 'Unknown'));
