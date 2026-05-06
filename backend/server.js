@@ -348,6 +348,7 @@ app.delete('/api/parent-token/:token', async (req, res) => {
 });
 
 
+app.get('/api/teachers', async (req, res) => {
   try { res.json(await Teacher.find().select('-signature')); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/api/teachers/with-signatures', async (req, res) => {
