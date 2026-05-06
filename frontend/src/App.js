@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
 import { usePushNotifications } from './usePushNotifications';
+import jsQR from 'jsqr';
 
 // Returns correct name based on role — JA for kumiai, EN for admin/PHGIC
 function displayName(item) {
@@ -1061,64 +1062,59 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
 }
 
 // ── QR SCANNER COMPONENT ─────────────────────────────────────────────────────
+// Loads jsQR from CDN for reliable cross-device QR detection
 function QRScanner({ onResult, onClose }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const animRef = useRef(null);
-  const [status, setStatus] = useState('Starting camera...');
-  const detectorRef = useRef(null);
+  const doneRef = useRef(false);
+  const [status, setStatus] = useState('Loading scanner...');
 
   useEffect(() => {
     const start = async () => {
       try {
-        // Prefer BarcodeDetector (native, fast) — fallback to jsQR via canvas
-        if ('BarcodeDetector' in window) {
-          detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
-        }
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } }
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
         });
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setStatus('Point camera at QR code');
-          animRef.current = requestAnimationFrame(scan);
-        }
-      } catch { setStatus('Camera access denied.'); }
-    };
+        if (!videoRef.current) return;
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setStatus('Point camera at QR code');
 
-    const scan = async () => {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (!video || !canvas || video.readyState < 2) {
-        animRef.current = requestAnimationFrame(scan); return;
-      }
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-
-      try {
-        if (detectorRef.current) {
-          const results = await detectorRef.current.detect(video);
-          if (results.length > 0) { onResult(results[0].rawValue); return; }
-        } else {
-          // Fallback: use canvas ImageData + basic URL detection
-          const ctx = canvas.getContext('2d');
-          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          // Try to load jsQR dynamically if available
-          if (window.jsQR) {
-            const code = window.jsQR(imgData.data, canvas.width, canvas.height);
-            if (code) { onResult(code.data); return; }
+        const scan = () => {
+          if (doneRef.current) return;
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          if (!video || !canvas || video.readyState < 2) {
+            animRef.current = requestAnimationFrame(scan); return;
           }
-        }
-      } catch {}
-      animRef.current = requestAnimationFrame(scan);
+          canvas.width  = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imgData.data, imgData.width, imgData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+          if (code && code.data) {
+            doneRef.current = true;
+            onResult(code.data);
+            return;
+          }
+          animRef.current = requestAnimationFrame(scan);
+        };
+
+        animRef.current = requestAnimationFrame(scan);
+      } catch (err) {
+        setStatus('Camera access denied. Please allow camera permission.');
+      }
     };
 
     start();
     return () => {
+      doneRef.current = true;
       if (animRef.current) cancelAnimationFrame(animRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
     };
