@@ -119,7 +119,7 @@
      max-width: var(--page-max);
      margin: 0 auto;
      padding: var(--page-pad);
-     padding-bottom: 48px;
+     padding-bottom: max(48px, calc(env(safe-area-inset-bottom) + 24px));
    }
    
    /* ── TYPOGRAPHY ──────────────────────────────────────── */
@@ -188,8 +188,15 @@
      overflow: hidden;
      transition: transform 0.14s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.14s ease;
      will-change: transform;
-     /* Prevent double-tap zoom on cards */
      touch-action: manipulation;
+   }
+   
+   /* Batch cards: subtle left accent stripe */
+   .card.batch-card {
+     border-left: 3px solid rgba(155,0,0,0.25);
+   }
+   .card.batch-card:hover {
+     border-left-color: var(--brand);
    }
    
    .card.clickable { cursor: pointer; }
@@ -257,7 +264,26 @@
    
    /* ── PROFILE HEADER ──────────────────────────────────── */
    .student-profile-header {
-     display: flex; flex-direction: column; align-items: center; padding: 28px 0 22px; gap: 10px;
+     display: flex; flex-direction: column; align-items: center;
+     padding: 28px 20px 24px; gap: 10px;
+     background: linear-gradient(160deg, var(--surface) 0%, var(--brand-soft) 100%);
+     border-radius: var(--radius-xl);
+     border: 1px solid rgba(155,0,0,0.08);
+     margin-bottom: 16px;
+     position: relative;
+     overflow: hidden;
+   }
+   .student-profile-header::before {
+     content: '';
+     position: absolute;
+     top: -40px; right: -40px;
+     width: 160px; height: 160px;
+     background: radial-gradient(circle, rgba(155,0,0,0.1) 0%, transparent 70%);
+     pointer-events: none;
+   }
+   [data-theme="dark"] .student-profile-header {
+     background: linear-gradient(160deg, var(--surface) 0%, rgba(155,0,0,0.08) 100%) !important;
+     border-color: rgba(255,107,107,0.1) !important;
    }
    
    .student-profile-avatar {
@@ -265,7 +291,7 @@
      border-radius: 22px;
      object-fit: cover;
      border: 3px solid var(--surface);
-     box-shadow: var(--shadow-lg);
+     box-shadow: var(--shadow-lg), 0 0 0 4px rgba(155,0,0,0.15);
    }
    
    .student-profile-icon {
@@ -379,14 +405,26 @@
      max-height: 92dvh;
      overflow-y: auto;
      padding: 0 var(--page-pad) 44px;
-     box-shadow: var(--shadow-lg);
+     box-shadow: 0 -8px 40px rgba(0,0,0,0.18), 0 -2px 8px rgba(0,0,0,0.08);
      animation: slideUp 0.26s cubic-bezier(0.32, 0.72, 0, 1);
    }
    
+   /* Subtle top gradient accent on modal */
+   .modal-sheet::before {
+     content: '';
+     display: block;
+     height: 2px;
+     background: linear-gradient(90deg, transparent 0%, var(--brand) 40%, var(--brand-mid) 60%, transparent 100%);
+     border-radius: 2px 2px 0 0;
+     margin: 0 calc(-1 * var(--page-pad));
+     opacity: 0.5;
+   }
+   
    .modal-handle {
-     width: 40px; height: 4px; background: var(--border-med);
-     border-radius: 2px; margin: 14px auto 22px;
+     width: 44px; height: 5px; background: var(--border-strong);
+     border-radius: 3px; margin: 16px auto 22px;
      flex-shrink: 0;
+     opacity: 0.6;
    }
    
    .modal-title {
@@ -464,11 +502,16 @@
    /* ── SECTION BOX ─────────────────────────────────────── */
    .section-box {
      background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--border);
-     padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow-xs);
+     padding: 18px 16px; margin-bottom: 12px; box-shadow: var(--shadow-xs);
      transition: box-shadow 0.14s ease;
    }
    .section-box:hover { box-shadow: var(--shadow-sm); }
-   .section-box-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+   .section-box-header {
+     display: flex; justify-content: space-between; align-items: center;
+     margin-bottom: 16px;
+     padding-bottom: 12px;
+     border-bottom: 1px solid var(--border);
+   }
    .section-box-title { font-size: 13px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em; }
    .section-box-add {
      padding: 5px 14px; background: var(--accent); color: #fff; border: none;
@@ -567,11 +610,24 @@
      width: 100%; display: flex; align-items: center; gap: 14px;
      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
      padding: 14px 18px; font-family: var(--font); font-size: 16px; font-weight: 600;
-     color: var(--text-primary); cursor: pointer; text-align: left; box-shadow: var(--shadow-sm);
+     color: var(--text-primary); cursor: pointer; text-align: left;
+     box-shadow: var(--shadow-sm);
      transition: all 0.15s cubic-bezier(0.34,1.56,0.64,1);
    }
    .teacher-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--border-med); }
    .teacher-card:active { transform: scale(0.985) translateY(0); }
+   
+   /* Larger, more tappable photo-edit badge on teacher cards */
+   .teacher-photo-edit-badge {
+     position: absolute;
+     bottom: -2px; right: -4px;
+     background: var(--accent);
+     border-radius: 50%;
+     width: 24px; height: 24px;
+     display: flex; align-items: center; justify-content: center;
+     font-size: 12px; color: #fff;
+     box-shadow: 0 2px 6px rgba(59,130,246,0.4);
+   }
    
    /* ── LOGIN SCREEN ────────────────────────────────────── */
    .login-screen {
@@ -589,7 +645,17 @@
    }
    .login-card {
      width: 100%; max-width: 360px; background: var(--surface); border-radius: var(--radius-xl);
-     padding: 30px 26px; box-shadow: var(--shadow-lg); border: 1px solid var(--border); position: relative; z-index: 1;
+     padding: 30px 26px; box-shadow: var(--shadow-lg), 0 0 0 1px var(--border); border: none; position: relative; z-index: 1;
+   }
+   /* Tagline below logo on login */
+   .login-tagline {
+     font-size: 12px;
+     font-weight: 600;
+     color: var(--text-tertiary);
+     letter-spacing: 0.06em;
+     text-transform: uppercase;
+     margin-bottom: 32px;
+     text-align: center;
    }
    .login-title { text-align: center; font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--text-primary); margin-bottom: 24px; letter-spacing: -0.025em; }
    .password-wrapper { position: relative; }
@@ -695,6 +761,27 @@
    .form-group { margin-bottom: 16px; }
    .form-group label { margin-bottom: 7px; }
    
+   /* ── EMPTY STATE ─────────────────────────────────────── */
+   .empty-state {
+     text-align: center;
+     padding: 44px 24px;
+     background: var(--surface);
+     border-radius: var(--radius-xl);
+     border: 2px dashed rgba(155,0,0,0.2);
+     position: relative;
+     overflow: hidden;
+   }
+   .empty-state::before {
+     content: '';
+     position: absolute;
+     inset: 0;
+     background: radial-gradient(ellipse at 50% 0%, rgba(155,0,0,0.04) 0%, transparent 70%);
+     pointer-events: none;
+   }
+   .empty-state-icon { font-size: 44px; margin-bottom: 12px; display: block; filter: grayscale(0.3); }
+   .empty-state-text { font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px; letter-spacing: -0.01em; }
+   .empty-state-sub { font-size: 13px; color: var(--text-tertiary); margin: 0; font-weight: 500; }
+
    /* ── EXAM LIST ───────────────────────────────────────── */
    .exam-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
    
@@ -717,15 +804,16 @@
      flex-direction: column;
      align-items: center;
      justify-content: center;
-     width: 60px;
-     height: 60px;
-     border-radius: 14px;
+     width: 64px;
+     height: 64px;
+     border-radius: 16px;
      flex-shrink: 0;
      line-height: 1;
-     gap: 1px;
+     gap: 2px;
    }
-   .exam-score-num { font-size: 20px; font-weight: 800; font-family: var(--font-display); letter-spacing: -0.03em; }
-   .exam-score-sep { font-size: 11px; font-weight: 600; opacity: 0.75; }
+   /* Percentage is the hero — bigger + bolder */
+   .exam-score-num { font-size: 22px; font-weight: 800; font-family: var(--font-display); letter-spacing: -0.03em; line-height: 1; }
+   .exam-score-sep { font-size: 10px; font-weight: 600; opacity: 0.65; margin-top: 1px; }
    
    .exam-list-info { flex: 1; min-width: 0; }
    .exam-list-name { font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 0 0 3px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -807,8 +895,8 @@
      display: flex;
      align-items: center;
      justify-content: center;
-     gap: 8px;
-     padding: 12px;
+     gap: 7px;
+     padding: 13px 12px;
      border-radius: var(--radius-md);
      border: 1.5px solid var(--border-med);
      background: var(--surface);
@@ -819,17 +907,28 @@
      cursor: pointer;
      box-shadow: var(--shadow-xs);
      transition: all 0.15s ease;
+     line-height: 1;
    }
+   .exam-action-btn span { display: inline-flex; align-items: center; line-height: 1; }
    .exam-action-btn.scan:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
    .exam-action-btn.upload:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
    .exam-action-btn:active { transform: scale(0.97); }
    
    .exam-empty-pages {
      text-align: center;
-     padding: 40px 20px;
+     padding: 48px 24px;
      background: var(--surface);
-     border-radius: var(--radius-lg);
-     border: 1px solid var(--border);
+     border-radius: var(--radius-xl);
+     border: 2px dashed rgba(155,0,0,0.2);
+     position: relative;
+     overflow: hidden;
+   }
+   .exam-empty-pages::before {
+     content: '';
+     position: absolute;
+     inset: 0;
+     background: radial-gradient(ellipse at 50% 0%, rgba(155,0,0,0.04) 0%, transparent 70%);
+     pointer-events: none;
    }
    
    /* Pages as 2-col grid for compact view */
@@ -1178,7 +1277,7 @@
    [data-theme="dark"] .exam-list-card,
    [data-theme="dark"] .exam-page-card { background: var(--surface) !important; border-color: var(--border) !important; }
 
-   [data-theme="dark"] .header-banner { background: linear-gradient(135deg, #3d0000, #6b0000) !important; }
+   [data-theme="dark"] .header-banner { background: linear-gradient(135deg, #7a0000 0%, #b03030 100%) !important; }
 
    [data-theme="dark"] input,
    [data-theme="dark"] textarea,
@@ -1226,10 +1325,13 @@
 
 /* Back-button style sticky bar */
 .sticky-header--back {
-  background: var(--bg);
+  background: rgba(242,242,246,0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   padding-top: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1255,6 +1357,121 @@
 }
 
 [data-theme="dark"] .sticky-header--back {
-  background: var(--bg);
+  background: rgba(17,17,23,0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-bottom-color: var(--border);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+}
+/* ═══════════════════════════════════════════════════════
+   DESIGN IMPROVEMENTS v2.5
+   Applied: all 14 suggestions from design review
+   ═══════════════════════════════════════════════════════ */
+
+/* ── FIX #9: Button hierarchy — only .add-button gets brand shadow.
+      .btn-primary inside modals gets a slightly toned-down shadow
+      to not compete with page-level actions ── */
+.modal-sheet .btn-primary {
+  box-shadow: 0 4px 14px rgba(155,0,0,0.28), 0 1px 4px rgba(155,0,0,0.15);
+}
+
+/* ── FIX #2: Batch card left-accent stripe (used via className in App.js) ── */
+/* Already added above — this is the dark mode override */
+[data-theme="dark"] .card.batch-card {
+  border-left-color: rgba(255,107,107,0.2);
+}
+[data-theme="dark"] .card.batch-card:hover {
+  border-left-color: var(--brand);
+}
+
+/* ── FIX #8: Login tagline (class added in App.js) ── */
+[data-theme="dark"] .login-tagline {
+  color: rgba(240,240,248,0.35);
+}
+
+/* ── FIX #1: Student profile header dark mode ── */
+/* Already handled inline above with [data-theme="dark"] selector */
+
+/* ── FIX #4: Empty states dark mode ── */
+[data-theme="dark"] .empty-state,
+[data-theme="dark"] .exam-empty-pages {
+  border-color: rgba(255,107,107,0.15) !important;
+  background: var(--surface) !important;
+}
+[data-theme="dark"] .empty-state::before,
+[data-theme="dark"] .exam-empty-pages::before {
+  background: radial-gradient(ellipse at 50% 0%, rgba(255,107,107,0.06) 0%, transparent 70%);
+}
+
+/* ── FIX #10: Section box header divider dark mode ── */
+[data-theme="dark"] .section-box-header {
+  border-bottom-color: var(--border) !important;
+}
+
+/* ── FIX #6: Modal sheet dark mode top accent line ── */
+[data-theme="dark"] .modal-sheet::before {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,107,107,0.6) 40%, rgba(224,85,85,0.6) 60%, transparent 100%);
+}
+
+/* ── FIX #3: Exam score badge — percentage pill is visually dominant ── */
+/* The .exam-pct-pill now has slightly bigger font to act as the real hero */
+.exam-pct-pill {
+  display: inline-block;
+  padding: 4px 11px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 800;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* ── FIX #12: Teacher photo badge override (inline style in App.js targets ✎ span) ── */
+/* The span with position:absolute already exists — we enhance it via a utility class */
+.teacher-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.teacher-avatar-wrap .edit-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -4px;
+  background: var(--accent);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(59,130,246,0.45);
+  border: 2px solid var(--surface);
+  pointer-events: none;
+}
+
+/* ── FIX #7: Progress Chart best score card — hero stat highlight ── */
+/* Applied via inline style in ProgressChart component already;
+   this class can override if needed */
+.progress-stat-hero {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-mid) 100%) !important;
+  color: #fff !important;
+}
+.progress-stat-hero .stat-label,
+.progress-stat-hero .stat-icon {
+  color: rgba(255,255,255,0.8) !important;
+}
+
+/* ── FIX #5: Sticky header — add drop shadow to dark header-banner when sticky ── */
+/* When the full dark header-banner is sticky (batches / kumiai views),
+   give it a subtle drop shadow for depth */
+.sticky-header .header-banner {
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  margin-bottom: 0;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+/* ── Smooth page entrance animation ── */
+.page-enter {
+  animation: pageIn 0.22s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
