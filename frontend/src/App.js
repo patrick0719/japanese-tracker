@@ -3,6 +3,14 @@ import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
 import { usePushNotifications } from './usePushNotifications';
+import {
+  TrendingUp, TrendingDown, Minus, User, Building2, FileText, BarChart2,
+  Trophy, Target, Flame, Rocket, AlertTriangle, Zap, Star, MapPin,
+  Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
+  Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
+  Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
+  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check
+} from 'lucide-react';
 import jsQR from 'jsqr';
 
 // Returns correct name based on role — JA for kumiai, EN for admin/PHGIC
@@ -169,8 +177,9 @@ function ImageViewer({ images, startIndex, onClose }) {
         padding: '12px 20px', background: 'rgba(0,0,0,0.8)', flexShrink: 0,
       }}>
         <button onClick={onClose} aria-label="Close image viewer" style={{
-          background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1
-        }}>✕</button>
+          background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}><X size={24} strokeWidth={2.5} /></button>
         <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
           Page {current + 1} / {images.length}
         </span>
@@ -230,8 +239,9 @@ function ImageViewer({ images, startIndex, onClose }) {
           style={{
             background: current === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
             color: '#fff', border: 'none', borderRadius: 10,
-            padding: '10px 24px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer'
-          }}>‹</button>
+            padding: '10px 20px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center'
+          }}><ChevronLeft size={20} strokeWidth={2.5} /></button>
 
         {/* Dot indicators */}
         <div role="tablist" aria-label="Page navigation" style={{ display: 'flex', gap: 6 }}>
@@ -259,8 +269,9 @@ function ImageViewer({ images, startIndex, onClose }) {
           style={{
             background: current === images.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
             color: '#fff', border: 'none', borderRadius: 10,
-            padding: '10px 24px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer'
-          }}>›</button>
+            padding: '10px 20px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center'
+          }}><ChevronRight size={20} strokeWidth={2.5} /></button>
       </div>
     </div>
   );
@@ -564,7 +575,7 @@ function ProgressChart({ student, batch, onClose }) {
           background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
           borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
         }}>{t('back')}</button>
-        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 {t('progressChart')}</span>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={18} /> {t('progressChart')}</span>
         <div style={{ width: 72 }} />
       </div>
 
@@ -577,7 +588,7 @@ function ProgressChart({ student, batch, onClose }) {
             width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid #8B0000'
           }} />
         ) : (
-          <span style={{ fontSize: 40 }}>👤</span>
+          <span style={{ fontSize: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: '50%', background: 'var(--bg-card2, #f2f2f7)', color: '#8e8e93' }}><User size={28} /></span>
         )}
         <div>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
@@ -587,7 +598,7 @@ function ProgressChart({ student, batch, onClose }) {
               display: 'inline-block', marginTop: 4,
               background: 'var(--green-soft, #e8f5e9)', color: 'var(--green, #2e7d32)',
               fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12
-            }}>🏢 {student.companyName}</span>
+            }}<Building2 size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{student.companyName}</span>
           )}
         </div>
       </div>
@@ -629,21 +640,21 @@ function ProgressChart({ student, batch, onClose }) {
         {!loading && chartData && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
-              { label: t('totalExams'), value: chartData.stats.totalExams, icon: '📝', color: '#007AFF', sub: null },
-              { label: t('averageScore'), value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759', sub: null },
-              { label: t('bestScore'), value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
+              { label: t('totalExams'), value: chartData.stats.totalExams, icon: <FileText size={22} color="#007AFF" />, color: '#007AFF', sub: null },
+              { label: t('averageScore'), value: chartData.stats.avgScore + '%', icon: <BarChart2 size={22} color="#34C759" />, color: '#34C759', sub: null },
+              { label: t('bestScore'), value: chartData.stats.bestScore + '%', icon: <Trophy size={22} color="#FF9500" />, color: '#FF9500', sub: null },
               chartData.stats.recentTrend !== null
                 ? {
                     label: 'Improvement',
                     value: (chartData.stats.recentTrend > 0 ? '+' : '') + chartData.stats.recentTrend + '%',
-                    icon: chartData.stats.recentTrend > 0 ? '📈' : chartData.stats.recentTrend < 0 ? '📉' : '➡️',
+                    icon: chartData.stats.recentTrend > 0 ? <TrendingUp size={22} color="#34C759" /> : chartData.stats.recentTrend < 0 ? <TrendingDown size={22} color="#FF3B30" /> : <Minus size={22} color="#8e8e93" />,
                     color: chartData.stats.recentTrend > 0 ? '#34C759' : chartData.stats.recentTrend < 0 ? '#FF3B30' : '#8e8e93',
                     sub: chartData.stats.recentTrendLabel,
                   }
                 : {
                     label: t('latestScore'),
                     value: chartData.stats.latestScore + '%',
-                    icon: '🎯',
+                    icon: <Target size={22} color="#8B0000" />,
                     color: '#8B0000',
                     sub: null,
                   },
@@ -652,7 +663,7 @@ function ProgressChart({ student, batch, onClose }) {
                 background: 'var(--bg-card, #fff)', borderRadius: 14, padding: '16px 14px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.06)', textAlign: 'center'
               }}>
-                <div style={{ fontSize: 24, marginBottom: 6 }}>{stat.icon}</div>
+                <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}>{stat.icon}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary, #8e8e93)', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
                 {stat.sub && <div style={{ fontSize: 10, color: 'var(--text-tertiary, #c7c7cc)', marginTop: 2 }}>{stat.sub}</div>}
@@ -667,22 +678,22 @@ function ProgressChart({ student, batch, onClose }) {
           let icon, color, bg, message;
 
           if (streak >= 3) {
-            icon = '🔥'; bg = '#fff8e1'; color = '#e65100';
+            icon = <Flame size={20} color="#e65100" />; bg = '#fff8e1'; color = '#e65100';
             message = `On a ${streak}-exam winning streak! Keep it up.`;
           } else if (recentTrend !== null && recentTrend >= 5) {
-            icon = '🚀'; bg = '#e8f5e9'; color = '#2e7d32';
+            icon = <Rocket size={20} color="#2e7d32" />; bg = '#e8f5e9'; color = '#2e7d32';
             message = `Strong recent momentum — up ${recentTrend}% in the last exams.`;
           } else if (recentTrend !== null && recentTrend <= -5) {
-            icon = '⚠️'; bg = '#fff3e0'; color = '#e65100';
+            icon = <AlertTriangle size={20} color="#e65100" />; bg = '#fff3e0'; color = '#e65100';
             message = `Recent dip of ${Math.abs(recentTrend)}%. May need extra review.`;
           } else if (consistency >= 70) {
-            icon = '💪'; bg = '#e3f2fd'; color = '#1565c0';
+            icon = <Zap size={20} color="#1565c0" />; bg = '#e3f2fd'; color = '#1565c0';
             message = `Very consistent — ${consistency}% of exams at or above personal average.`;
           } else if (totalExams >= 5 && avgScore >= 80) {
-            icon = '⭐'; bg = '#f3e5f5'; color = '#6a1b9a';
+            icon = <Star size={20} color="#6a1b9a" />; bg = '#f3e5f5'; color = '#6a1b9a';
             message = `Excellent average of ${avgScore}% across ${totalExams} exams.`;
           } else {
-            icon = '📌'; bg = '#f2f2f7'; color = '#8e8e93';
+            icon = <MapPin size={20} color="#8e8e93" />; bg = '#f2f2f7'; color = '#8e8e93';
             message = `Consistency rate: ${consistency}% of exams at or above personal average.`;
           }
 
@@ -691,7 +702,7 @@ function ProgressChart({ student, batch, onClose }) {
               background: bg, borderRadius: 12, padding: '12px 14px',
               marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 10
             }}>
-              <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
+              <span style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start' }}>{icon}</span>
               <p style={{ margin: 0, fontSize: 13, color, fontWeight: 500, lineHeight: 1.4 }}>{message}</p>
             </div>
           );
@@ -701,7 +712,7 @@ function ProgressChart({ student, batch, onClose }) {
           background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
         }}>
-          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)' }}>⏱️ Time Range</p>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'flex', alignItems: 'center', gap: 6 }}><Clock size={13} /> Time Range</p>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
               { id: 'all', label: 'All Time' },
@@ -724,7 +735,7 @@ function ProgressChart({ student, batch, onClose }) {
             background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)' }}>📁 Categories</p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'flex', alignItems: 'center', gap: 6 }}><Folder size={13} /> Categories</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {chartData.categories.map(cat => {
                 const colors = {
@@ -759,7 +770,7 @@ function ProgressChart({ student, batch, onClose }) {
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>📈 Score Trend</h3>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)', display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={15} /> Score Trend</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--text-secondary, #3a3a3c)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 12, height: 3, background: '#007AFF', borderRadius: 2 }} />
@@ -785,7 +796,7 @@ function ProgressChart({ student, batch, onClose }) {
             </div>
           ) : chartData?.exams.length === 0 ? (
             <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary, #8e8e93)' }}>
-              <span style={{ fontSize: 40, marginBottom: 10 }}>📊</span>
+              <span style={{ marginBottom: 10, color: '#8e8e93', display: 'flex' }}><BarChart2 size={40} /></span>
               <p style={{ margin: 0, fontSize: 14 }}>No exam data available</p>
               <p style={{ margin: '4px 0 0', fontSize: 12 }}>Add exams with dates to see progress</p>
             </div>
@@ -801,7 +812,7 @@ function ProgressChart({ student, batch, onClose }) {
             background: 'var(--bg-card, #fff)', borderRadius: 16, padding: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>📝 Recent Exams</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)', display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={15} /> Recent Exams</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {chartData.exams.slice(-5).reverse().map((exam, i) => (
                 <div key={i} style={{
@@ -1019,12 +1030,12 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         flexShrink: 0, zIndex: 10, position: 'relative'
       }}>
-        <button onClick={onRetake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
-          ← Retake
+        <button onClick={onRetake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ArrowLeft size={15} /> Retake
         </button>
         <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
-        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-          Use ✓
+        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+          Use <Check size={15} />
         </button>
       </div>
       <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center', padding: '5px 0', flexShrink: 0 }}>
@@ -1050,11 +1061,11 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
         paddingBottom: 'env(safe-area-inset-bottom, 14px)',
         display: 'flex', gap: 12
       }}>
-        <button onClick={onRetake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer' }}>
-          ← Retake
+        <button onClick={onRetake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <ArrowLeft size={15} /> Retake
         </button>
-        <button onClick={onConfirm} style={{ flex: 2, background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
-          ✓ Use This Page
+        <button onClick={onConfirm} style={{ flex: 2, background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <Check size={16} /> Use This Page
         </button>
       </div>
     </div>
@@ -1132,7 +1143,7 @@ function QRScanner({ onResult, onClose }) {
       }}>
         <button onClick={onClose} style={{
           background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1,
-        }}>✕</button>
+        }}><X size={14} /></button>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Scan QR Code</span>
         <div style={{ width: 32 }} />
       </div>
@@ -1282,7 +1293,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
       });
       lastCornersRef.current = scaled;
       setDetected(true);
-      setStatus('Document in frame — tap 📸 to capture');
+      setStatus('Document in frame — tap the shutter to capture');
     } else {
       lastCornersRef.current = null;
       setDetected(false);
@@ -1549,7 +1560,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
             disabled={bulkUploading || scannedPages.length === 0}
             style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}
           >
-            {bulkUploading ? '⏳ Uploading…' : `✅ Done (${scannedPages.length})`}
+            {bulkUploading ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 4, verticalAlign: 'middle' }} /> Uploading…</> : <><CheckCircle size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Done ({scannedPages.length})</>}
           </button>
         </div>
 
@@ -1564,7 +1575,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
               <button
                 onClick={() => removeBulkPage(idx)}
                 style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
-              >✕</button>
+              <X size={14} /></button>
             </div>
           ))}
         </div>
@@ -1579,7 +1590,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
             onClick={scanNextPage}
             style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 48px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
           >
-            📸 Scan Next Page
+            <Camera size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />Scan Next Page
           </button>
         </div>
       </div>
@@ -1616,7 +1627,10 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
           color: '#fff', padding: '6px 16px', borderRadius: 20,
           fontSize: 13, fontWeight: 600
         }}>
-          {detected ? '🟢 ' + status : '🔍 ' + status}
+          {detected
+            ? <><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#4cd964', marginRight: 6, verticalAlign: 'middle' }} />{status}</>
+            : <><Search size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />{status}</>
+          }
         </div>
         {/* Page counter / review shortcut */}
         {bulkMode && scannedPages.length > 0 ? (
@@ -1662,7 +1676,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0
         }}>
-          📸
+          <Camera size={30} color="#000" />
         </button>
       </div>
     </div>
@@ -1796,9 +1810,9 @@ useEffect(() => {
           <div>
             <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>☁️ Cloudinary Storage</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', display: 'flex', alignItems: 'center', gap: 6 }}><Layers size={15} /> Cloudinary Storage</span>
                 {storageLoading && <span style={{ fontSize: 12, color: '#8e8e93' }}>Loading…</span>}
-                {storageError && <span style={{ fontSize: 12, color: '#ff3b30' }}>⚠ Error</span>}
+                {storageError && <span style={{ fontSize: 12, color: '#ff3b30', display: 'flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} /> Error</span>}
               </div>
 
               {storageLoading ? (
@@ -1846,8 +1860,8 @@ useEffect(() => {
                   {storage?.resources && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       {[
-                        { label: '🖼 Images', count: storage.resources.image_count, size: storage.resources.image_size },
-                        { label: '📄 Raw files', count: storage.resources.raw_count, size: storage.resources.raw_size },
+                        { label: <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Image size={13} /> Images</span>, count: storage.resources.image_count, size: storage.resources.image_size },
+                        { label: <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><File size={13} /> Raw files</span>, count: storage.resources.raw_count, size: storage.resources.raw_size },
                       ].map((r, i) => (
                         <div key={i} style={{ background: '#f9f9f9', borderRadius: 12, padding: '12px 14px' }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: '#1c1c1e', marginBottom: 2 }}>{r.label}</div>
@@ -1859,8 +1873,8 @@ useEffect(() => {
                   )}
 
                   {usedPct > 80 && (
-                    <div style={{ marginTop: 14, background: '#fff3cd', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#856404', fontWeight: 500 }}>
-                      ⚠️ Storage is getting full. Consider archiving old images.
+                    <div style={{ marginTop: 14, background: '#fff3cd', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#856404', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <AlertTriangle size={14} color="#856404" /> Storage is getting full. Consider archiving old images.
                     </div>
                   )}
                 </>
@@ -1886,13 +1900,13 @@ useEffect(() => {
             </div>
 
             {[
-              { icon: '🗂️', label: t('totalBatches'), value: totalBatches },
-              { icon: '👥', label: t('totalStudents'), value: totalStudents.toLocaleString() },
-              { icon: '📝', label: t('totalExams'), value: totalExams.toLocaleString() },
-              { icon: '🖼️', label: t('totalImages'), value: totalImages.toLocaleString() },
+              { icon: <Layers size={26} color="#8B0000" />, label: t('totalBatches'), value: totalBatches },
+              { icon: <Users size={26} color="#8B0000" />, label: t('totalStudents'), value: totalStudents.toLocaleString() },
+              { icon: <FileText size={26} color="#8B0000" />, label: t('totalExams'), value: totalExams.toLocaleString() },
+              { icon: <Image size={26} color="#8B0000" />, label: t('totalImages'), value: totalImages.toLocaleString() },
             ].map((stat, i) => (
               <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontSize: 28 }}>{stat.icon}</span>
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 12, background: 'rgba(139,0,0,0.08)', flexShrink: 0 }}>{stat.icon}</span>
                 <div>
                   <div style={{ fontSize: 13, color: '#8e8e93' }}>{stat.label}</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1.2 }}>{stat.value}</div>
@@ -1911,7 +1925,7 @@ useEffect(() => {
         {activeSection === 'manage' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>🖼️ Image Storage</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}><Image size={15} style={{ marginRight: 6, verticalAlign: "middle" }} />Image Storage</div>
               <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 16px 0', lineHeight: 1.5 }}>
                 To free up Cloudinary storage, use the <strong>📦 Archive</strong> feature per student to move old exam images to the archive folder. Archived images are still accessible but won't count against your active quota in most plans.
               </p>
@@ -1927,12 +1941,12 @@ useEffect(() => {
                 To permanently delete a student and all their images from Cloudinary and the database, use the <strong>🗑️ Delete</strong> button on the student's Categories screen. This <strong>cannot be undone</strong>.
               </p>
               <div style={{ background: '#fff3f3', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#c0392b', fontWeight: 500 }}>
-                ⚠️ Permanent delete removes all data from Cloudinary and MongoDB.
+                <p style={{ margin: '8px 0 0', fontSize: 12, color: '#856404', display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={12} /> Permanent delete removes all data from Cloudinary and MongoDB.</p>
               </div>
             </div>
 
             <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>📊 Storage by Batch</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}><BarChart2 size={15} style={{ marginRight: 6, verticalAlign: "middle" }} />Storage by Batch</div>
               <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 12px 0' }}>Estimated image count per batch:</p>
               {batches.map(b => {
                 const imgCount = b.students.reduce((s, st) =>
@@ -1942,7 +1956,7 @@ useEffect(() => {
                 return (
                   <div key={b._id} style={{ marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>🎌 {b.name}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}><BookOpen size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />{b.name}</span>
                       <span style={{ fontSize: 12, color: '#8e8e93' }}>{imgCount} images</span>
                     </div>
                     <div style={{ background: '#f2f2f7', borderRadius: 99, height: 6, overflow: 'hidden' }}>
@@ -1967,13 +1981,13 @@ useEffect(() => {
                 border: 'none', borderRadius: 10, padding: '8px 18px',
                 fontSize: 13, fontWeight: 600, cursor: serverLoading ? 'default' : 'pointer'
               }}>
-                {serverLoading ? '⏳ ' + t('loading') : t('refresh')}
+                {serverLoading ? <><Loader size={13} style={{ animation: 'spin 1s linear infinite', marginRight: 4, verticalAlign: 'middle' }} />{t('loading')}</> : t('refresh')}
               </button>
             </div>
 
             {serverError && (
-              <div style={{ background: '#fff3f3', borderRadius: 14, padding: 16, color: '#c0392b', fontSize: 13 }}>
-                ⚠️ {serverError}
+              <div style={{ background: '#fff3f3', borderRadius: 14, padding: 16, color: '#c0392b', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertTriangle size={14} /> {serverError}
               </div>
             )}
 
@@ -2000,15 +2014,15 @@ useEffect(() => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: r.apiAvailable ? '#f0fff4' : '#fffbe6', borderRadius: 10, fontSize: 12 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.apiAvailable ? '#34C759' : '#ff9500' }} />
                     <span style={{ color: r.apiAvailable ? '#1a7f37' : '#856404', fontWeight: 600 }}>
-                      {r.apiAvailable ? '✅ Live data mula sa Render API' : '⚠️ Estimated data (walang API key)'}
+                      {r.apiAvailable ? 'Live data mula sa Render API' : 'Estimated data (walang API key)'}
                     </span>
                   </div>
 
                   {/* Instance Hours Card */}
                   <div style={{ background: r.willSuspend ? '#fff3f3' : '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>
-                      ⏱️ Instance Hours
-                      {r.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px' }}>⚠️ Malapit maubos!</span>}
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Clock size={15} /> Instance Hours
+                      {r.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={10} /> Malapit maubos!</span>}
                     </div>
                     <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included Usage — resets every 1st of month</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -2026,8 +2040,8 @@ useEffect(() => {
                     </div>
                     <div style={{ fontSize: 12, color: '#8e8e93' }}>{renderPct}% ng 750h monthly limit</div>
                     {r.willSuspend && (
-                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 600 }}>
-                        🚨 Bababa na sa 50 hours! Mag-migrate na o mag-upgrade bago ma-suspend ang app.
+                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <AlertCircle size={14} /> Bababa na sa 50 hours! Mag-migrate na o mag-upgrade bago ma-suspend ang app.
                       </div>
                     )}
                   </div>
@@ -2035,7 +2049,7 @@ useEffect(() => {
                   {/* Bandwidth Card */}
                   {r.bandwidthUsedBytes !== undefined && (
                     <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>🌐 Outbound Bandwidth</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={15} /> Outbound Bandwidth</div>
                       <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included: 100 GB</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                         <div>
@@ -2056,7 +2070,7 @@ useEffect(() => {
                   {/* Services List */}
                   {r.services && r.services.length > 0 && (
                     <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🚀 Render Services</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}><Rocket size={15} style={{ marginRight: 6, verticalAlign: "middle" }} />Render Services</div>
                       {r.services.map((svc, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < r.services.length - 1 ? '1px solid #f2f2f7' : 'none' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2290,9 +2304,9 @@ function SmartReminders({ batches, onNavigate }) {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             borderBottom: '1px solid var(--border-color, #f0f0f0)',
           }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary, #8e8e93)', letterSpacing: 0.3 }}>
-              📝 NO EXAM IN 30+ DAYS — {examReminders.length}
-            </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary, #8e8e93)', letterSpacing: 0.3, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <AlertTriangle size={12} /> NO EXAM IN 30+ DAYS — {examReminders.length}
+              </span>
             <button
               onClick={dismissAll}
               style={{
@@ -2306,7 +2320,7 @@ function SmartReminders({ batches, onNavigate }) {
 
           {examReminders.length === 0 && (
             <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary, #8e8e93)', fontSize: 13 }}>
-              All caught up! 🎉
+              All caught up! ✓
             </div>
           )}
 
@@ -2329,9 +2343,11 @@ function SmartReminders({ batches, onNavigate }) {
                   width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
                   background: isUrgent ? '#fff0f0' : '#fff8ee',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 18,
                 }}>
-                  {isUrgent ? '🚨' : '⚠️'}
+                  {isUrgent
+                    ? <AlertCircle size={18} color="#ff3b30" />
+                    : <AlertTriangle size={18} color="#ff9500" />
+                  }
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
@@ -2342,7 +2358,7 @@ function SmartReminders({ batches, onNavigate }) {
                     {r.student}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-tertiary, #8e8e93)', marginTop: 2 }}>
-                    🎌 {r.batch} · {r.label}
+                    <BookOpen size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{r.batch} · {r.label}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2498,7 +2514,7 @@ function TeacherSelect({ onSelect }) {
 
       {/* ── Global Search Bar ── */}
       <div style={{ width: '100%', maxWidth: 400, position: 'relative', marginBottom: 20 }}>
-        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'var(--text-tertiary)' }}>🔍</span>
+        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }}><Search size={16} /></span>
         <input
           type="text"
           value={globalQuery}
@@ -2518,7 +2534,7 @@ function TeacherSelect({ onSelect }) {
             background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: '50%',
             width: 22, height: 22, cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>✕</button>
+          }}><X size={14} /></button>
         )}
       </div>
 
@@ -2568,7 +2584,7 @@ function TeacherSelect({ onSelect }) {
                         {student.name}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                        🎌 {batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : ''}
+                        <><BookOpen size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : ''}
                       </div>
                     </div>
                     <span style={{ color: 'var(--text-tertiary)', fontSize: 18 }}>›</span>
@@ -2590,7 +2606,7 @@ function TeacherSelect({ onSelect }) {
                   ? <img src={teacher.photo} alt={teacher.name} className="student-avatar" />
                   : <span style={{ fontSize: 34, lineHeight: 1 }}>{teacher.emoji}</span>
                 }
-                <span style={{ position: 'absolute', bottom: -2, right: -4, background: 'var(--accent)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>✎</span>
+                <span style={{ position: 'absolute', bottom: -2, right: -4, background: 'var(--accent)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}><MoreHorizontal size={10} /></span>
                 <input type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => e.target.files[0] && uploadTeacherPhoto(teacher._id, e.target.files[0])} />
               </label>
@@ -2609,7 +2625,7 @@ function TeacherSelect({ onSelect }) {
                   <input type="file" accept="image/*" style={{ display: 'none' }}
                     onChange={e => e.target.files[0] && uploadSignature(teacher._id, e.target.files[0])} />
                 </label>
-                <button onClick={() => setDeleteId(teacher._id)} className="delete-btn-icon">✕</button>
+                <button onClick={() => setDeleteId(teacher._id)} className="delete-btn-icon"><X size={14} /></button>
               </div>
             )}
           </div>
@@ -2722,7 +2738,7 @@ function LoginScreen({ onLogin }) {
               placeholder="Enter password"
             />
             <button onClick={() => setShowPass(p => !p)} className="password-toggle">
-              {showPass ? '🙈' : '👁️'}
+              {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
         </div>
@@ -2873,11 +2889,11 @@ function ParentQRPopup({ student, batch, teacher, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
           {student.photo
             ? <img src={student.photo} alt={student.name} style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
-            : <span style={{ fontSize: 36 }}>👤</span>
+            : <span style={{ }}><User size={36} strokeWidth={1.2} /></span>
           }
           <div>
             <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
-            <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-tertiary, #8e8e93)' }}>🎌 {batch.name}</p>
+            <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-tertiary, #8e8e93)' }}><BookOpen size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />{batch.name}</p>
           </div>
         </div>
 
@@ -2898,19 +2914,20 @@ function ParentQRPopup({ student, batch, teacher, onClose }) {
               color: 'var(--text-primary, #1c1c1e)',
             }}
           />
-          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-tertiary, #8e8e93)' }}>
-            ⚠️ After this date, the QR code will no longer work.
+          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-tertiary, #8e8e93)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <AlertTriangle size={12} /> After this date, the QR code will no longer work.
           </p>
         </div>
 
         {/* Info box */}
-        <div style={{ background: '#f0f7ff', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1565c0', lineHeight: 1.5 }}>
-          👨‍👩‍👧 The parent can view all exam scores and scanned papers of <strong>{student.name}</strong> without logging in. No editing allowed.
+        <div style={{ background: '#f0f7ff', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1565c0', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Users size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+          The parent can view all exam scores and scanned papers of <strong>{student.name}</strong> without logging in. No editing allowed.
         </div>
 
         {error && (
-          <div style={{ background: '#fff3f3', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#c62828', fontWeight: 600 }}>
-            ❌ {error}
+          <div style={{ background: '#fff3f3', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#c62828', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertCircle size={14} /> {error}
           </div>
         )}
 
@@ -2923,8 +2940,8 @@ function ParentQRPopup({ student, batch, teacher, onClose }) {
             }}>
               <img src={qrDataUrl} alt="Parent QR Code" style={{ width: 200, height: 200, display: 'block' }} />
             </div>
-            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: '#2e7d32' }}>
-              ✅ QR ready to share!
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <CheckCircle size={14} color="#2e7d32" /> QR ready to share!
             </p>
             <p style={{ margin: '0 0 12px', fontSize: 12, color: '#8e8e93' }}>
               Expires: <strong>{formatDate(tokenInfo.expiresAt)}</strong>
@@ -2965,7 +2982,12 @@ function ParentQRPopup({ student, batch, teacher, onClose }) {
             cursor: generating ? 'default' : 'pointer',
           }}
         >
-          {generating ? '⏳ Generating...' : qrDataUrl ? '🔄 Regenerate' : '🔑 Generate Parent QR'}
+          {generating
+            ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6, verticalAlign: 'middle' }} />Generating...</>
+            : qrDataUrl
+              ? <><RefreshCw size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Regenerate</>
+              : <><KeyRound size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Generate Parent QR</>
+          }
         </button>
 
         <button onClick={onClose} style={{
@@ -3024,12 +3046,12 @@ function ParentView({ data, token }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
           {student.photo
             ? <img src={student.photo} alt={student.name} style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(255,255,255,0.3)' }} />
-            : <span style={{ fontSize: 48 }}>👤</span>
+            : <span style={{ }}><User size={48} strokeWidth={1.2} /></span>
           }
           <div>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#fff' }}>{student.name}</h1>
-            <p style={{ margin: '3px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>🎌 {batch.name}</p>
-            {student.companyName && <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>🏢 {student.companyName}</p>}
+            <p style={{ margin: '3px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}><BookOpen size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />{batch.name}</p>
+            {student.companyName && <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}><Building2 size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{student.companyName}</p>}
           </div>
         </div>
         {/* Expiry badge */}
@@ -3038,7 +3060,7 @@ function ParentView({ data, token }) {
           borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#fff',
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
-          <span>{daysLeft <= 1 ? '⚠️' : '🔒'}</span>
+          <span>{daysLeft <= 1 ? <AlertTriangle size={14} /> : <Lock size={14} />}</span>
           <span>
             {daysLeft <= 0 ? 'Expires today' : `View access expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`} · {formatDate(expiry)}
           </span>
@@ -3047,14 +3069,14 @@ function ParentView({ data, token }) {
 
       {/* Read-only badge */}
       <div style={{ background: '#fff', padding: '10px 20px', borderBottom: '1px solid #e5e5ea', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 13 }}>👁️</span>
+        <Eye size={14} color="#8e8e93" />
         <span style={{ fontSize: 13, color: '#8e8e93' }}>View only · Shared by Sage Asian Japanese Language School</span>
       </div>
 
       <div style={{ padding: '16px' }}>
         {student.categories.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
-            <div style={{ fontSize: 48, marginBottom: 10 }}>📝</div>
+            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><FileText size={48} strokeWidth={1} /></div>
             <p>No exam records yet.</p>
           </div>
         )}
@@ -3068,7 +3090,7 @@ function ParentView({ data, token }) {
             <div key={cat._id} style={{ marginBottom: 20 }}>
               {/* Category header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>📁 {cat.name}</h2>
+                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}><Folder size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{cat.name}</h2>
                 {avg !== null && (
                   <span style={{
                     background: avg >= 60 ? '#e8f5e9' : '#ffebee',
@@ -3139,7 +3161,7 @@ function ParentView({ data, token }) {
       {/* Footer */}
       <div style={{ textAlign: 'center', padding: '20px', color: '#c7c7cc', fontSize: 12 }}>
         <img src="data:image/png;base64,iVBORw0KGgo=" alt="" style={{ display: 'none' }} />
-        🎌 Sage Asian Japanese Language School<br />
+        <BookOpen size={13} style={{ marginRight: 6, verticalAlign: "middle" }} />Sage Asian Japanese Language School<br />
         This link expires on {formatDate(expiry)}
       </div>
 
@@ -3986,13 +4008,13 @@ function App() {
     );
     if (parentViewData.expired) return (
       <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '40px 24px', textAlign: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
-        <div style={{ fontSize: 72, marginBottom: 20 }}>🔒</div>
+        <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center', color: '#8e8e93' }}><Lock size={72} strokeWidth={1.5} /></div>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', margin: '0 0 10px' }}>Link Expired</h1>
         <p style={{ fontSize: 15, color: '#8e8e93', margin: 0, lineHeight: 1.6 }}>
           This QR code has expired or is no longer valid.<br />Please ask the teacher to generate a new one.
         </p>
-        <div style={{ marginTop: 32, padding: '14px 20px', background: '#fff', borderRadius: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', fontSize: 13, color: '#8e8e93' }}>
-          🎌 Sage Asian Japanese Language School
+        <div style={{ marginTop: 32, padding: '14px 20px', background: '#fff', borderRadius: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', fontSize: 13, color: '#8e8e93', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <BookOpen size={14} /> Sage Asian Japanese Language School
         </div>
       </div>
     );
@@ -4017,7 +4039,7 @@ function App() {
   // QR scan password prompt — show before anything else if pending
   if (qrPasswordPrompt) return (
     <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
-      <div style={{ fontSize: 56, marginBottom: 16 }}>🔒</div>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', color: '#8B0000' }}><Lock size={56} strokeWidth={1.5} /></div>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1c1c1e', marginBottom: 6, textAlign: 'center' }}>Access Required</h2>
       <p style={{ fontSize: 14, color: '#8e8e93', marginBottom: 28, textAlign: 'center' }}>Enter the password to view this student's record.</p>
       <div style={{ width: '100%', maxWidth: 340, background: '#fff', borderRadius: 16, padding: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
@@ -4134,9 +4156,9 @@ function App() {
       const students = selectedCompany.students.filter(s => !s.isArchived).slice().sort((a, b) => a.name.localeCompare(b.name));
       return (
         <>
-          <button className="back-btn" onClick={() => setSelectedCompany(null)}>←</button>
+          <button className="back-btn" onClick={() => setSelectedCompany(null)}><ArrowLeft size={18} /></button>
           <div className="header-with-back">
-            <h1 className="title">🏢 {selectedCompany.name}</h1>
+            <h1 className="title"><Building2 size={22} style={{ marginRight: 8, verticalAlign: "middle" }} />{selectedCompany.name}</h1>
           </div>
           <h2 className="section-title">{students.length} Student{students.length !== 1 ? 's' : ''}</h2>
           {students.map(student => (
@@ -4148,7 +4170,7 @@ function App() {
                   ? <img src={student.photo} alt={student.name} className="student-avatar"
                       onClick={(e) => { e.stopPropagation(); setImageViewer({ images: [student.photo], index: 0 }); }}
                       style={{ cursor: 'pointer' }} />
-                  : <span className="student-avatar-icon">👤</span>
+                  : <span className="student-avatar-icon"><User size={22} /></span>
                 }
                 <div>
                   <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
@@ -4164,7 +4186,7 @@ function App() {
                     fontWeight: 600, cursor: 'pointer', flexShrink: 0
                   }}
                 >
-                  📈 Progress
+                  <TrendingUp size={14} style={{ marginRight: 5, verticalAlign: "middle" }} />Progress
                 </button>
                 <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
               </div>
@@ -4201,7 +4223,7 @@ function App() {
 
         {groupKeys.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>👥</div>
+            <div style={{ marginBottom: 10 }}><Users size={40} strokeWidth={1.2} /></div>
             <p>{t('noStudentsFound')}</p>
           </div>
         )}
@@ -4213,7 +4235,7 @@ function App() {
               onClick={() => setSelectedCompany({ name: groupKey, students })}>
               <div className="card-content">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <span style={{ fontSize: 32 }}>🏢</span>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 12, background: 'rgba(139,0,0,0.08)', flexShrink: 0 }}><Building2 size={26} color="#8B0000" /></span>
                   <div>
                     <h2 className="card-title">{groupKey}</h2>
                     <p className="card-subtitle">{students.length} {t('studentPlural')}</p>
@@ -4284,11 +4306,11 @@ function App() {
               <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">{t('switch')}</button>
             )}
             <button onClick={() => setDarkMode(d => !d)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Toggle Dark Mode">
-                {darkMode ? '☀️' : '🌙'}
+                {darkMode ? <Sun size={16} /> : <Moon size={16} />}
               </button>
             {safeLocalGet(ROLE_KEY) === 'admin' && (
               <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
-                ⚙️
+                <Settings size={16} />
               </button>
             )}
             <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
@@ -4302,8 +4324,8 @@ function App() {
           <div style={{ position: 'relative' }}>
             <span style={{
               position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-              fontSize: 16, pointerEvents: 'none', opacity: 0.55,
-            }}>🔍</span>
+              pointerEvents: 'none', opacity: 0.55,
+            }}><Search size={16} /></span>
             <input
               type="text"
               value={globalSearch}
@@ -4329,7 +4351,7 @@ function App() {
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   lineHeight: 1, padding: 0,
                 }}
-              >✕</button>
+              <X size={14} /></button>
             )}
           </div>
         </div>
@@ -4359,7 +4381,7 @@ function App() {
           </h2>
           {searchResults.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-tertiary)' }}>
-              <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
+              <div style={{ marginBottom: 12 }}><Search size={44} strokeWidth={1.2} /></div>
               <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>No results for "{globalSearch}"</p>
               <p style={{ fontSize: 13, marginTop: 6, color: 'var(--text-tertiary)' }}>Try searching by name, company, or batch</p>
             </div>
@@ -4394,18 +4416,18 @@ function App() {
                     <div className="student-card-left">
                       {student.photo
                         ? <img src={student.photo} alt={student.name} className="student-avatar" />
-                        : <span className="student-avatar-icon">👤</span>
+                        : <span className="student-avatar-icon"><User size={22} /></span>
                       }
                       <div>
                         <h3 className="card-title" style={{ margin: 0 }}>
                           {highlight(student.name)}
                         </h3>
                         <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
-                          🎌 {highlight(batch.name)}
+                          <BookOpen size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{highlight(batch.name)}
                         </p>
                         {student.companyName && (
                           <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
-                            🏢 {highlight(student.companyName)}
+                            <Building2 size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{highlight(student.companyName)}
                           </p>
                         )}
                         {student.kumiai && (
@@ -4438,14 +4460,14 @@ function App() {
             <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
               <div className="card-content">
                 <div>
-                  <h2 className="card-title">🎌 {displayName(batch)}</h2>
+                  <h2 className="card-title"><BookOpen size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{displayName(batch)}</h2>
                   <p className="card-subtitle">
                     {isViewer
                       ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
                       : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
                   </p>
                 </div>
-                {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>}
+                {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>}
               </div>
             </div>
           ))}
@@ -4460,7 +4482,7 @@ function App() {
               fontSize: 15, fontWeight: 700, cursor: 'pointer',
             }}
           >
-            <span style={{ fontSize: 20 }}>📷</span> Scan Student QR Code
+            <span style={{ }}><Camera size={20} /></span> Scan Student QR Code
           </button>
         </>
       )}
@@ -4481,7 +4503,7 @@ function App() {
     return (
     <>
       <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}>←</button>
+        <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
         <div className="header-with-back">
           <h1 className="title">{displayName(selectedBatch)}</h1>
         </div>
@@ -4495,7 +4517,7 @@ function App() {
                 ? <img src={student.photo} alt={student.name} className="student-avatar"
                     onClick={(e) => { e.stopPropagation(); setImageViewer({ images: [student.photo], index: 0 }); }}
                     style={{ cursor: 'pointer' }} />
-                : <span className="student-avatar-icon">👤</span>
+                : <span className="student-avatar-icon"><User size={22} /></span>
               }
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -4532,8 +4554,8 @@ function App() {
             </div>
             {!isViewer && (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }} onClick={(e) => openEditStudent(student, e)}>✎</button>
-                <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}>✕</button>
+                <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }} onClick={(e) => openEditStudent(student, e)}><MoreHorizontal size={13} /></button>
+                <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}><X size={14} /></button>
               </div>
             )}
           </div>
@@ -4550,14 +4572,14 @@ function App() {
   const renderCategories = () => (
     <>
       <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}>←</button>
+        <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
       </div>
       <div className="student-profile-header">
   {selectedStudent.photo
     ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
         onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
         style={{ cursor: 'pointer' }} />
-    : <span className="student-profile-icon">👤</span>
+    : <span className="student-profile-icon"><User size={22} /></span>
   }
   <h1 className="student-profile-name">{selectedStudent.name}</h1>
   {!isViewer && (
@@ -4579,7 +4601,7 @@ function App() {
       <button
         onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}
         style={{ background: '#5856D6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >🔑 Parent QR</button>
+      ><KeyRound size={14} style={{ marginRight: 5, verticalAlign: "middle" }} />Parent QR</button>
 
       <button
         onClick={async () => {
@@ -4635,7 +4657,7 @@ function App() {
       boxShadow: '0 2px 8px rgba(139,0,0,0.25)'
     }}
   >
-    <span style={{ fontSize: 20 }}>📈</span>
+    <TrendingUp size={18} style={{ flexShrink: 0 }} />
     {t('viewProgressChart')}
   </button>
 )}
@@ -4654,15 +4676,15 @@ function App() {
             <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
               <div className="card-content">
                 <div>
-                  <h3 className="card-title">📁 {displayName(cat)}</h3>
+                  <h3 className="card-title"><Folder size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{displayName(cat)}</h3>
                   <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="exam-right">
                   {!isViewer && (
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
-                        onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}>✎</button>
-                      <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>
+                        onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
+                      <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}><X size={14} /></button>
                     </div>
                   )}
                 </div>
@@ -4690,14 +4712,14 @@ function App() {
   const renderEvaluations = () => (
     <>
       <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}>←</button>
+        <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
       </div>
       <div className="student-profile-header">
         {selectedStudent.photo
           ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
               onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
               style={{ cursor: 'pointer' }} />
-          : <span className="student-profile-icon">👤</span>
+          : <span className="student-profile-icon"><User size={22} /></span>
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
       </div>
@@ -4708,10 +4730,10 @@ function App() {
           <div key={ev._id} className="card exam-card clickable" onClick={() => goToEvaluationDetail(ev)}>
             <div className="card-content">
               <div>
-                <h3 className="card-title">📋 {ev.ordinal} Evaluation — {ev.title}</h3>
+                <h3 className="card-title"><FileText size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{ev.ordinal} Evaluation — {ev.title}</h3>
                 <p className="card-subtitle">📅 {ev.date}</p>
               </div>
-              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteEvaluation(ev._id, e)}>✕</button>}
+              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteEvaluation(ev._id, e)}><X size={14} /></button>}
             </div>
           </div>
         ))
@@ -4831,8 +4853,8 @@ function App() {
                     fontSize: 14, lineHeight: 1.6, color: '#1a1a2e',
                     whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                   }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#007AFF', display: 'block', marginBottom: 4, letterSpacing: 0.5 }}>
-                      🇯🇵 日本語訳 {translating && '…'}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#007AFF', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4, letterSpacing: 0.5 }}>
+                      <Flag size={11} /> 日本語訳 {translating && '…'}
                     </span>
                     {translating
                       ? <span style={{ color: '#8e8e93', fontStyle: 'italic' }}>Translating...</span>
@@ -4850,7 +4872,7 @@ function App() {
                           padding: '6px 14px', fontSize: 13, fontWeight: 700,
                           cursor: 'pointer',
                         }}>
-                        ✓ Use Japanese
+                        <Check size={13} style={{ marginRight: 5, verticalAlign: 'middle' }} />Use Japanese
                       </button>
                     )}
                   </div>
@@ -4880,7 +4902,7 @@ function App() {
     return (
       <>
         <div className="sticky-header sticky-header--back">
-          <button className="back-btn" onClick={goBack}>←</button>
+          <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
         </div>
 
         {/* Hero banner */}
@@ -4894,14 +4916,14 @@ function App() {
             <div className="eval-student-badge">
               {selectedStudent?.photo
                 ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="eval-student-avatar" />
-                : <span className="eval-student-icon">👤</span>
+                : <span className="eval-student-icon"><User size={22} /></span>
               }
               <p className="eval-student-name">{selectedStudent?.name}</p>
             </div>
           </div>
           {selectedStudent?.companyName && (
             <div className="eval-company-chip">
-              🏢 {selectedStudent.companyName}
+              <Building2 size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />{selectedStudent.companyName}
             </div>
           )}
         </div>
@@ -4909,7 +4931,7 @@ function App() {
         {/* Skills Rating */}
         <div className="section-box">
           <div className="section-box-header">
-            <span className="section-box-title">🎯 Skills Rating</span>
+            <span className="section-box-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Target size={14} /> Skills Rating</span>
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>Score 0 – 10</span>
           </div>
           {ratingField('reading',   'READING',   '読むこと')}
@@ -5052,10 +5074,10 @@ function App() {
     <>
       <div className="sticky-header sticky-header--back">
         <button className="back-btn" onClick={reorderMode ? exitReorderMode : goBack}>
-          {reorderMode ? '✕' : '←'}
+          {reorderMode ? <X size={18} /> : <ArrowLeft size={18} />}
         </button>
         <div className="header-with-back">
-          <h1 className="title">📁 {displayName(selectedCategory)}</h1>
+          <h1 className="title"><Folder size={16} style={{ marginRight: 8, verticalAlign: "middle" }} />{displayName(selectedCategory)}</h1>
         </div>
         {/* Reorder mode: show Done button in header */}
         {reorderMode && (
@@ -5085,7 +5107,7 @@ function App() {
       <h2 className="section-title">{t('exams')}</h2>
       {displayItems.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">📝</div>
+          <div className="empty-state-icon"><FileText size={40} strokeWidth={1.2} /></div>
           <p className="empty-state-text">{t('noExamsYet')}</p>
           <p className="empty-state-sub">{t('addExamHint')}</p>
         </div>
@@ -5152,7 +5174,7 @@ function App() {
                   <p className="exam-list-name">{displayName(item)}</p>
                   <p className="exam-list-meta">{item.date}</p>
                   {item.images?.length > 0 && (
-                    <span className="exam-photo-chip">📷 {item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
+                    <span className="exam-photo-chip"><Camera size={12} style={{ marginRight: 3, verticalAlign: "middle" }} />{item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
                   )}
                 </div>
                 {/* Pct pill + action buttons (hidden in reorder mode) */}
@@ -5162,8 +5184,8 @@ function App() {
                     {!isViewer && (
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
-                          onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}>✎</button>
-                        <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
+                          onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
+                        <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}><X size={14} /></button>
                       </div>
                     )}
                   </div>
@@ -5209,7 +5231,7 @@ function App() {
     return (
       <>
         <div className="sticky-header sticky-header--back">
-          <button className="back-btn" onClick={goBack}>←</button>
+          <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
         </div>
 
         {/* Hero score card */}
@@ -5229,10 +5251,10 @@ function App() {
         {!isViewer && (
           <div className="exam-action-row">
             <button className="exam-action-btn scan" onClick={() => openScanner(selectedExam._id)}>
-              <span>📷</span> {t('scanPage')}
+              <Camera size={16} style={{ marginRight: 6 }} />{t('scanPage')}
             </button>
             <button className="exam-action-btn upload" onClick={() => triggerFileInput(selectedExam._id)}>
-              <span>🖼️</span> {t('upload')}
+              <Image size={16} style={{ marginRight: 6 }} />{t('upload')}
             </button>
           </div>
         )}
@@ -5244,7 +5266,7 @@ function App() {
 
         {rawImages.length === 0 ? (
           <div className="exam-empty-pages">
-            <div style={{ fontSize: 52, marginBottom: 14 }}>📄</div>
+            <div style={{ marginBottom: 14 }}><File size={52} strokeWidth={1.2} color='#8e8e93' /></div>
             <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>{t('noPagesYet')}</p>
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>{t('scanOrUpload')}</p>
           </div>
@@ -5262,7 +5284,7 @@ function App() {
                     <button
                       className="exam-page-delete"
                       onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
-                    >✕</button>
+                    <X size={14} /></button>
                   )}
 
                   {/* Image */}
@@ -5275,7 +5297,7 @@ function App() {
                     />
                   ) : (
                     <div className="exam-page-loading">
-                      <span>⏳</span>
+                      <Loader size={22} color="#8e8e93" style={{ animation: 'spin 1s linear infinite' }} />
                       <p>{t('loading')}</p>
                     </div>
                   )}
@@ -5337,7 +5359,7 @@ function App() {
             <div className="form-group">
               <label>{t('categoryName')}</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('categoryPlaceholder')} />
-              <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
+              <label style={{ marginTop: 10, display: 'block' }}><Flag size={11} style={{ marginRight: 5, verticalAlign: "middle" }} />日本語名（任意）</label>
               <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：漢字、文法、語彙" />
             </div>
           ) : modalType === 'exam' || modalType === 'editExam' ? (
@@ -5345,7 +5367,7 @@ function App() {
               <div className="form-group">
                 <label>{t('examName')}</label>
                 <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder={t('examNamePlaceholder')} />
-                <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
+                <label style={{ marginTop: 10, display: 'block' }}><Flag size={11} style={{ marginRight: 5, verticalAlign: "middle" }} />日本語名（任意）</label>
                 <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：小テスト１、中間試験、期末試験" />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
@@ -5508,7 +5530,7 @@ function App() {
                 <div className="student-photo-upload" onClick={() => studentPhotoInputRef.current.click()}>
                   {newStudentPhoto
                     ? <img src={newStudentPhoto} alt="Preview" className="student-photo-preview" />
-                    : <><span className="upload-icon" style={{ fontSize: 28 }}>👤</span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>{t('tapToUploadPhoto')}</p></>
+                    : <><span className="upload-icon" style={{ fontSize: 28 }}><User size={22} /></span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>{t('tapToUploadPhoto')}</p></>
                   }
                 </div>
                 <input
@@ -5530,7 +5552,7 @@ function App() {
             <div className="form-group">
               <label>{t('name')}</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('batchNamePlaceholder')} />
-              <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
+              <label style={{ marginTop: 10, display: 'block' }}><Flag size={11} style={{ marginRight: 5, verticalAlign: "middle" }} />日本語名（任意）</label>
               <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：N5 土曜日 14:00" />
             </div>
           )}
@@ -5566,7 +5588,7 @@ function App() {
         <div class="qr-card">
           ${item.photo
             ? `<img src="${item.photo}" class="avatar" />`
-            : `<div class="avatar-placeholder">👤</div>`}
+            : `<div class="avatar-placeholder"><svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg></div>`}
           <img src="${item.dataUrl}" class="qr" />
           <p class="name">${item.name}</p>
           <p class="batch">${selectedBatch.name}</p>
@@ -5711,7 +5733,7 @@ function App() {
             <div key={i} className="qr-card-print">
               {item.photo
                 ? <img src={item.photo} alt={item.name} className="qr-print-avatar" />
-                : <span className="qr-print-icon">👤</span>
+                : <span className="qr-print-icon"><User size={22} /></span>
               }
               <img src={item.dataUrl} alt="QR" className="qr-print-code" />
               <p className="qr-print-name">{item.name}</p>
@@ -5904,6 +5926,7 @@ function App() {
       })()}
       <style>{`
         @keyframes ptr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .search-input::placeholder { color: rgba(255,255,255,0.55) !important; }
         .search-input:focus { outline: none; background: rgba(255,255,255,0.25) !important; }
       `}</style>
