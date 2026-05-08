@@ -2584,7 +2584,7 @@ function TeacherSelect({ onSelect }) {
                         {student.name}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                        <><BookOpen size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : ''}
+                        <BookOpen size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : ''}
                       </div>
                     </div>
                     <span style={{ color: 'var(--text-tertiary)', fontSize: 18 }}>›</span>
