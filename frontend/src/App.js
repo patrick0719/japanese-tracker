@@ -1575,7 +1575,7 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
               <button
                 onClick={() => removeBulkPage(idx)}
                 style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
-              <X size={14} /></button>
+              ><X size={14} /></button>
             </div>
           ))}
         </div>
@@ -4351,7 +4351,7 @@ function App() {
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   lineHeight: 1, padding: 0,
                 }}
-              <X size={14} /></button>
+              ><X size={14} /></button>
             )}
           </div>
         </div>
@@ -5284,7 +5284,7 @@ function App() {
                     <button
                       className="exam-page-delete"
                       onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
-                    <X size={14} /></button>
+                    ><X size={14} /></button>
                   )}
 
                   {/* Image */}
