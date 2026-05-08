@@ -598,7 +598,7 @@ function ProgressChart({ student, batch, onClose }) {
               display: 'inline-block', marginTop: 4,
               background: 'var(--green-soft, #e8f5e9)', color: 'var(--green, #2e7d32)',
               fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12
-            }}<Building2 size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{student.companyName}</span>
+            }}><Building2 size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{student.companyName}</span>
           )}
         </div>
       </div>
