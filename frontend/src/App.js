@@ -3544,18 +3544,22 @@ function App() {
     return res.json();
   };
 
+  // Returns true if the photo value is a newly picked local file (base64),
+  // as opposed to an already-uploaded Cloudinary URL from a previous save.
+  const isNewPhoto = (photo) => photo && photo.startsWith('data:');
+
   const updateStudent = async () => {
     if (!newName || !editingStudent) return;
     setSaving(true);
     try {
-      // Step 1: save name/status/etc. — photo excluded to avoid bloating MongoDB
+      // Step 1: save name/status/etc. — photo handled separately below
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${editingStudent._id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
       });
       let updatedBatch = await res.json();
-      // Step 2: if a new photo was picked (base64 preview), upload to Cloudinary separately
-      if (newStudentPhoto && newStudentPhoto.startsWith('data:')) {
+      // Step 2: only upload if user picked a NEW photo (base64) — skip if it's already a Cloudinary URL
+      if (isNewPhoto(newStudentPhoto)) {
         updatedBatch = await uploadStudentPhoto(selectedBatch._id, editingStudent._id, newStudentPhoto);
       }
       updateBatchInState(updatedBatch);
@@ -3589,8 +3593,8 @@ function App() {
         body: JSON.stringify({ name: newName, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
       });
       let updatedBatch = await res.json();
-      // Step 2: if a photo was picked, upload it to Cloudinary now that we have a studentId
-      if (newStudentPhoto && newStudentPhoto.startsWith('data:')) {
+      // Step 2: if a new photo was picked, upload to Cloudinary now that we have a studentId
+      if (isNewPhoto(newStudentPhoto)) {
         const newStudent = updatedBatch.students[updatedBatch.students.length - 1];
         if (newStudent?._id) {
           updatedBatch = await uploadStudentPhoto(selectedBatch._id, newStudent._id, newStudentPhoto);
