@@ -50,7 +50,7 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const img = new Image();
+      const img = document.createElement('img'); // avoid new Image() minification conflict
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let width = img.width;
