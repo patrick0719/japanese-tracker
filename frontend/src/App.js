@@ -3533,18 +3533,34 @@ function App() {
     setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai(''); setNewNameJa(''); setNewExamDate(''); setNewScholarship('no'); setNewScholarshipType('');
   };
 
+  // Upload student photo to Cloudinary via server, returns updated batch.
+  // This keeps MongoDB lean — only the Cloudinary URL is stored, not raw base64.
+  const uploadStudentPhoto = async (batchId, studentId, base64Photo) => {
+    const res = await fetch(`${API}/batches/${batchId}/students/${studentId}/photo`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo: base64Photo })
+    });
+    if (!res.ok) throw new Error('Photo upload failed');
+    return res.json();
+  };
+
   const updateStudent = async () => {
     if (!newName || !editingStudent) return;
     setSaving(true);
     try {
+      // Step 1: save name/status/etc. — photo excluded to avoid bloating MongoDB
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${editingStudent._id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
+        body: JSON.stringify({ name: newName, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
       });
-      const updatedBatch = await res.json();
+      let updatedBatch = await res.json();
+      // Step 2: if a new photo was picked (base64 preview), upload to Cloudinary separately
+      if (newStudentPhoto && newStudentPhoto.startsWith('data:')) {
+        updatedBatch = await uploadStudentPhoto(selectedBatch._id, editingStudent._id, newStudentPhoto);
+      }
       updateBatchInState(updatedBatch);
       closeModal();
-    } catch { alert('Error updating student.'); }
+    } catch (err) { alert('Error updating student: ' + (err.message || '')); }
     setSaving(false);
   };
 
@@ -3567,14 +3583,22 @@ function App() {
     if (!newName || !selectedBatch) return;
     setSaving(true);
     try {
+      // Step 1: create student without photo first (gets an _id back)
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
+        body: JSON.stringify({ name: newName, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
       });
-      const updatedBatch = await res.json();
+      let updatedBatch = await res.json();
+      // Step 2: if a photo was picked, upload it to Cloudinary now that we have a studentId
+      if (newStudentPhoto && newStudentPhoto.startsWith('data:')) {
+        const newStudent = updatedBatch.students[updatedBatch.students.length - 1];
+        if (newStudent?._id) {
+          updatedBatch = await uploadStudentPhoto(selectedBatch._id, newStudent._id, newStudentPhoto);
+        }
+      }
       updateBatchInState(updatedBatch);
       closeModal();
-    } catch { alert('Error saving student.'); }
+    } catch (err) { alert('Error saving student: ' + (err.message || '')); }
     setSaving(false);
   };
 

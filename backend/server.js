@@ -448,7 +448,7 @@ app.patch('/api/batches/:batchId/students/:studentId', async (req, res) => {
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     if (req.body.name !== undefined) student.name = req.body.name;
-    if (req.body.photo !== undefined) student.photo = req.body.photo;
+    // NOTE: photo is intentionally excluded here — use POST .../photo instead
     if (req.body.status !== undefined) student.status = req.body.status;
     if (req.body.companyName !== undefined) student.companyName = req.body.companyName;
     if (req.body.kumiai !== undefined) student.kumiai = req.body.kumiai;
@@ -457,6 +457,26 @@ app.patch('/api/batches/:batchId/students/:studentId', async (req, res) => {
     await batch.save();
     res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── STUDENT PHOTO UPLOAD (via Cloudinary — keeps MongoDB lean) ───────────────
+// Accepts base64, uploads to Cloudinary, stores only the URL in MongoDB.
+app.post('/api/batches/:batchId/students/:studentId/photo', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const { photo } = req.body; // base64 data URL
+    if (!photo) return res.status(400).json({ error: 'photo is required' });
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const { url } = await cloudinaryUpload(photo); // upload → get back HTTPS URL
+    student.photo = url; // store only the URL, not raw base64
+    await batch.save();
+    res.json(batch);
+  } catch (err) {
+    console.error('[student photo upload]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.patch('/api/batches/:batchId/students/:studentId/status', async (req, res) => {
