@@ -851,42 +851,33 @@ function ProgressChart({ student, batch, onClose }) {
 }
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
-// Simple 4-corner rectangular crop — no homography, no blank/white bugs.
-// corners: { x, y } in IMAGE pixel space (0..imgW, 0..imgH)
-function CropScreen({ dataUrl, imgW, imgH, onConfirm, onRetake }) {
-  const canvasRef   = useRef(null);
+// Reads image dimensions from the dataUrl itself — avoids stale-prop bugs.
+function CropScreen({ dataUrl, onConfirm, onRetake }) {
+  const canvasRef    = useRef(null);
   const containerRef = useRef(null);
-  const imgRef      = useRef(null);
-  const cornersRef  = useRef(null);      // live copy for pointer handlers
-  const draggingRef = useRef(-1);
+  const imgRef       = useRef(null);   // loaded HTMLImageElement
+  const cornersRef   = useRef(null);   // live corners for pointer handlers
+  const draggingRef  = useRef(-1);
+  const [corners, setCorners]   = useState(null);  // null until image loads
+  const [imgSize,  setImgSize]  = useState({ w: 1, h: 1 });
 
-  // corners state: [TL, TR, BR, BL] in image coords
-  const [corners, setCorners] = useState(() => [
-    { x: imgW * 0.08, y: imgH * 0.08 },
-    { x: imgW * 0.92, y: imgH * 0.08 },
-    { x: imgW * 0.92, y: imgH * 0.92 },
-    { x: imgW * 0.08, y: imgH * 0.92 },
-  ]);
-
-  // Keep ref in sync for pointer handlers (no stale closure)
   useEffect(() => { cornersRef.current = corners; }, [corners]);
 
   // ── Drawing ──────────────────────────────────────────────────────
-  const draw = useCallback((img, crns) => {
+  const draw = useCallback((img, crns, iw, ih) => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
     const cW = container.offsetWidth;
     const cH = container.offsetHeight;
-    if (!cW || !cH || !imgW || !imgH) return;
+    if (!cW || !cH || !iw || !ih) return;
 
-    canvas.width = cW;
+    canvas.width  = cW;
     canvas.height = cH;
     const ctx = canvas.getContext('2d');
 
-    // Letterbox: fit image inside canvas
-    const scale = Math.min(cW / imgW, cH / imgH);
-    const drawW = imgW * scale, drawH = imgH * scale;
+    const scale = Math.min(cW / iw, cH / ih);
+    const drawW = iw * scale, drawH = ih * scale;
     const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
 
     ctx.clearRect(0, 0, cW, cH);
@@ -894,11 +885,10 @@ function CropScreen({ dataUrl, imgW, imgH, onConfirm, onRetake }) {
 
     if (!crns || crns.length < 4) return;
 
-    // image coord → canvas pixel
-    const toPx = c => ({ x: ox + (c.x / imgW) * drawW, y: oy + (c.y / imgH) * drawH });
-    const pts = crns.map(toPx);
+    const toPx = c => ({ x: ox + (c.x / iw) * drawW, y: oy + (c.y / ih) * drawH });
+    const pts  = crns.map(toPx);
 
-    // Dim outside crop region
+    // Dim outside crop
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, cW, cH);
@@ -917,32 +907,43 @@ function CropScreen({ dataUrl, imgW, imgH, onConfirm, onRetake }) {
     pts.forEach(p => ctx.lineTo(p.x, p.y));
     ctx.closePath();
     ctx.strokeStyle = '#00FF88';
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth   = 2.5;
     ctx.stroke();
 
     // Corner handles
     const labels = ['↖','↗','↘','↙'];
     pts.forEach((p, i) => {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(p.x, p.y, 22, 0, Math.PI*2);
       ctx.fillStyle = '#00FF88'; ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-      ctx.fillStyle = '#000';
-      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = '#000'; ctx.font = 'bold 14px sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(labels[i], p.x, p.y);
     });
-  }, [imgW, imgH]);
+  }, []);
 
-  // Load image, draw once container has real dimensions
+  // Load image → get real dimensions → init corners → draw
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
       imgRef.current = img;
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      setImgSize({ w: iw, h: ih });
+      const initCorners = [
+        { x: iw * 0.08, y: ih * 0.08 },
+        { x: iw * 0.92, y: ih * 0.08 },
+        { x: iw * 0.92, y: ih * 0.92 },
+        { x: iw * 0.08, y: ih * 0.92 },
+      ];
+      setCorners(initCorners);
+      cornersRef.current = initCorners;
+
+      // Draw after container has real layout dimensions
       const tryDraw = () => {
         const c = containerRef.current;
         if (c && c.offsetWidth > 0 && c.offsetHeight > 0) {
-          draw(img, cornersRef.current);
+          draw(img, initCorners, iw, ih);
         } else {
           requestAnimationFrame(tryDraw);
         }
@@ -952,54 +953,60 @@ function CropScreen({ dataUrl, imgW, imgH, onConfirm, onRetake }) {
     img.src = dataUrl;
   }, []); // eslint-disable-line
 
-  // Redraw on corner change
+  // Redraw on corner drag
   useEffect(() => {
-    if (imgRef.current) draw(imgRef.current, corners);
-  }, [corners, draw]);
+    const img = imgRef.current;
+    if (img && corners) draw(img, corners, imgSize.w, imgSize.h);
+  }, [corners, imgSize, draw]);
 
   // Resize
   useEffect(() => {
-    const onResize = () => { if (imgRef.current) draw(imgRef.current, cornersRef.current); };
+    const onResize = () => {
+      const img = imgRef.current;
+      if (img) draw(img, cornersRef.current, imgSize.w, imgSize.h);
+    };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [draw]);
+  }, [draw, imgSize]);
 
   // ── Coordinate helpers ───────────────────────────────────────────
   const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const src = e.touches ? e.touches[0] : e;
+    const src  = e.touches ? e.touches[0] : e;
     return {
-      x: (src.clientX - rect.left) * (canvas.width / rect.width),
+      x: (src.clientX - rect.left) * (canvas.width  / rect.width),
       y: (src.clientY - rect.top)  * (canvas.height / rect.height),
     };
   };
 
   const toImgCoord = (cx, cy) => {
+    const { w: iw, h: ih } = imgSize;
     const canvas = canvasRef.current;
     const cW = canvas.width, cH = canvas.height;
-    const scale = Math.min(cW / imgW, cH / imgH);
-    const drawW = imgW * scale, drawH = imgH * scale;
+    const scale = Math.min(cW / iw, cH / ih);
+    const drawW = iw * scale, drawH = ih * scale;
     const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
     return {
-      x: Math.max(0, Math.min(imgW, ((cx - ox) / drawW) * imgW)),
-      y: Math.max(0, Math.min(imgH, ((cy - oy) / drawH) * imgH)),
+      x: Math.max(0, Math.min(iw, ((cx - ox) / drawW) * iw)),
+      y: Math.max(0, Math.min(ih, ((cy - oy) / drawH) * ih)),
     };
   };
 
   const hitCorner = (cx, cy) => {
+    const { w: iw, h: ih } = imgSize;
     const canvas = canvasRef.current;
     const cW = canvas.width, cH = canvas.height;
-    const scale = Math.min(cW / imgW, cH / imgH);
-    const drawW = imgW * scale, drawH = imgH * scale;
+    const scale = Math.min(cW / iw, cH / ih);
+    const drawW = iw * scale, drawH = ih * scale;
     const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
     const crns = cornersRef.current;
     if (!crns) return -1;
     let best = -1, bestD = 52;
     crns.forEach((c, i) => {
-      const px = ox + (c.x / imgW) * drawW;
-      const py = oy + (c.y / imgH) * drawH;
-      const d = Math.hypot(cx - px, cy - py);
+      const px = ox + (c.x / iw) * drawW;
+      const py = oy + (c.y / ih) * drawH;
+      const d  = Math.hypot(cx - px, cy - py);
       if (d < bestD) { bestD = d; best = i; }
     });
     return best;
@@ -1010,36 +1017,36 @@ function CropScreen({ dataUrl, imgW, imgH, onConfirm, onRetake }) {
     if (draggingRef.current < 0) return;
     e.preventDefault();
     const {x,y} = getCanvasPos(e);
-    const coord = toImgCoord(x,y);
-    setCorners(prev => prev.map((c,i) => i === draggingRef.current ? coord : c));
+    setCorners(prev => prev.map((c,i) => i === draggingRef.current ? toImgCoord(x,y) : c));
   };
   const onPointerUp = () => { draggingRef.current = -1; };
 
-  // ── CONFIRM: simple rectangular crop using bounding box of corners ─
+  // ── CONFIRM: bounding-box crop from loaded image ─────────────────
   const confirmCrop = () => {
-    if (!imgRef.current || !corners) return;
+    const img = imgRef.current;
+    const crns = cornersRef.current;
+    if (!img || !crns) return;
+    const { w: iw, h: ih } = imgSize;
 
-    const xs = corners.map(c => c.x);
-    const ys = corners.map(c => c.y);
-    const x1 = Math.max(0, Math.min(...xs));
-    const y1 = Math.max(0, Math.min(...ys));
-    const x2 = Math.min(imgW, Math.max(...xs));
-    const y2 = Math.min(imgH, Math.max(...ys));
+    const xs = crns.map(c => c.x);
+    const ys = crns.map(c => c.y);
+    const x1 = Math.max(0,  Math.min(...xs));
+    const y1 = Math.max(0,  Math.min(...ys));
+    const x2 = Math.min(iw, Math.max(...xs));
+    const y2 = Math.min(ih, Math.max(...ys));
     const cropW = Math.round(x2 - x1);
     const cropH = Math.round(y2 - y1);
-
     if (cropW < 10 || cropH < 10) return;
 
     const dst = document.createElement('canvas');
-    dst.width = cropW;
+    dst.width  = cropW;
     dst.height = cropH;
-    dst.getContext('2d').drawImage(imgRef.current, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
+    dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
     onConfirm(dst.toDataURL('image/jpeg', 0.92));
   };
 
   return (
     <div style={{ position:'fixed', inset:0, background:'#111', zIndex:9999, display:'flex', flexDirection:'column' }}>
-      {/* Top bar */}
       <div style={{ background:'#000', padding:'12px 20px', paddingTop:'env(safe-area-inset-top,12px)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
         <button onClick={onRetake} style={{ background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, cursor:'pointer', padding:'10px 16px', borderRadius:8, display:'flex', alignItems:'center', gap:6 }}>
           <ArrowLeft size={15}/> Retake
@@ -1052,8 +1059,12 @@ function CropScreen({ dataUrl, imgW, imgH, onConfirm, onRetake }) {
       <div style={{ color:'rgba(255,255,255,0.45)', fontSize:12, textAlign:'center', padding:'5px 0', flexShrink:0 }}>
         Drag the green corners to adjust crop
       </div>
-      {/* Canvas area */}
       <div ref={containerRef} style={{ flex:1, position:'relative', overflow:'hidden', background:'#000' }}>
+        {!corners && (
+          <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }} />
+          </div>
+        )}
         <canvas
           ref={canvasRef}
           style={{ position:'absolute', inset:0, width:'100%', height:'100%', touchAction:'none' }}
@@ -1061,7 +1072,6 @@ function CropScreen({ dataUrl, imgW, imgH, onConfirm, onRetake }) {
           onTouchStart={onPointerDown} onTouchMove={onPointerMove} onTouchEnd={onPointerUp}
         />
       </div>
-      {/* Bottom bar */}
       <div style={{ flexShrink:0, background:'#000', padding:'14px 24px', paddingBottom:'env(safe-area-inset-bottom,14px)', display:'flex', gap:12 }}>
         <button onClick={onRetake} style={{ flex:1, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, fontWeight:600, padding:'14px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
           <ArrowLeft size={15}/> Retake
@@ -1318,8 +1328,6 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     return (
       <CropScreen
         dataUrl={capturedDataUrl}
-        imgW={capturedW}
-        imgH={capturedH}
         onConfirm={handleCropDone}
         onRetake={retake}
       />
