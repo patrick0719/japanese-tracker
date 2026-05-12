@@ -851,26 +851,31 @@ function ProgressChart({ student, batch, onClose }) {
 }
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
-// Reads image dimensions from the dataUrl itself — avoids stale-prop bugs.
 function CropScreen({ dataUrl, onConfirm, onRetake }) {
   const canvasRef    = useRef(null);
   const containerRef = useRef(null);
-  const imgRef       = useRef(null);   // loaded HTMLImageElement
-  const cornersRef   = useRef(null);   // live corners for pointer handlers
+  const imgRef       = useRef(null);
+  const cornersRef   = useRef(null);
   const draggingRef  = useRef(-1);
-  const [corners, setCorners]   = useState(null);  // null until image loads
-  const [imgSize,  setImgSize]  = useState({ w: 1, h: 1 });
+  const [corners, setCorners] = useState(null);
+  const [imgSize, setImgSize] = useState({ w: 1, h: 1 });
+  const [debugLog, setDebugLog] = useState([]);
+
+  const addLog = (msg) => {
+    console.log('[CropScreen]', msg);
+    setDebugLog(prev => [...prev.slice(-6), msg]);
+  };
 
   useEffect(() => { cornersRef.current = corners; }, [corners]);
 
-  // ── Drawing ──────────────────────────────────────────────────────
   const draw = useCallback((img, crns, iw, ih) => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container) return;
+    if (!canvas || !container) { addLog('draw: no canvas/container'); return; }
     const cW = container.offsetWidth;
     const cH = container.offsetHeight;
-    if (!cW || !cH || !iw || !ih) return;
+    addLog(`draw: container=${cW}x${cH} img=${iw}x${ih}`);
+    if (!cW || !cH || !iw || !ih) { addLog('draw: zero dimension, skipping'); return; }
 
     canvas.width  = cW;
     canvas.height = cH;
@@ -882,13 +887,13 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
 
     ctx.clearRect(0, 0, cW, cH);
     ctx.drawImage(img, ox, oy, drawW, drawH);
+    addLog(`drew image at ${Math.round(ox)},${Math.round(oy)} size ${Math.round(drawW)}x${Math.round(drawH)}`);
 
     if (!crns || crns.length < 4) return;
 
     const toPx = c => ({ x: ox + (c.x / iw) * drawW, y: oy + (c.y / ih) * drawH });
     const pts  = crns.map(toPx);
 
-    // Dim outside crop
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, cW, cH);
@@ -901,7 +906,6 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     ctx.drawImage(img, ox, oy, drawW, drawH);
     ctx.restore();
 
-    // Border
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     pts.forEach(p => ctx.lineTo(p.x, p.y));
@@ -910,7 +914,6 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     ctx.lineWidth   = 2.5;
     ctx.stroke();
 
-    // Corner handles
     const labels = ['↖','↗','↘','↙'];
     pts.forEach((p, i) => {
       ctx.beginPath(); ctx.arc(p.x, p.y, 22, 0, Math.PI*2);
@@ -922,10 +925,12 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     });
   }, []);
 
-  // Load image → get real dimensions → init corners → draw
   useEffect(() => {
+    addLog(`dataUrl length: ${dataUrl ? dataUrl.length : 0}, starts: ${dataUrl ? dataUrl.substring(0,30) : 'none'}`);
+    if (!dataUrl) { addLog('ERROR: no dataUrl!'); return; }
     const img = new Image();
     img.onload = () => {
+      addLog(`img loaded: ${img.naturalWidth}x${img.naturalHeight}`);
       imgRef.current = img;
       const iw = img.naturalWidth;
       const ih = img.naturalHeight;
@@ -938,28 +943,30 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
       ];
       setCorners(initCorners);
       cornersRef.current = initCorners;
-
-      // Draw after container has real layout dimensions
-      const tryDraw = () => {
+      const tryDraw = (attempt) => {
         const c = containerRef.current;
-        if (c && c.offsetWidth > 0 && c.offsetHeight > 0) {
+        const w = c ? c.offsetWidth : 0;
+        const h = c ? c.offsetHeight : 0;
+        addLog(`tryDraw attempt ${attempt}: container=${w}x${h}`);
+        if (w > 0 && h > 0) {
           draw(img, initCorners, iw, ih);
+        } else if (attempt < 30) {
+          requestAnimationFrame(() => tryDraw(attempt + 1));
         } else {
-          requestAnimationFrame(tryDraw);
+          addLog('ERROR: container never got dimensions!');
         }
       };
-      tryDraw();
+      tryDraw(0);
     };
+    img.onerror = (e) => addLog('ERROR: img failed to load: ' + e);
     img.src = dataUrl;
   }, []); // eslint-disable-line
 
-  // Redraw on corner drag
   useEffect(() => {
     const img = imgRef.current;
     if (img && corners) draw(img, corners, imgSize.w, imgSize.h);
   }, [corners, imgSize, draw]);
 
-  // Resize
   useEffect(() => {
     const onResize = () => {
       const img = imgRef.current;
@@ -969,7 +976,6 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     return () => window.removeEventListener('resize', onResize);
   }, [draw, imgSize]);
 
-  // ── Coordinate helpers ───────────────────────────────────────────
   const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -1021,13 +1027,12 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
   };
   const onPointerUp = () => { draggingRef.current = -1; };
 
-  // ── CONFIRM: bounding-box crop from loaded image ─────────────────
   const confirmCrop = () => {
     const img = imgRef.current;
     const crns = cornersRef.current;
+    addLog(`confirmCrop: img=${!!img} crns=${!!crns} imgSize=${imgSize.w}x${imgSize.h}`);
     if (!img || !crns) return;
     const { w: iw, h: ih } = imgSize;
-
     const xs = crns.map(c => c.x);
     const ys = crns.map(c => c.y);
     const x1 = Math.max(0,  Math.min(...xs));
@@ -1036,13 +1041,15 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     const y2 = Math.min(ih, Math.max(...ys));
     const cropW = Math.round(x2 - x1);
     const cropH = Math.round(y2 - y1);
-    if (cropW < 10 || cropH < 10) return;
-
+    addLog(`crop: x1=${Math.round(x1)} y1=${Math.round(y1)} w=${cropW} h=${cropH}`);
+    if (cropW < 10 || cropH < 10) { addLog('ERROR: crop too small'); return; }
     const dst = document.createElement('canvas');
     dst.width  = cropW;
     dst.height = cropH;
     dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
-    onConfirm(dst.toDataURL('image/jpeg', 0.92));
+    const result = dst.toDataURL('image/jpeg', 0.92);
+    addLog(`result dataUrl length: ${result.length}`);
+    onConfirm(result);
   };
 
   return (
@@ -1052,12 +1059,16 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
           <ArrowLeft size={15}/> Retake
         </button>
         <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>Adjust Crop</span>
-        <button onClick={confirmCrop} style={{ background:'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+        <button onClick={confirmCrop} style={{ background:'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor:'pointer' }}>
           Use <Check size={15}/>
         </button>
       </div>
-      <div style={{ color:'rgba(255,255,255,0.45)', fontSize:12, textAlign:'center', padding:'5px 0', flexShrink:0 }}>
-        Drag the green corners to adjust crop
+      {/* DEBUG LOG — makikita sa screen mismo */}
+      <div style={{ background:'#1a1a2e', padding:'6px 12px', flexShrink:0, fontFamily:'monospace', fontSize:10, color:'#0f0' }}>
+        {debugLog.map((l,i) => <div key={i}>{l}</div>)}
+      </div>
+      <div style={{ color:'rgba(255,255,255,0.45)', fontSize:12, textAlign:'center', padding:'4px 0', flexShrink:0 }}>
+        Drag green corners to adjust
       </div>
       <div ref={containerRef} style={{ flex:1, position:'relative', overflow:'hidden', background:'#000' }}>
         {!corners && (
