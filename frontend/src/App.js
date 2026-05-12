@@ -1505,11 +1505,13 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
           const fx = sx-x0,           fy = sy-y0;
           const di = (dy*outW + dx)*4;
 
-          if (x0<0||y0<0||x1>=sw||y1>=sh) {
-            outData.data[di+3]=0; continue;
-          }
-          const i00=(y0*sw+x0)*4, i10=(y0*sw+x1)*4;
-          const i01=(y1*sw+x0)*4, i11=(y1*sw+x1)*4;
+          // Clamp to valid source bounds instead of skipping — prevents white edges in JPEG
+          const cx0 = Math.max(0, Math.min(sw - 1, x0));
+          const cy0 = Math.max(0, Math.min(sh - 1, y0));
+          const cx1 = Math.max(0, Math.min(sw - 1, x1));
+          const cy1 = Math.max(0, Math.min(sh - 1, y1));
+          const i00=(cy0*sw+cx0)*4, i10=(cy0*sw+cx1)*4;
+          const i01=(cy1*sw+cx0)*4, i11=(cy1*sw+cx1)*4;
           for (let c=0;c<3;c++) {
             outData.data[di+c] = Math.round(
               srcData.data[i00+c]*(1-fx)*(1-fy) +
