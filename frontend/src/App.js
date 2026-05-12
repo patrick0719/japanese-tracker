@@ -1348,32 +1348,54 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    // Read dimensions and capture frame BEFORE stopping the stream
-    const W = video.videoWidth || video.clientWidth;
-    const H = video.videoHeight || video.clientHeight;
-    canvas.width = W; canvas.height = H;
-    canvas.getContext('2d').drawImage(video, 0, 0, W, H);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    // Wait until the video has valid dimensions (fixes white/blank image on mobile)
+    const doCapture = () => {
+      const W = video.videoWidth;
+      const H = video.videoHeight;
 
-    // Stop stream only after capture
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      // If dimensions aren't ready yet, wait for the next frame
+      if (!W || !H) {
+        requestAnimationFrame(doCapture);
+        return;
+      }
 
-    setCapturedDataUrl(dataUrl);
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, W, H);
 
-    // Init corners from detection or default
-    const detected = lastCornersRef.current;
-    const initCorners = detected ? [
-      { ...detected[0] }, { ...detected[1] }, { ...detected[2] }, { ...detected[3] }
-    ] : [
-      { x: W * 0.08, y: H * 0.08 },
-      { x: W * 0.92, y: H * 0.08 },
-      { x: W * 0.92, y: H * 0.92 },
-      { x: W * 0.08, y: H * 0.92 }
-    ];
-    setImgSize({ w: W, h: H });
-    setCorners(initCorners);
-    setPhase('crop');
+      // Verify the capture is not blank (check a center pixel)
+      const pixel = ctx.getImageData(Math.floor(W / 2), Math.floor(H / 2), 1, 1).data;
+      const isBlank = pixel[0] === 0 && pixel[1] === 0 && pixel[2] === 0 && pixel[3] === 0;
+      if (isBlank) {
+        // Video frame not ready yet, retry next animation frame
+        requestAnimationFrame(doCapture);
+        return;
+      }
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+      // Stop stream only after a successful capture
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+
+      setCapturedDataUrl(dataUrl);
+
+      // Init corners from detection or default
+      const detected = lastCornersRef.current;
+      const initCorners = detected ? [
+        { ...detected[0] }, { ...detected[1] }, { ...detected[2] }, { ...detected[3] }
+      ] : [
+        { x: W * 0.08, y: H * 0.08 },
+        { x: W * 0.92, y: H * 0.08 },
+        { x: W * 0.92, y: H * 0.92 },
+        { x: W * 0.08, y: H * 0.92 }
+      ];
+      setImgSize({ w: W, h: H });
+      setCorners(initCorners);
+      setPhase('crop');
+    };
+
+    doCapture();
   };
 
 
