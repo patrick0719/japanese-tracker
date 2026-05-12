@@ -851,17 +851,27 @@ function ProgressChart({ student, batch, onClose }) {
 }
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
-function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRetake }) {
-  const canvasRef = useRef(null);
+// Simple 4-corner rectangular crop — no homography, no blank/white bugs.
+// corners: { x, y } in IMAGE pixel space (0..imgW, 0..imgH)
+function CropScreen({ dataUrl, imgW, imgH, onConfirm, onRetake }) {
+  const canvasRef   = useRef(null);
   const containerRef = useRef(null);
-  const draggingRef = useRef(null);
-  const loadedImgRef = useRef(null);
-  const cornersRef = useRef(corners);
+  const imgRef      = useRef(null);
+  const cornersRef  = useRef(null);      // live copy for pointer handlers
+  const draggingRef = useRef(-1);
 
-  // Keep cornersRef in sync so canvas event handlers always see latest corners
+  // corners state: [TL, TR, BR, BL] in image coords
+  const [corners, setCorners] = useState(() => [
+    { x: imgW * 0.08, y: imgH * 0.08 },
+    { x: imgW * 0.92, y: imgH * 0.08 },
+    { x: imgW * 0.92, y: imgH * 0.92 },
+    { x: imgW * 0.08, y: imgH * 0.92 },
+  ]);
+
+  // Keep ref in sync for pointer handlers (no stale closure)
   useEffect(() => { cornersRef.current = corners; }, [corners]);
 
-  // Draw everything onto the canvas
+  // ── Drawing ──────────────────────────────────────────────────────
   const draw = useCallback((img, crns) => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -874,40 +884,37 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
     canvas.height = cH;
     const ctx = canvas.getContext('2d');
 
-    // Fit image inside canvas (letterbox)
+    // Letterbox: fit image inside canvas
     const scale = Math.min(cW / imgW, cH / imgH);
-    const drawW = imgW * scale;
-    const drawH = imgH * scale;
-    const ox = (cW - drawW) / 2;
-    const oy = (cH - drawH) / 2;
+    const drawW = imgW * scale, drawH = imgH * scale;
+    const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
 
-    // Draw full image
     ctx.clearRect(0, 0, cW, cH);
     ctx.drawImage(img, ox, oy, drawW, drawH);
 
     if (!crns || crns.length < 4) return;
 
-    // Convert image coords → canvas pixels
+    // image coord → canvas pixel
     const toPx = c => ({ x: ox + (c.x / imgW) * drawW, y: oy + (c.y / imgH) * drawH });
     const pts = crns.map(toPx);
 
-    // Darken outside crop area
+    // Dim outside crop region
+    ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, cW, cH);
-    ctx.save();
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
     ctx.closePath();
     ctx.clip();
     ctx.clearRect(0, 0, cW, cH);
     ctx.drawImage(img, ox, oy, drawW, drawH);
     ctx.restore();
 
-    // Green border
+    // Border
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
     ctx.closePath();
     ctx.strokeStyle = '#00FF88';
     ctx.lineWidth = 2.5;
@@ -918,64 +925,56 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
     pts.forEach((p, i) => {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
-      ctx.fillStyle = '#00FF88';
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+      ctx.fillStyle = '#00FF88'; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
       ctx.fillStyle = '#000';
       ctx.font = 'bold 14px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(labels[i], p.x, p.y);
     });
   }, [imgW, imgH]);
 
-  // Load image then draw — runs once on mount
+  // Load image, draw once container has real dimensions
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
-      loadedImgRef.current = img;
-      setTimeout(() => {
-        draw(img, cornersRef.current);
-      }, 50);
-    };
-    img.onerror = (e) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('[CropScreen] image failed to load', e);
-      }
+      imgRef.current = img;
+      const tryDraw = () => {
+        const c = containerRef.current;
+        if (c && c.offsetWidth > 0 && c.offsetHeight > 0) {
+          draw(img, cornersRef.current);
+        } else {
+          requestAnimationFrame(tryDraw);
+        }
+      };
+      tryDraw();
     };
     img.src = dataUrl;
   }, []); // eslint-disable-line
 
-  // Redraw whenever corners change (dragging)
+  // Redraw on corner change
   useEffect(() => {
-    if (loadedImgRef.current) {
-      draw(loadedImgRef.current, corners);
-    }
+    if (imgRef.current) draw(imgRef.current, corners);
   }, [corners, draw]);
 
-  // Handle window resize
+  // Resize
   useEffect(() => {
-    const onResize = () => {
-      if (loadedImgRef.current) draw(loadedImgRef.current, cornersRef.current);
-    };
+    const onResize = () => { if (imgRef.current) draw(imgRef.current, cornersRef.current); };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [draw]);
 
-  // Get touch/mouse position relative to canvas, scaled to canvas pixel space
+  // ── Coordinate helpers ───────────────────────────────────────────
   const getCanvasPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const src = e.touches ? e.touches[0] : e;
     return {
       x: (src.clientX - rect.left) * (canvas.width / rect.width),
-      y: (src.clientY - rect.top) * (canvas.height / rect.height),
+      y: (src.clientY - rect.top)  * (canvas.height / rect.height),
     };
   };
 
-  // Convert canvas pixel → image coordinate
   const toImgCoord = (cx, cy) => {
     const canvas = canvasRef.current;
     const cW = canvas.width, cH = canvas.height;
@@ -988,7 +987,6 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
     };
   };
 
-  // Find nearest corner handle within 50px
   const hitCorner = (cx, cy) => {
     const canvas = canvasRef.current;
     const cW = canvas.width, cH = canvas.height;
@@ -997,75 +995,79 @@ function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRet
     const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
     const crns = cornersRef.current;
     if (!crns) return -1;
-    for (let i = 0; i < crns.length; i++) {
-      const px = ox + (crns[i].x / imgW) * drawW;
-      const py = oy + (crns[i].y / imgH) * drawH;
-      if (Math.hypot(cx - px, cy - py) < 50) return i;
-    }
-    return -1;
+    let best = -1, bestD = 52;
+    crns.forEach((c, i) => {
+      const px = ox + (c.x / imgW) * drawW;
+      const py = oy + (c.y / imgH) * drawH;
+      const d = Math.hypot(cx - px, cy - py);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
   };
 
-  const onPointerDown = (e) => {
-    e.preventDefault();
-    const { x, y } = getCanvasPos(e);
-    draggingRef.current = hitCorner(x, y);
-  };
-
+  const onPointerDown = (e) => { e.preventDefault(); const {x,y} = getCanvasPos(e); draggingRef.current = hitCorner(x,y); };
   const onPointerMove = (e) => {
-    if (draggingRef.current == null || draggingRef.current < 0) return;
+    if (draggingRef.current < 0) return;
     e.preventDefault();
-    const { x, y } = getCanvasPos(e);
-    const coord = toImgCoord(x, y);
-    setCorners(prev => prev.map((c, i) => i === draggingRef.current ? coord : c));
+    const {x,y} = getCanvasPos(e);
+    const coord = toImgCoord(x,y);
+    setCorners(prev => prev.map((c,i) => i === draggingRef.current ? coord : c));
   };
+  const onPointerUp = () => { draggingRef.current = -1; };
 
-  const onPointerUp = () => { draggingRef.current = null; };
+  // ── CONFIRM: simple rectangular crop using bounding box of corners ─
+  const confirmCrop = () => {
+    if (!imgRef.current || !corners) return;
+
+    const xs = corners.map(c => c.x);
+    const ys = corners.map(c => c.y);
+    const x1 = Math.max(0, Math.min(...xs));
+    const y1 = Math.max(0, Math.min(...ys));
+    const x2 = Math.min(imgW, Math.max(...xs));
+    const y2 = Math.min(imgH, Math.max(...ys));
+    const cropW = Math.round(x2 - x1);
+    const cropH = Math.round(y2 - y1);
+
+    if (cropW < 10 || cropH < 10) return;
+
+    const dst = document.createElement('canvas');
+    dst.width = cropW;
+    dst.height = cropH;
+    dst.getContext('2d').drawImage(imgRef.current, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
+    onConfirm(dst.toDataURL('image/jpeg', 0.92));
+  };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position:'fixed', inset:0, background:'#111', zIndex:9999, display:'flex', flexDirection:'column' }}>
       {/* Top bar */}
-      <div style={{
-        background: '#000', padding: '12px 20px',
-        paddingTop: 'env(safe-area-inset-top, 12px)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        flexShrink: 0, zIndex: 10, position: 'relative'
-      }}>
-        <button onClick={onRetake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <ArrowLeft size={15} /> Retake
+      <div style={{ background:'#000', padding:'12px 20px', paddingTop:'env(safe-area-inset-top,12px)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+        <button onClick={onRetake} style={{ background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, cursor:'pointer', padding:'10px 16px', borderRadius:8, display:'flex', alignItems:'center', gap:6 }}>
+          <ArrowLeft size={15}/> Retake
         </button>
-        <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
-        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          Use <Check size={15} />
+        <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>Adjust Crop</span>
+        <button onClick={confirmCrop} style={{ background:'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+          Use <Check size={15}/>
         </button>
       </div>
-      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center', padding: '5px 0', flexShrink: 0 }}>
-        Drag the green corners to adjust
+      <div style={{ color:'rgba(255,255,255,0.45)', fontSize:12, textAlign:'center', padding:'5px 0', flexShrink:0 }}>
+        Drag the green corners to adjust crop
       </div>
-      {/* Wrapper gives the canvas measurable dimensions */}
-      <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#000' }}>
+      {/* Canvas area */}
+      <div ref={containerRef} style={{ flex:1, position:'relative', overflow:'hidden', background:'#000' }}>
         <canvas
           ref={canvasRef}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }}
-          onMouseDown={onPointerDown}
-          onMouseMove={onPointerMove}
-          onMouseUp={onPointerUp}
-          onMouseLeave={onPointerUp}
-          onTouchStart={onPointerDown}
-          onTouchMove={onPointerMove}
-          onTouchEnd={onPointerUp}
+          style={{ position:'absolute', inset:0, width:'100%', height:'100%', touchAction:'none' }}
+          onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp} onMouseLeave={onPointerUp}
+          onTouchStart={onPointerDown} onTouchMove={onPointerMove} onTouchEnd={onPointerUp}
         />
       </div>
-      {/* Bottom confirm button — always reachable even if top bar is under notch */}
-      <div style={{
-        flexShrink: 0, background: '#000', padding: '14px 24px',
-        paddingBottom: 'env(safe-area-inset-bottom, 14px)',
-        display: 'flex', gap: 12
-      }}>
-        <button onClick={onRetake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <ArrowLeft size={15} /> Retake
+      {/* Bottom bar */}
+      <div style={{ flexShrink:0, background:'#000', padding:'14px 24px', paddingBottom:'env(safe-area-inset-bottom,14px)', display:'flex', gap:12 }}>
+        <button onClick={onRetake} style={{ flex:1, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, fontWeight:600, padding:'14px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          <ArrowLeft size={15}/> Retake
         </button>
-        <button onClick={onConfirm} style={{ flex: 2, background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <Check size={16} /> Use This Page
+        <button onClick={confirmCrop} style={{ flex:2, background:'#007AFF', color:'#fff', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          <Check size={16}/> Use This Page
         </button>
       </div>
     </div>
@@ -1206,8 +1208,11 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   const animFrameRef = useRef(null);
   const capturingRef = useRef(false);
 
+  // phase: 'camera' | 'crop' | 'review'
   const [phase, setPhase] = useState('camera');
   const [capturedDataUrl, setCapturedDataUrl] = useState(null);
+  const [capturedW, setCapturedW] = useState(1);
+  const [capturedH, setCapturedH] = useState(1);
   const [status, setStatus] = useState('Initializing camera...');
   const [scannedPages, setScannedPages] = useState([]);
   const [bulkUploading, setBulkUploading] = useState(false);
@@ -1217,7 +1222,6 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     if (phase !== 'camera') return;
     capturingRef.current = false;
     let active = true;
-
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -1230,14 +1234,11 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
         video.srcObject = stream;
         video.onloadedmetadata = async () => {
           try { await video.play(); } catch {}
-          setStatus('Point camera at document — tap shutter to capture');
+          setStatus('Point camera at document — tap shutter');
           animFrameRef.current = requestAnimationFrame(overlayLoop);
         };
-      } catch {
-        setStatus('Camera access denied. Please allow camera and retry.');
-      }
+      } catch { setStatus('Camera access denied.'); }
     };
-
     startCamera();
     return () => {
       active = false;
@@ -1246,143 +1247,109 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     };
   }, [phase]); // eslint-disable-line
 
-  // ── OVERLAY LOOP — draw guide rect only ─────────────────────────
+  // ── OVERLAY GUIDE RECT ───────────────────────────────────────────
   const overlayLoop = () => {
     const overlay = overlayCanvasRef.current;
     const video = videoRef.current;
-    if (!overlay || !video || video.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(overlayLoop);
-      return;
-    }
-    overlay.width = overlay.offsetWidth || overlay.clientWidth;
-    overlay.height = overlay.offsetHeight || overlay.clientHeight;
-    if (!overlay.width || !overlay.height) {
-      animFrameRef.current = requestAnimationFrame(overlayLoop);
-      return;
-    }
+    if (!overlay || !video || video.readyState < 2) { animFrameRef.current = requestAnimationFrame(overlayLoop); return; }
+    overlay.width = overlay.offsetWidth;
+    overlay.height = overlay.offsetHeight;
+    if (!overlay.width || !overlay.height) { animFrameRef.current = requestAnimationFrame(overlayLoop); return; }
     const ctx = overlay.getContext('2d');
     ctx.clearRect(0, 0, overlay.width, overlay.height);
-    const padX = overlay.width * 0.075;
-    const padY = overlay.height * 0.1;
-    ctx.strokeStyle = '#00FF88';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([12, 6]);
-    ctx.strokeRect(padX, padY, overlay.width - padX * 2, overlay.height - padY * 2);
-    ctx.setLineDash([]);
-    [[padX,padY],[overlay.width-padX,padY],[overlay.width-padX,overlay.height-padY],[padX,overlay.height-padY]].forEach(([x,y]) => {
-      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2);
-      ctx.fillStyle = '#00FF88'; ctx.fill();
+    const px = overlay.width * 0.075, py = overlay.height * 0.1;
+    const rw = overlay.width - px * 2, rh = overlay.height - py * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, 0, overlay.width, overlay.height);
+    ctx.clearRect(px, py, rw, rh);
+    ctx.strokeStyle = '#00FF88'; ctx.lineWidth = 3; ctx.setLineDash([12,6]);
+    ctx.strokeRect(px, py, rw, rh); ctx.setLineDash([]);
+    [[px,py],[px+rw,py],[px+rw,py+rh],[px,py+rh]].forEach(([x,y]) => {
+      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fillStyle='#00FF88'; ctx.fill();
     });
     animFrameRef.current = requestAnimationFrame(overlayLoop);
   };
 
-  // ── TAKE PHOTO ───────────────────────────────────────────────────
+  // ── TAKE PHOTO → crop phase ──────────────────────────────────────
   const takePhoto = () => {
     if (capturingRef.current) return;
     capturingRef.current = true;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) { capturingRef.current = false; return; }
-
     const capture = () => {
-      const W = video.videoWidth;
-      const H = video.videoHeight;
-      if (!W || !H || video.readyState < 2) {
-        requestAnimationFrame(capture);
-        return;
-      }
-      canvas.width = W;
-      canvas.height = H;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, W, H);
+      const W = video.videoWidth, H = video.videoHeight;
+      if (!W || !H || video.readyState < 2) { requestAnimationFrame(capture); return; }
+      canvas.width = W; canvas.height = H;
+      canvas.getContext('2d').drawImage(video, 0, 0, W, H);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-
       setCapturedDataUrl(dataUrl);
-      setPhase('preview');
+      setCapturedW(W); setCapturedH(H);
+      setPhase('crop');
     };
-
     capture();
   };
 
-  // ── CONFIRM ──────────────────────────────────────────────────────
-  const confirmCapture = () => {
-    if (!capturedDataUrl) return;
+  // ── CROP CONFIRMED ───────────────────────────────────────────────
+  const handleCropDone = (croppedDataUrl) => {
     if (bulkMode) {
-      setScannedPages(prev => [...prev, capturedDataUrl]);
+      setScannedPages(prev => [...prev, croppedDataUrl]);
       setCapturedDataUrl(null);
       setPhase('review');
     } else {
-      onCapture(capturedDataUrl);
+      onCapture(croppedDataUrl);
     }
   };
 
   const retake = () => { setCapturedDataUrl(null); setPhase('camera'); };
   const scanNextPage = () => { setCapturedDataUrl(null); setPhase('camera'); };
-
   const finishBulkScan = async () => {
-    if (scannedPages.length === 0) return;
+    if (!scannedPages.length) return;
     setBulkUploading(true);
     await onCapture(scannedPages);
     setBulkUploading(false);
   };
-
   const removeBulkPage = (idx) => setScannedPages(prev => prev.filter((_, i) => i !== idx));
 
-  // ── PREVIEW PHASE ─────────────────────────────────────────────────
-  if (phase === 'preview' && capturedDataUrl) {
+  // ── CROP PHASE ────────────────────────────────────────────────────
+  if (phase === 'crop' && capturedDataUrl) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ background: '#000', padding: '12px 20px', paddingTop: 'env(safe-area-inset-top, 12px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <button onClick={retake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <ArrowLeft size={15} /> Retake
-          </button>
-          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Preview</span>
-          <button onClick={confirmCapture} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-            Use
-          </button>
-        </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#111' }}>
-          <img src={capturedDataUrl} alt="Captured" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-        </div>
-        <div style={{ flexShrink: 0, background: '#000', padding: '14px 24px', paddingBottom: 'env(safe-area-inset-bottom, 14px)', display: 'flex', gap: 12 }}>
-          <button onClick={retake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer' }}>
-            Retake
-          </button>
-          <button onClick={confirmCapture} style={{ flex: 2, background: '#34C759', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <Check size={16} /> {bulkMode ? 'Add Page' : 'Use This Photo'}
-          </button>
-        </div>
-      </div>
+      <CropScreen
+        dataUrl={capturedDataUrl}
+        imgW={capturedW}
+        imgH={capturedH}
+        onConfirm={handleCropDone}
+        onRetake={retake}
+      />
     );
   }
 
   // ── BULK REVIEW PHASE ─────────────────────────────────────────────
   if (bulkMode && phase === 'review') {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ background: '#000', padding: '12px 20px', paddingTop: 'env(safe-area-inset-top, 12px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>Cancel</button>
-          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>{scannedPages.length} Page{scannedPages.length !== 1 ? 's' : ''} Scanned</span>
-          <button onClick={finishBulkScan} disabled={bulkUploading || scannedPages.length === 0}
-            style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}>
-            {bulkUploading ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 4, verticalAlign: 'middle' }} /> Uploading…</> : <><CheckCircle size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Done ({scannedPages.length})</>}
+      <div style={{ position:'fixed', inset:0, background:'#111', zIndex:9999, display:'flex', flexDirection:'column' }}>
+        <div style={{ background:'#000', padding:'12px 20px', paddingTop:'env(safe-area-inset-top,12px)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <button onClick={onClose} style={{ background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, cursor:'pointer', padding:'10px 16px', borderRadius:8 }}>Cancel</button>
+          <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>{scannedPages.length} Page{scannedPages.length!==1?'s':''} Scanned</span>
+          <button onClick={finishBulkScan} disabled={bulkUploading||!scannedPages.length}
+            style={{ background:!scannedPages.length?'rgba(0,122,255,0.4)':'#34C759', color:'#fff', border:'none', borderRadius:8, padding:'10px 14px', fontSize:14, fontWeight:700, cursor:!scannedPages.length?'default':'pointer' }}>
+            {bulkUploading?<><Loader size={14} style={{animation:'spin 1s linear infinite',marginRight:4,verticalAlign:'middle'}}/>Uploading…</>:<><CheckCircle size={14} style={{marginRight:4,verticalAlign:'middle'}}/>Done ({scannedPages.length})</>}
           </button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, alignContent: 'start' }}>
-          {scannedPages.map((url, idx) => (
-            <div key={idx} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#222', aspectRatio: '3/4' }}>
-              <img src={url} alt={`Page ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>Page {idx + 1}</div>
-              <button onClick={() => removeBulkPage(idx)} style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+        <div style={{ flex:1, overflowY:'auto', padding:12, display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:10, alignContent:'start' }}>
+          {scannedPages.map((url,idx) => (
+            <div key={idx} style={{ position:'relative', borderRadius:10, overflow:'hidden', background:'#222', aspectRatio:'3/4' }}>
+              <img src={url} alt={`Page ${idx+1}`} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+              <div style={{ position:'absolute', top:6, left:6, background:'rgba(0,0,0,0.72)', color:'#fff', fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:10 }}>Page {idx+1}</div>
+              <button onClick={()=>removeBulkPage(idx)} style={{ position:'absolute', top:6, right:6, background:'rgba(255,59,48,0.9)', color:'#fff', border:'none', borderRadius:'50%', width:26, height:26, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><X size={14}/></button>
             </div>
           ))}
         </div>
-        <div style={{ flexShrink: 0, background: '#000', padding: '14px 24px', paddingBottom: 'env(safe-area-inset-bottom, 14px)', display: 'flex', justifyContent: 'center' }}>
-          <button onClick={scanNextPage} style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 48px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
-            <Camera size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />Scan Next Page
+        <div style={{ flexShrink:0, background:'#000', padding:'14px 24px', paddingBottom:'env(safe-area-inset-bottom,14px)', display:'flex', justifyContent:'center' }}>
+          <button onClick={scanNextPage} style={{ background:'#fff', color:'#000', border:'none', borderRadius:14, padding:'14px 48px', fontSize:16, fontWeight:700, cursor:'pointer' }}>
+            <Camera size={16} style={{marginRight:8,verticalAlign:'middle'}}/>Scan Next Page
           </button>
         </div>
       </div>
@@ -1391,22 +1358,22 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
 
   // ── CAMERA PHASE ─────────────────────────────────────────────────
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flexShrink: 0, background: 'rgba(0,0,0,0.85)', paddingTop: 'env(safe-area-inset-top, 12px)', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 18px', fontSize: 15, cursor: 'pointer' }}>Cancel</button>
-        <div style={{ background: 'rgba(60,60,60,0.9)', color: '#fff', padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600 }}>{status}</div>
+    <div style={{ position:'fixed', inset:0, background:'#000', zIndex:9999, display:'flex', flexDirection:'column' }}>
+      <div style={{ flexShrink:0, background:'rgba(0,0,0,0.85)', paddingTop:'env(safe-area-inset-top,12px)', padding:'12px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', color:'#fff', border:'none', borderRadius:10, padding:'8px 18px', fontSize:15, cursor:'pointer' }}>Cancel</button>
+        <div style={{ background:'rgba(60,60,60,0.9)', color:'#fff', padding:'6px 16px', borderRadius:20, fontSize:13, fontWeight:600 }}>{status}</div>
         {bulkMode && scannedPages.length > 0
-          ? <button onClick={() => setPhase('review')} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Review ({scannedPages.length})</button>
-          : <div style={{ width: 80 }} />}
+          ? <button onClick={()=>setPhase('review')} style={{ background:'#34C759', color:'#fff', border:'none', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, cursor:'pointer' }}>Review ({scannedPages.length})</button>
+          : <div style={{width:80}}/>}
       </div>
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
-        <canvas ref={overlayCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <div style={{ flex:1, position:'relative', overflow:'hidden' }}>
+        <video ref={videoRef} style={{ width:'100%', height:'100%', objectFit:'cover' }} playsInline muted />
+        <canvas ref={overlayCanvasRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }} />
+        <canvas ref={canvasRef} style={{ display:'none' }} />
       </div>
-      <div style={{ flexShrink: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 0', paddingBottom: 'env(safe-area-inset-bottom, 24px)' }}>
-        <button onClick={takePhoto} style={{ width: 72, height: 72, borderRadius: '50%', background: '#fff', border: '4px solid rgba(255,255,255,0.4)', boxShadow: '0 0 0 3px #fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Camera size={28} color="#000" />
+      <div style={{ flexShrink:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 0', paddingBottom:'env(safe-area-inset-bottom,24px)' }}>
+        <button onClick={takePhoto} style={{ width:72, height:72, borderRadius:'50%', background:'#fff', border:'4px solid rgba(255,255,255,0.4)', boxShadow:'0 0 0 3px #fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <Camera size={28} color="#000"/>
         </button>
       </div>
     </div>
