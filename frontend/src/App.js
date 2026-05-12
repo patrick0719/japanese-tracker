@@ -915,40 +915,41 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
   };
 
   const onMove = (e) => {
-    if (!dragging.current) return;
+    const d = dragging.current;
+    if (!d) return;
     const src = e.touches ? e.touches[0] : e;
     const container = containerRef.current;
     if (!container) return;
     const cw = container.offsetWidth;
     const ch = container.offsetHeight;
-    const dx = ((src.clientX - dragging.current.startX) / cw) * 100;
-    const dy = ((src.clientY - dragging.current.startY) / ch) * 100;
-    const sb = dragging.current.startBox;
-    const MIN = 10; // minimum box size in %
+    const dx = ((src.clientX - d.startX) / cw) * 100;
+    const dy = ((src.clientY - d.startY) / ch) * 100;
+    const sb = d.startBox;
+    const MIN = 10;
 
-    setBox(() => {
-      let { left, top, right, bottom } = sb;
-      switch (dragging.current.corner) {
-        case 'tl':
-          left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
-          top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
-          break;
-        case 'tr':
-          right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
-          top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
-          break;
-        case 'br':
-          right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
-          bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
-          break;
-        case 'bl':
-          left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
-          bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
-          break;
-        default: break;
-      }
-      return { left, top, right, bottom };
-    });
+    // Read corner OUTSIDE setBox to avoid stale closure
+    const corner = d.corner;
+    let { left, top, right, bottom } = sb;
+    switch (corner) {
+      case 'tl':
+        left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
+        top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
+        break;
+      case 'tr':
+        right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
+        top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
+        break;
+      case 'br':
+        right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
+        bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
+        break;
+      case 'bl':
+        left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
+        bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
+        break;
+      default: break;
+    }
+    setBox({ left, top, right, bottom });
   };
 
   const onEnd = () => { dragging.current = null; };
