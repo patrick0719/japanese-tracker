@@ -851,58 +851,67 @@ function ProgressChart({ student, batch, onClose }) {
 }
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
-// NO canvas — uses <img> + absolute div handles to avoid all drawing bugs.
-// cropBox: { left, top, right, bottom } as 0..100 percentages of the image display area
 function CropScreen({ dataUrl, onConfirm, onRetake }) {
-  const imgRef      = useRef(null);
+  const imgRef       = useRef(null);
   const containerRef = useRef(null);
-  const dragging    = useRef(null); // { corner: 'tl'|'tr'|'bl'|'br', startX, startY, startBox }
+  const dragging     = useRef(null);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgNatural, setImgNatural] = useState({ w: 1, h: 1 });
 
-  // crop box as % of the displayed image (not the raw image pixels)
+  // crop box as % of the CONTAINER (0–100)
   const [box, setBox] = useState({ left: 8, top: 8, right: 92, bottom: 92 });
 
-  // When user confirms — convert % back to pixel coords and crop
+  // ── Confirm: convert container-% → image pixels → canvas crop ───
   const confirmCrop = () => {
     const img = imgRef.current;
-    if (!img) return;
-    const iw = img.naturalWidth;
-    const ih = img.naturalHeight;
-    if (!iw || !ih) return;
-
-    // The <img> is rendered with objectFit:'contain' inside the container.
-    // We need the actual rendered size and offset to convert % -> image px.
     const container = containerRef.current;
+    if (!img || !container) return;
+
+    const { w: iw, h: ih } = imgNatural;
     const cw = container.offsetWidth;
     const ch = container.offsetHeight;
     const scale = Math.min(cw / iw, ch / ih);
-    const drawW = iw * scale;
-    const drawH = ih * scale;
-    const ox = (cw - drawW) / 2;  // letterbox offset x
-    const oy = (ch - drawH) / 2;  // letterbox offset y
+    const drawW = iw * scale, drawH = ih * scale;
+    const ox = (cw - drawW) / 2;
+    const oy = (ch - drawH) / 2;
 
-    // box is % of the CONTAINER, convert to image pixels
-    const x1 = Math.max(0, Math.round(((box.left   / 100) * cw - ox) / scale));
-    const y1 = Math.max(0, Math.round(((box.top    / 100) * ch - oy) / scale));
+    const x1 = Math.max(0,  Math.round(((box.left   / 100) * cw - ox) / scale));
+    const y1 = Math.max(0,  Math.round(((box.top    / 100) * ch - oy) / scale));
     const x2 = Math.min(iw, Math.round(((box.right  / 100) * cw - ox) / scale));
     const y2 = Math.min(ih, Math.round(((box.bottom / 100) * ch - oy) / scale));
     const cropW = x2 - x1;
     const cropH = y2 - y1;
-    if (cropW < 10 || cropH < 10) return;
+
+    // Guard: if crop is too small just use the full image — never show white
+    if (cropW < 20 || cropH < 20) {
+      onConfirm(dataUrl);
+      return;
+    }
 
     const dst = document.createElement('canvas');
     dst.width  = cropW;
     dst.height = cropH;
     dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
-    onConfirm(dst.toDataURL('image/jpeg', 0.92));
+    const result = dst.toDataURL('image/jpeg', 0.92);
+    // Guard: if canvas produced a blank result, fall back to full image
+    if (!result || result.length < 1000) {
+      onConfirm(dataUrl);
+      return;
+    }
+    onConfirm(result);
   };
 
-  // Touch/mouse drag on corner handles
+  // ── Dragging logic ───────────────────────────────────────────────
   const onHandleStart = (e, corner) => {
     e.preventDefault();
     e.stopPropagation();
     const src = e.touches ? e.touches[0] : e;
-    dragging.current = { corner, startX: src.clientX, startY: src.clientY, startBox: { ...box } };
+    dragging.current = {
+      corner,
+      startX:   src.clientX,
+      startY:   src.clientY,
+      startBox: { ...box },
+    };
   };
 
   const onMove = (e) => {
@@ -915,44 +924,63 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     const dx = ((src.clientX - dragging.current.startX) / cw) * 100;
     const dy = ((src.clientY - dragging.current.startY) / ch) * 100;
     const sb = dragging.current.startBox;
-    const MIN_SIZE = 10;
+    const MIN = 10; // minimum box size in %
 
-    setBox(prev => {
+    setBox(() => {
       let { left, top, right, bottom } = sb;
       switch (dragging.current.corner) {
-        case 'tl': left  = Math.min(sb.left  + dx, sb.right  - MIN_SIZE); top    = Math.min(sb.top    + dy, sb.bottom - MIN_SIZE); break;
-        case 'tr': right = Math.max(sb.right + dx, sb.left   + MIN_SIZE); top    = Math.min(sb.top    + dy, sb.bottom - MIN_SIZE); break;
-        case 'br': right = Math.max(sb.right + dx, sb.left   + MIN_SIZE); bottom = Math.max(sb.bottom + dy, sb.top    + MIN_SIZE); break;
-        case 'bl': left  = Math.min(sb.left  + dx, sb.right  - MIN_SIZE); bottom = Math.max(sb.bottom + dy, sb.top    + MIN_SIZE); break;
+        case 'tl':
+          left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
+          top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
+          break;
+        case 'tr':
+          right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
+          top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
+          break;
+        case 'br':
+          right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
+          bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
+          break;
+        case 'bl':
+          left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
+          bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
+          break;
         default: break;
       }
-      return {
-        left:   Math.max(0,   Math.min(left,   100)),
-        top:    Math.max(0,   Math.min(top,    100)),
-        right:  Math.max(0,   Math.min(right,  100)),
-        bottom: Math.max(0,   Math.min(bottom, 100)),
-      };
+      return { left, top, right, bottom };
     });
   };
 
   const onEnd = () => { dragging.current = null; };
 
-  const handleStyle = (style) => ({
-    position: 'absolute', width: 36, height: 36, borderRadius: '50%',
-    background: '#00FF88', border: '3px solid #fff',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 14, fontWeight: 700, color: '#000',
-    cursor: 'pointer', zIndex: 10, touchAction: 'none',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-    transform: 'translate(-50%,-50%)',
-    ...style,
-  });
-
-  const L = `${box.left}%`, T = `${box.top}%`, R = `${100 - box.right}%`, B = `${100 - box.bottom}%`;
+  // ── Handle style helper ──────────────────────────────────────────
+  const handle = (corner, posStyle, label) => (
+    <div
+      key={corner}
+      style={{
+        position: 'absolute',
+        width: 40, height: 40,
+        borderRadius: '50%',
+        background: '#00FF88',
+        border: '3px solid #fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 15, fontWeight: 700, color: '#000',
+        cursor: 'grab', zIndex: 10,
+        touchAction: 'none',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+        transform: 'translate(-50%,-50%)',
+        ...posStyle,
+      }}
+      onMouseDown={e => onHandleStart(e, corner)}
+      onTouchStart={e => onHandleStart(e, corner)}
+    >{label}</div>
+  );
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'#000', zIndex:9999, display:'flex', flexDirection:'column' }}
-      onMouseMove={onMove} onMouseUp={onEnd} onTouchMove={onMove} onTouchEnd={onEnd}
+    <div
+      style={{ position:'fixed', inset:0, background:'#000', zIndex:9999, display:'flex', flexDirection:'column' }}
+      onMouseMove={onMove} onMouseUp={onEnd}
+      onTouchMove={onMove} onTouchEnd={onEnd}
     >
       {/* Top bar */}
       <div style={{ background:'#000', padding:'12px 20px', paddingTop:'env(safe-area-inset-top,12px)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
@@ -960,53 +988,57 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
           <ArrowLeft size={15}/> Retake
         </button>
         <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>Adjust Crop</span>
-        <button onClick={confirmCrop} style={{ background:'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor:'pointer' }}>
+        <button onClick={confirmCrop} style={{ background:'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
           Use <Check size={15}/>
         </button>
       </div>
       <div style={{ color:'rgba(255,255,255,0.5)', fontSize:12, textAlign:'center', padding:'4px 0', flexShrink:0 }}>
-        Drag the green corners to adjust
+        Drag each green corner individually
       </div>
 
       {/* Image + crop overlay */}
-      <div ref={containerRef} style={{ flex:1, position:'relative', overflow:'hidden', background:'#000', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div
+        ref={containerRef}
+        style={{ flex:1, position:'relative', overflow:'hidden', background:'#000', display:'flex', alignItems:'center', justifyContent:'center' }}
+      >
         {!imgLoaded && (
           <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }} />
         )}
         <img
           ref={imgRef}
           src={dataUrl}
-          onLoad={() => setImgLoaded(true)}
+          onLoad={(e) => {
+            setImgNatural({ w: e.target.naturalWidth, h: e.target.naturalHeight });
+            setImgLoaded(true);
+          }}
           alt="Captured"
           draggable={false}
-          style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain', display: imgLoaded ? 'block' : 'none', userSelect:'none' }}
+          style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain', display: imgLoaded ? 'block' : 'none', userSelect:'none', pointerEvents:'none' }}
         />
-        {imgLoaded && (
-          <>
-            {/* Dark overlay outside crop — 4 rectangles */}
-            <div style={{ position:'absolute', inset:0, pointerEvents:'none' }}>
-              {/* top */}
-              <div style={{ position:'absolute', top:0, left:0, right:0, height:T, background:'rgba(0,0,0,0.55)' }}/>
-              {/* bottom */}
-              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:B, background:'rgba(0,0,0,0.55)' }}/>
-              {/* left */}
-              <div style={{ position:'absolute', top:T, bottom:B, left:0, width:L, background:'rgba(0,0,0,0.55)' }}/>
-              {/* right */}
-              <div style={{ position:'absolute', top:T, bottom:B, right:0, width:R, background:'rgba(0,0,0,0.55)' }}/>
-              {/* border */}
-              <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, border:'2.5px solid #00FF88' }}/>
-            </div>
-            {/* Corner handles */}
-            <div style={{ position:'absolute', top:T, left:L, ...handleStyle({}) }}
-              onMouseDown={e=>onHandleStart(e,'tl')} onTouchStart={e=>onHandleStart(e,'tl')}>↖</div>
-            <div style={{ position:'absolute', top:T, left:`${box.right}%`, ...handleStyle({}) }}
-              onMouseDown={e=>onHandleStart(e,'tr')} onTouchStart={e=>onHandleStart(e,'tr')}>↗</div>
-            <div style={{ position:'absolute', top:`${box.bottom}%`, left:`${box.right}%`, ...handleStyle({}) }}
-              onMouseDown={e=>onHandleStart(e,'br')} onTouchStart={e=>onHandleStart(e,'br')}>↘</div>
-            <div style={{ position:'absolute', top:`${box.bottom}%`, left:L, ...handleStyle({}) }}
-              onMouseDown={e=>onHandleStart(e,'bl')} onTouchStart={e=>onHandleStart(e,'bl')}>↙</div>
-          </>
-        )}
+
+        {imgLoaded && (() => {
+          const L  = `${box.left}%`;
+          const T  = `${box.top}%`;
+          const R  = `${100 - box.right}%`;
+          const B  = `${100 - box.bottom}%`;
+          return (
+            <>
+              {/* Dark mask — 4 sides */}
+              <div style={{ position:'absolute', inset:0, pointerEvents:'none' }}>
+                <div style={{ position:'absolute', top:0,    left:0, right:0,  height:T,              background:'rgba(0,0,0,0.6)' }}/>
+                <div style={{ position:'absolute', bottom:0, left:0, right:0,  height:B,              background:'rgba(0,0,0,0.6)' }}/>
+                <div style={{ position:'absolute', top:T,    left:0, width:L,  bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
+                <div style={{ position:'absolute', top:T,    right:0, width:R, bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
+                <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, border:'2.5px solid #00FF88' }}/>
+              </div>
+              {/* Individual corner handles — each pinned to its own coordinate */}
+              {handle('tl', { top: T,              left: L              }, '↖')}
+              {handle('tr', { top: T,              left: `${box.right}%`}, '↗')}
+              {handle('br', { top: `${box.bottom}%`, left: `${box.right}%`}, '↘')}
+              {handle('bl', { top: `${box.bottom}%`, left: L              }, '↙')}
+            </>
+          );
+        })()}
       </div>
 
       {/* Bottom bar */}
