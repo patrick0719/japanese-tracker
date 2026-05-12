@@ -851,209 +851,110 @@ function ProgressChart({ student, batch, onClose }) {
 }
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
+// NO canvas — uses <img> + absolute div handles to avoid all drawing bugs.
+// cropBox: { left, top, right, bottom } as 0..100 percentages of the image display area
 function CropScreen({ dataUrl, onConfirm, onRetake }) {
-  const canvasRef    = useRef(null);
+  const imgRef      = useRef(null);
   const containerRef = useRef(null);
-  const imgRef       = useRef(null);
-  const cornersRef   = useRef(null);
-  const draggingRef  = useRef(-1);
-  const [corners, setCorners] = useState(null);
-  const [imgSize, setImgSize] = useState({ w: 1, h: 1 });
-  const [debugLog, setDebugLog] = useState([]);
+  const dragging    = useRef(null); // { corner: 'tl'|'tr'|'bl'|'br', startX, startY, startBox }
+  const [imgLoaded, setImgLoaded] = useState(false);
 
-  const addLog = (msg) => {
-    console.log('[CropScreen]', msg);
-    setDebugLog(prev => [...prev.slice(-6), msg]);
-  };
+  // crop box as % of the displayed image (not the raw image pixels)
+  const [box, setBox] = useState({ left: 8, top: 8, right: 92, bottom: 92 });
 
-  useEffect(() => { cornersRef.current = corners; }, [corners]);
-
-  const draw = useCallback((img, crns, iw, ih) => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) { addLog('draw: no canvas/container'); return; }
-    const cW = container.offsetWidth;
-    const cH = container.offsetHeight;
-    addLog(`draw: container=${cW}x${cH} img=${iw}x${ih}`);
-    if (!cW || !cH || !iw || !ih) { addLog('draw: zero dimension, skipping'); return; }
-
-    canvas.width  = cW;
-    canvas.height = cH;
-    const ctx = canvas.getContext('2d');
-
-    const scale = Math.min(cW / iw, cH / ih);
-    const drawW = iw * scale, drawH = ih * scale;
-    const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
-
-    ctx.clearRect(0, 0, cW, cH);
-    ctx.drawImage(img, ox, oy, drawW, drawH);
-    addLog(`drew image at ${Math.round(ox)},${Math.round(oy)} size ${Math.round(drawW)}x${Math.round(drawH)}`);
-
-    if (!crns || crns.length < 4) return;
-
-    const toPx = c => ({ x: ox + (c.x / iw) * drawW, y: oy + (c.y / ih) * drawH });
-    const pts  = crns.map(toPx);
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, cW, cH);
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    pts.forEach(p => ctx.lineTo(p.x, p.y));
-    ctx.closePath();
-    ctx.clip();
-    ctx.clearRect(0, 0, cW, cH);
-    ctx.drawImage(img, ox, oy, drawW, drawH);
-    ctx.restore();
-
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    pts.forEach(p => ctx.lineTo(p.x, p.y));
-    ctx.closePath();
-    ctx.strokeStyle = '#00FF88';
-    ctx.lineWidth   = 2.5;
-    ctx.stroke();
-
-    const labels = ['↖','↗','↘','↙'];
-    pts.forEach((p, i) => {
-      ctx.beginPath(); ctx.arc(p.x, p.y, 22, 0, Math.PI*2);
-      ctx.fillStyle = '#00FF88'; ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-      ctx.fillStyle = '#000'; ctx.font = 'bold 14px sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(labels[i], p.x, p.y);
-    });
-  }, []);
-
-  useEffect(() => {
-    addLog(`dataUrl length: ${dataUrl ? dataUrl.length : 0}, starts: ${dataUrl ? dataUrl.substring(0,30) : 'none'}`);
-    if (!dataUrl) { addLog('ERROR: no dataUrl!'); return; }
-    const img = new Image();
-    img.onload = () => {
-      addLog(`img loaded: ${img.naturalWidth}x${img.naturalHeight}`);
-      imgRef.current = img;
-      const iw = img.naturalWidth;
-      const ih = img.naturalHeight;
-      setImgSize({ w: iw, h: ih });
-      const initCorners = [
-        { x: iw * 0.08, y: ih * 0.08 },
-        { x: iw * 0.92, y: ih * 0.08 },
-        { x: iw * 0.92, y: ih * 0.92 },
-        { x: iw * 0.08, y: ih * 0.92 },
-      ];
-      setCorners(initCorners);
-      cornersRef.current = initCorners;
-      const tryDraw = (attempt) => {
-        const c = containerRef.current;
-        const w = c ? c.offsetWidth : 0;
-        const h = c ? c.offsetHeight : 0;
-        addLog(`tryDraw attempt ${attempt}: container=${w}x${h}`);
-        if (w > 0 && h > 0) {
-          draw(img, initCorners, iw, ih);
-        } else if (attempt < 30) {
-          requestAnimationFrame(() => tryDraw(attempt + 1));
-        } else {
-          addLog('ERROR: container never got dimensions!');
-        }
-      };
-      tryDraw(0);
-    };
-    img.onerror = (e) => addLog('ERROR: img failed to load: ' + e);
-    img.src = dataUrl;
-  }, []); // eslint-disable-line
-
-  useEffect(() => {
-    const img = imgRef.current;
-    if (img && corners) draw(img, corners, imgSize.w, imgSize.h);
-  }, [corners, imgSize, draw]);
-
-  useEffect(() => {
-    const onResize = () => {
-      const img = imgRef.current;
-      if (img) draw(img, cornersRef.current, imgSize.w, imgSize.h);
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [draw, imgSize]);
-
-  const getCanvasPos = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const src  = e.touches ? e.touches[0] : e;
-    return {
-      x: (src.clientX - rect.left) * (canvas.width  / rect.width),
-      y: (src.clientY - rect.top)  * (canvas.height / rect.height),
-    };
-  };
-
-  const toImgCoord = (cx, cy) => {
-    const { w: iw, h: ih } = imgSize;
-    const canvas = canvasRef.current;
-    const cW = canvas.width, cH = canvas.height;
-    const scale = Math.min(cW / iw, cH / ih);
-    const drawW = iw * scale, drawH = ih * scale;
-    const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
-    return {
-      x: Math.max(0, Math.min(iw, ((cx - ox) / drawW) * iw)),
-      y: Math.max(0, Math.min(ih, ((cy - oy) / drawH) * ih)),
-    };
-  };
-
-  const hitCorner = (cx, cy) => {
-    const { w: iw, h: ih } = imgSize;
-    const canvas = canvasRef.current;
-    const cW = canvas.width, cH = canvas.height;
-    const scale = Math.min(cW / iw, cH / ih);
-    const drawW = iw * scale, drawH = ih * scale;
-    const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
-    const crns = cornersRef.current;
-    if (!crns) return -1;
-    let best = -1, bestD = 52;
-    crns.forEach((c, i) => {
-      const px = ox + (c.x / iw) * drawW;
-      const py = oy + (c.y / ih) * drawH;
-      const d  = Math.hypot(cx - px, cy - py);
-      if (d < bestD) { bestD = d; best = i; }
-    });
-    return best;
-  };
-
-  const onPointerDown = (e) => { e.preventDefault(); const {x,y} = getCanvasPos(e); draggingRef.current = hitCorner(x,y); };
-  const onPointerMove = (e) => {
-    if (draggingRef.current < 0) return;
-    e.preventDefault();
-    const {x,y} = getCanvasPos(e);
-    setCorners(prev => prev.map((c,i) => i === draggingRef.current ? toImgCoord(x,y) : c));
-  };
-  const onPointerUp = () => { draggingRef.current = -1; };
-
+  // When user confirms — convert % back to pixel coords and crop
   const confirmCrop = () => {
     const img = imgRef.current;
-    const crns = cornersRef.current;
-    addLog(`confirmCrop: img=${!!img} crns=${!!crns} imgSize=${imgSize.w}x${imgSize.h}`);
-    if (!img || !crns) return;
-    const { w: iw, h: ih } = imgSize;
-    const xs = crns.map(c => c.x);
-    const ys = crns.map(c => c.y);
-    const x1 = Math.max(0,  Math.min(...xs));
-    const y1 = Math.max(0,  Math.min(...ys));
-    const x2 = Math.min(iw, Math.max(...xs));
-    const y2 = Math.min(ih, Math.max(...ys));
-    const cropW = Math.round(x2 - x1);
-    const cropH = Math.round(y2 - y1);
-    addLog(`crop: x1=${Math.round(x1)} y1=${Math.round(y1)} w=${cropW} h=${cropH}`);
-    if (cropW < 10 || cropH < 10) { addLog('ERROR: crop too small'); return; }
+    if (!img) return;
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+    if (!iw || !ih) return;
+
+    // The <img> is rendered with objectFit:'contain' inside the container.
+    // We need the actual rendered size and offset to convert % -> image px.
+    const container = containerRef.current;
+    const cw = container.offsetWidth;
+    const ch = container.offsetHeight;
+    const scale = Math.min(cw / iw, ch / ih);
+    const drawW = iw * scale;
+    const drawH = ih * scale;
+    const ox = (cw - drawW) / 2;  // letterbox offset x
+    const oy = (ch - drawH) / 2;  // letterbox offset y
+
+    // box is % of the CONTAINER, convert to image pixels
+    const x1 = Math.max(0, Math.round(((box.left   / 100) * cw - ox) / scale));
+    const y1 = Math.max(0, Math.round(((box.top    / 100) * ch - oy) / scale));
+    const x2 = Math.min(iw, Math.round(((box.right  / 100) * cw - ox) / scale));
+    const y2 = Math.min(ih, Math.round(((box.bottom / 100) * ch - oy) / scale));
+    const cropW = x2 - x1;
+    const cropH = y2 - y1;
+    if (cropW < 10 || cropH < 10) return;
+
     const dst = document.createElement('canvas');
     dst.width  = cropW;
     dst.height = cropH;
     dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
-    const result = dst.toDataURL('image/jpeg', 0.92);
-    addLog(`result dataUrl length: ${result.length}`);
-    onConfirm(result);
+    onConfirm(dst.toDataURL('image/jpeg', 0.92));
   };
 
+  // Touch/mouse drag on corner handles
+  const onHandleStart = (e, corner) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const src = e.touches ? e.touches[0] : e;
+    dragging.current = { corner, startX: src.clientX, startY: src.clientY, startBox: { ...box } };
+  };
+
+  const onMove = (e) => {
+    if (!dragging.current) return;
+    const src = e.touches ? e.touches[0] : e;
+    const container = containerRef.current;
+    if (!container) return;
+    const cw = container.offsetWidth;
+    const ch = container.offsetHeight;
+    const dx = ((src.clientX - dragging.current.startX) / cw) * 100;
+    const dy = ((src.clientY - dragging.current.startY) / ch) * 100;
+    const sb = dragging.current.startBox;
+    const MIN_SIZE = 10;
+
+    setBox(prev => {
+      let { left, top, right, bottom } = sb;
+      switch (dragging.current.corner) {
+        case 'tl': left  = Math.min(sb.left  + dx, sb.right  - MIN_SIZE); top    = Math.min(sb.top    + dy, sb.bottom - MIN_SIZE); break;
+        case 'tr': right = Math.max(sb.right + dx, sb.left   + MIN_SIZE); top    = Math.min(sb.top    + dy, sb.bottom - MIN_SIZE); break;
+        case 'br': right = Math.max(sb.right + dx, sb.left   + MIN_SIZE); bottom = Math.max(sb.bottom + dy, sb.top    + MIN_SIZE); break;
+        case 'bl': left  = Math.min(sb.left  + dx, sb.right  - MIN_SIZE); bottom = Math.max(sb.bottom + dy, sb.top    + MIN_SIZE); break;
+        default: break;
+      }
+      return {
+        left:   Math.max(0,   Math.min(left,   100)),
+        top:    Math.max(0,   Math.min(top,    100)),
+        right:  Math.max(0,   Math.min(right,  100)),
+        bottom: Math.max(0,   Math.min(bottom, 100)),
+      };
+    });
+  };
+
+  const onEnd = () => { dragging.current = null; };
+
+  const handleStyle = (style) => ({
+    position: 'absolute', width: 36, height: 36, borderRadius: '50%',
+    background: '#00FF88', border: '3px solid #fff',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 14, fontWeight: 700, color: '#000',
+    cursor: 'pointer', zIndex: 10, touchAction: 'none',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+    transform: 'translate(-50%,-50%)',
+    ...style,
+  });
+
+  const L = `${box.left}%`, T = `${box.top}%`, R = `${100 - box.right}%`, B = `${100 - box.bottom}%`;
+
   return (
-    <div style={{ position:'fixed', inset:0, background:'#111', zIndex:9999, display:'flex', flexDirection:'column' }}>
+    <div style={{ position:'fixed', inset:0, background:'#000', zIndex:9999, display:'flex', flexDirection:'column' }}
+      onMouseMove={onMove} onMouseUp={onEnd} onTouchMove={onMove} onTouchEnd={onEnd}
+    >
+      {/* Top bar */}
       <div style={{ background:'#000', padding:'12px 20px', paddingTop:'env(safe-area-inset-top,12px)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
         <button onClick={onRetake} style={{ background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, cursor:'pointer', padding:'10px 16px', borderRadius:8, display:'flex', alignItems:'center', gap:6 }}>
           <ArrowLeft size={15}/> Retake
@@ -1063,26 +964,52 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
           Use <Check size={15}/>
         </button>
       </div>
-      {/* DEBUG LOG — makikita sa screen mismo */}
-      <div style={{ background:'#1a1a2e', padding:'6px 12px', flexShrink:0, fontFamily:'monospace', fontSize:10, color:'#0f0' }}>
-        {debugLog.map((l,i) => <div key={i}>{l}</div>)}
+      <div style={{ color:'rgba(255,255,255,0.5)', fontSize:12, textAlign:'center', padding:'4px 0', flexShrink:0 }}>
+        Drag the green corners to adjust
       </div>
-      <div style={{ color:'rgba(255,255,255,0.45)', fontSize:12, textAlign:'center', padding:'4px 0', flexShrink:0 }}>
-        Drag green corners to adjust
-      </div>
-      <div ref={containerRef} style={{ flex:1, position:'relative', overflow:'hidden', background:'#000' }}>
-        {!corners && (
-          <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }} />
-          </div>
+
+      {/* Image + crop overlay */}
+      <div ref={containerRef} style={{ flex:1, position:'relative', overflow:'hidden', background:'#000', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        {!imgLoaded && (
+          <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }} />
         )}
-        <canvas
-          ref={canvasRef}
-          style={{ position:'absolute', inset:0, width:'100%', height:'100%', touchAction:'none' }}
-          onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp} onMouseLeave={onPointerUp}
-          onTouchStart={onPointerDown} onTouchMove={onPointerMove} onTouchEnd={onPointerUp}
+        <img
+          ref={imgRef}
+          src={dataUrl}
+          onLoad={() => setImgLoaded(true)}
+          alt="Captured"
+          draggable={false}
+          style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain', display: imgLoaded ? 'block' : 'none', userSelect:'none' }}
         />
+        {imgLoaded && (
+          <>
+            {/* Dark overlay outside crop — 4 rectangles */}
+            <div style={{ position:'absolute', inset:0, pointerEvents:'none' }}>
+              {/* top */}
+              <div style={{ position:'absolute', top:0, left:0, right:0, height:T, background:'rgba(0,0,0,0.55)' }}/>
+              {/* bottom */}
+              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:B, background:'rgba(0,0,0,0.55)' }}/>
+              {/* left */}
+              <div style={{ position:'absolute', top:T, bottom:B, left:0, width:L, background:'rgba(0,0,0,0.55)' }}/>
+              {/* right */}
+              <div style={{ position:'absolute', top:T, bottom:B, right:0, width:R, background:'rgba(0,0,0,0.55)' }}/>
+              {/* border */}
+              <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, border:'2.5px solid #00FF88' }}/>
+            </div>
+            {/* Corner handles */}
+            <div style={{ position:'absolute', top:T, left:L, ...handleStyle({}) }}
+              onMouseDown={e=>onHandleStart(e,'tl')} onTouchStart={e=>onHandleStart(e,'tl')}>↖</div>
+            <div style={{ position:'absolute', top:T, left:`${box.right}%`, ...handleStyle({}) }}
+              onMouseDown={e=>onHandleStart(e,'tr')} onTouchStart={e=>onHandleStart(e,'tr')}>↗</div>
+            <div style={{ position:'absolute', top:`${box.bottom}%`, left:`${box.right}%`, ...handleStyle({}) }}
+              onMouseDown={e=>onHandleStart(e,'br')} onTouchStart={e=>onHandleStart(e,'br')}>↘</div>
+            <div style={{ position:'absolute', top:`${box.bottom}%`, left:L, ...handleStyle({}) }}
+              onMouseDown={e=>onHandleStart(e,'bl')} onTouchStart={e=>onHandleStart(e,'bl')}>↙</div>
+          </>
+        )}
       </div>
+
+      {/* Bottom bar */}
       <div style={{ flexShrink:0, background:'#000', padding:'14px 24px', paddingBottom:'env(safe-area-inset-bottom,14px)', display:'flex', gap:12 }}>
         <button onClick={onRetake} style={{ flex:1, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, fontWeight:600, padding:'14px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
           <ArrowLeft size={15}/> Retake
