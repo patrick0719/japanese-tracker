@@ -1204,354 +1204,124 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   const overlayCanvasRef = useRef(null);
   const streamRef = useRef(null);
   const animFrameRef = useRef(null);
-  const stableCountRef = useRef(0);
-  const lastCornersRef = useRef(null);
-
-  // phase: 'camera' | 'crop' | 'review' (bulk only)
-  const [phase, setPhase] = useState('camera');
-  const [capturedDataUrl, setCapturedDataUrl] = useState(null);
-  const [imgSize, setImgSize] = useState({ w: 1, h: 1 });
-
-  // 4 draggable corners [TL, TR, BR, BL]
-  const [corners, setCorners] = useState(null);
-
-  const [status, setStatus] = useState('Initializing camera...');
-  const [detected, setDetected] = useState(false);
   const capturingRef = useRef(false);
 
-  // Bulk scan pages accumulator
+  const [phase, setPhase] = useState('camera');
+  const [capturedDataUrl, setCapturedDataUrl] = useState(null);
+  const [status, setStatus] = useState('Initializing camera...');
   const [scannedPages, setScannedPages] = useState([]);
   const [bulkUploading, setBulkUploading] = useState(false);
 
-  // ── CAMERA PHASE ─────────────────────────────────────────────────
+  // ── START CAMERA ─────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'camera') return;
+    capturingRef.current = false;
+    let active = true;
+
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
+        if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setStatus('Point camera at document');
-          animFrameRef.current = requestAnimationFrame(detectLoop);
-        }
-      } catch { setStatus('Camera access denied.'); }
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        video.onloadedmetadata = async () => {
+          try { await video.play(); } catch {}
+          setStatus('Point camera at document — tap shutter to capture');
+          animFrameRef.current = requestAnimationFrame(overlayLoop);
+        };
+      } catch {
+        setStatus('Camera access denied. Please allow camera and retry.');
+      }
     };
+
     startCamera();
     return () => {
+      active = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
   }, [phase]); // eslint-disable-line
 
-  // ── EDGE HINT LOOP (dotted guide only, no auto-capture) ───────────
-  const detectLoop = () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+  // ── OVERLAY LOOP — draw guide rect only ─────────────────────────
+  const overlayLoop = () => {
     const overlay = overlayCanvasRef.current;
-    if (!video || !canvas || !overlay || video.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(detectLoop);
+    const video = videoRef.current;
+    if (!overlay || !video || video.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(overlayLoop);
       return;
     }
-    const W = video.videoWidth;
-    const H = video.videoHeight;
-    const SW = Math.floor(W / 2), SH = Math.floor(H / 2);
-    canvas.width = SW; canvas.height = SH;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, SW, SH);
-    const imageData = ctx.getImageData(0, 0, SW, SH);
-
-    overlay.width = overlay.offsetWidth;
-    overlay.height = overlay.offsetHeight;
-    const oCtx = overlay.getContext('2d');
-    oCtx.clearRect(0, 0, overlay.width, overlay.height);
-
-    const raw = findEdgeHint(imageData, SW, SH);
-    if (raw) {
-      const scaled = raw.map(p => ({ x: p.x * 2, y: p.y * 2 }));
-      const sx = overlay.width / W, sy = overlay.height / H;
-      const pts = scaled.map(p => ({ x: p.x * sx, y: p.y * sy }));
-      oCtx.beginPath();
-      oCtx.moveTo(pts[0].x, pts[0].y);
-      pts.forEach(p => oCtx.lineTo(p.x, p.y));
-      oCtx.closePath();
-      oCtx.strokeStyle = '#00FF88';
-      oCtx.lineWidth = 3;
-      oCtx.setLineDash([10, 6]);
-      oCtx.stroke();
-      oCtx.setLineDash([]);
-      oCtx.fillStyle = 'rgba(0,255,136,0.08)';
-      oCtx.fill();
-      pts.forEach(p => {
-        oCtx.beginPath();
-        oCtx.arc(p.x, p.y, 9, 0, Math.PI * 2);
-        oCtx.fillStyle = '#00FF88';
-        oCtx.fill();
-      });
-      lastCornersRef.current = scaled;
-      setDetected(true);
-      setStatus('Document in frame — tap the shutter to capture');
-    } else {
-      lastCornersRef.current = null;
-      setDetected(false);
-      setStatus('Point camera at document');
+    overlay.width = overlay.offsetWidth || overlay.clientWidth;
+    overlay.height = overlay.offsetHeight || overlay.clientHeight;
+    if (!overlay.width || !overlay.height) {
+      animFrameRef.current = requestAnimationFrame(overlayLoop);
+      return;
     }
-    animFrameRef.current = requestAnimationFrame(detectLoop);
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    const padX = overlay.width * 0.075;
+    const padY = overlay.height * 0.1;
+    ctx.strokeStyle = '#00FF88';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([12, 6]);
+    ctx.strokeRect(padX, padY, overlay.width - padX * 2, overlay.height - padY * 2);
+    ctx.setLineDash([]);
+    [[padX,padY],[overlay.width-padX,padY],[overlay.width-padX,overlay.height-padY],[padX,overlay.height-padY]].forEach(([x,y]) => {
+      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2);
+      ctx.fillStyle = '#00FF88'; ctx.fill();
+    });
+    animFrameRef.current = requestAnimationFrame(overlayLoop);
   };
 
-  const findEdgeHint = (imageData, W, H) => {
-    const data = imageData.data;
-    const STEP = 4;
-    const edges = new Uint8Array(W * H);
-    for (let y = STEP; y < H - STEP; y += STEP) {
-      for (let x = STEP; x < W - STEP; x += STEP) {
-        const i = (y * W + x) * 4;
-        const ir = (y * W + x + STEP) * 4;
-        const id = ((y + STEP) * W + x) * 4;
-        const b = (data[i] + data[i+1] + data[i+2]) / 3;
-        const br = (data[ir] + data[ir+1] + data[ir+2]) / 3;
-        const bd = (data[id] + data[id+1] + data[id+2]) / 3;
-        if (Math.abs(b - br) + Math.abs(b - bd) > 35) edges[y * W + x] = 1;
-      }
-    }
-    const M = Math.floor(W * 0.04);
-    let top = -1, bottom = -1, left = -1, right = -1;
-    for (let y = M; y < H / 2 && top === -1; y++) {
-      let c = 0; for (let x = M; x < W - M; x++) if (edges[y * W + x]) c++;
-      if (c > W * 0.2) top = y;
-    }
-    for (let y = H - M; y > H / 2 && bottom === -1; y--) {
-      let c = 0; for (let x = M; x < W - M; x++) if (edges[y * W + x]) c++;
-      if (c > W * 0.2) bottom = y;
-    }
-    for (let x = M; x < W / 2 && left === -1; x++) {
-      let c = 0; for (let y = M; y < H - M; y++) if (edges[y * W + x]) c++;
-      if (c > H * 0.15) left = x;
-    }
-    for (let x = W - M; x > W / 2 && right === -1; x--) {
-      let c = 0; for (let y = M; y < H - M; y++) if (edges[y * W + x]) c++;
-      if (c > H * 0.15) right = x;
-    }
-    if (top === -1 || bottom === -1 || left === -1 || right === -1) return null;
-    if ((right - left) < W * 0.25 || (bottom - top) < H * 0.25) return null;
-    return [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }];
-  };
-
-  // ── TAKE PHOTO → go to crop phase ────────────────────────────────
+  // ── TAKE PHOTO ───────────────────────────────────────────────────
   const takePhoto = () => {
     if (capturingRef.current) return;
     capturingRef.current = true;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas) { capturingRef.current = false; return; }
 
-    // Wait until the video has valid dimensions (fixes white/blank image on mobile)
-    const doCapture = () => {
+    const capture = () => {
       const W = video.videoWidth;
       const H = video.videoHeight;
-
-      // If dimensions aren't ready yet, wait for the next frame
-      if (!W || !H) {
-        requestAnimationFrame(doCapture);
+      if (!W || !H || video.readyState < 2) {
+        requestAnimationFrame(capture);
         return;
       }
-
-      canvas.width = W; canvas.height = H;
+      canvas.width = W;
+      canvas.height = H;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, W, H);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
-      // Verify the capture is not blank (check a center pixel)
-      const pixel = ctx.getImageData(Math.floor(W / 2), Math.floor(H / 2), 1, 1).data;
-      const isBlank = pixel[0] === 0 && pixel[1] === 0 && pixel[2] === 0 && pixel[3] === 0;
-      if (isBlank) {
-        // Video frame not ready yet, retry next animation frame
-        requestAnimationFrame(doCapture);
-        return;
-      }
-
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-
-      // Stop stream only after a successful capture
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
 
       setCapturedDataUrl(dataUrl);
-
-      // Init corners from detection or default
-      const detected = lastCornersRef.current;
-      const initCorners = detected ? [
-        { ...detected[0] }, { ...detected[1] }, { ...detected[2] }, { ...detected[3] }
-      ] : [
-        { x: W * 0.08, y: H * 0.08 },
-        { x: W * 0.92, y: H * 0.08 },
-        { x: W * 0.92, y: H * 0.92 },
-        { x: W * 0.08, y: H * 0.92 }
-      ];
-      setImgSize({ w: W, h: H });
-      setCorners(initCorners);
-      setPhase('crop');
+      setPhase('preview');
     };
 
-    doCapture();
+    capture();
   };
 
-
-
-  const confirmCrop = () => {
-    if (!corners || !capturedDataUrl) return;
-    const img = new Image();
-    img.onload = () => {
-      // Sort corners robustly into TL, TR, BR, BL regardless of drag order
-      const pts = [...corners];
-      const cx = pts.reduce((s,p) => s+p.x, 0) / 4;
-      const cy = pts.reduce((s,p) => s+p.y, 0) / 4;
-      // Classify by angle from centroid
-      pts.sort((a, b) => Math.atan2(a.y-cy, a.x-cx) - Math.atan2(b.y-cy, b.x-cx));
-      // After angle sort: left-top, left-bottom, right-bottom, right-top (CCW from -π)
-      // Re-sort: top-left has min(x+y), top-right has min(y-x), etc.
-      const sumSort  = [...pts].sort((a,b) => (a.x+a.y)-(b.x+b.y));
-      const diffSort = [...pts].sort((a,b) => (a.x-a.y)-(b.x-b.y));
-      const tl = sumSort[0];
-      const br = sumSort[3];
-      const tr = diffSort[3];
-      const bl = diffSort[0];
-
-      // Output dimensions based on actual edge lengths
-      const wTop   = Math.hypot(tr.x-tl.x, tr.y-tl.y);
-      const wBot   = Math.hypot(br.x-bl.x, br.y-bl.y);
-      const hLeft  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
-      const hRight = Math.hypot(br.x-tr.x, br.y-tr.y);
-      const outW   = Math.round(Math.max(wTop, wBot));
-      const outH   = Math.round(Math.max(hLeft, hRight));
-
-      // ── Compute inverse homography (dest → src) ──────────────────
-      // Source quad: tl, tr, br, bl
-      // Dest quad:   (0,0), (W,0), (W,H), (0,H)
-      // Solve 8 unknowns h00..h22 (h22=1) using 8 equations.
-      // Using the direct linear transform (DLT).
-
-      const sx0=tl.x, sy0=tl.y;
-      const sx1=tr.x, sy1=tr.y;
-      const sx2=br.x, sy2=br.y;
-      const sx3=bl.x, sy3=bl.y;
-      const dx0=0,    dy0=0;
-      const dx1=outW, dy1=0;
-      const dx2=outW, dy2=outH;
-      const dx3=0,    dy3=outH;
-
-      // Build 8x8 matrix A and vector b for Ah=b
-      // For each correspondence (dxi,dyi) -> (sxi,syi):
-      //   sxi = (h0*dxi + h1*dyi + h2) / (h6*dxi + h7*dyi + 1)
-      //   syi = (h3*dxi + h4*dyi + h5) / (h6*dxi + h7*dyi + 1)
-      const corrPts = [
-        [dx0,dy0,sx0,sy0],[dx1,dy1,sx1,sy1],
-        [dx2,dy2,sx2,sy2],[dx3,dy3,sx3,sy3],
-      ];
-      const A = [], b = [];
-      for (const [dx,dy,sx,sy] of corrPts) {
-        A.push([dx, dy, 1,  0,  0,  0, -sx*dx, -sx*dy]);
-        A.push([ 0,  0, 0, dx, dy,  1, -sy*dx, -sy*dy]);
-        b.push(sx); b.push(sy);
-      }
-
-      // Gaussian elimination to solve Ah=b
-      const n = 8;
-      const M = A.map((row, i) => [...row, b[i]]);
-      for (let col = 0; col < n; col++) {
-        // Pivot
-        let maxRow = col;
-        for (let r = col+1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[maxRow][col])) maxRow = r;
-        [M[col], M[maxRow]] = [M[maxRow], M[col]];
-        const pivot = M[col][col];
-        if (Math.abs(pivot) < 1e-10) continue;
-        for (let r = col+1; r < n; r++) {
-          const f = M[r][col] / pivot;
-          for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
-        }
-      }
-      const h = new Array(n).fill(0);
-      for (let r = n-1; r >= 0; r--) {
-        h[r] = M[r][n];
-        for (let c = r+1; c < n; c++) h[r] -= M[r][c] * h[c];
-        h[r] /= M[r][r];
-      }
-      // h = [h0,h1,h2,h3,h4,h5,h6,h7], h8=1
-      const [h0,h1,h2,h3,h4,h5,h6,h7] = h;
-
-      // ── Rasterize ─────────────────────────────────────────────────
-      const srcCanvas = document.createElement('canvas');
-      srcCanvas.width  = img.naturalWidth  || imgSize.w;
-      srcCanvas.height = img.naturalHeight || imgSize.h;
-      srcCanvas.getContext('2d').drawImage(img, 0, 0);
-      const srcData = srcCanvas.getContext('2d').getImageData(0, 0, srcCanvas.width, srcCanvas.height);
-      const sw = srcData.width, sh = srcData.height;
-
-      const dst = document.createElement('canvas');
-      dst.width = outW; dst.height = outH;
-      const outData = dst.getContext('2d').createImageData(outW, outH);
-
-      for (let dy = 0; dy < outH; dy++) {
-        for (let dx = 0; dx < outW; dx++) {
-          const w_  = h6*dx + h7*dy + 1;
-          const sx  = (h0*dx + h1*dy + h2) / w_;
-          const sy  = (h3*dx + h4*dy + h5) / w_;
-
-          // Bilinear sample from source
-          const x0 = Math.floor(sx), y0 = Math.floor(sy);
-          const x1 = x0+1,           y1 = y0+1;
-          const fx = sx-x0,           fy = sy-y0;
-          const di = (dy*outW + dx)*4;
-
-          // Clamp to valid source bounds instead of skipping — prevents white edges in JPEG
-          const cx0 = Math.max(0, Math.min(sw - 1, x0));
-          const cy0 = Math.max(0, Math.min(sh - 1, y0));
-          const cx1 = Math.max(0, Math.min(sw - 1, x1));
-          const cy1 = Math.max(0, Math.min(sh - 1, y1));
-          const i00=(cy0*sw+cx0)*4, i10=(cy0*sw+cx1)*4;
-          const i01=(cy1*sw+cx0)*4, i11=(cy1*sw+cx1)*4;
-          for (let c=0;c<3;c++) {
-            outData.data[di+c] = Math.round(
-              srcData.data[i00+c]*(1-fx)*(1-fy) +
-              srcData.data[i10+c]*fx*(1-fy) +
-              srcData.data[i01+c]*(1-fx)*fy +
-              srcData.data[i11+c]*fx*fy
-            );
-          }
-          outData.data[di+3] = 255;
-        }
-      }
-      dst.getContext('2d').putImageData(outData, 0, 0);
-      const croppedUrl = dst.toDataURL('image/jpeg', 0.92);
-      if (bulkMode) {
-        setScannedPages(prev => [...prev, croppedUrl]);
-        setPhase('review');
-      } else {
-        onCapture(croppedUrl);
-      }
-    };
-    img.src = capturedDataUrl;
+  // ── CONFIRM ──────────────────────────────────────────────────────
+  const confirmCapture = () => {
+    if (!capturedDataUrl) return;
+    if (bulkMode) {
+      setScannedPages(prev => [...prev, capturedDataUrl]);
+      setCapturedDataUrl(null);
+      setPhase('review');
+    } else {
+      onCapture(capturedDataUrl);
+    }
   };
 
-  // Shared reset — used by both "Retake" and "Scan Next Page"
-  const resetToCamera = () => {
-    capturingRef.current = false;
-    setCapturedDataUrl(null);
-    setCorners(null);
-    stableCountRef.current = 0;
-    lastCornersRef.current = null;
-    setDetected(false);
-    setPhase('camera');
-  };
+  const retake = () => { setCapturedDataUrl(null); setPhase('camera'); };
+  const scanNextPage = () => { setCapturedDataUrl(null); setPhase('camera'); };
 
-  const retake = resetToCamera;
-
-  // Bulk: go back to camera to scan next page
-  const scanNextPage = resetToCamera;
-
-  // Bulk: upload all scanned pages
   const finishBulkScan = async () => {
     if (scannedPages.length === 0) return;
     setBulkUploading(true);
@@ -1559,61 +1329,59 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     setBulkUploading(false);
   };
 
-  // Bulk: remove a page from the list
-  const removeBulkPage = (idx) => {
-    setScannedPages(prev => prev.filter((_, i) => i !== idx));
-  };
+  const removeBulkPage = (idx) => setScannedPages(prev => prev.filter((_, i) => i !== idx));
+
+  // ── PREVIEW PHASE ─────────────────────────────────────────────────
+  if (phase === 'preview' && capturedDataUrl) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ background: '#000', padding: '12px 20px', paddingTop: 'env(safe-area-inset-top, 12px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <button onClick={retake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ArrowLeft size={15} /> Retake
+          </button>
+          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Preview</span>
+          <button onClick={confirmCapture} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+            Use
+          </button>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#111' }}>
+          <img src={capturedDataUrl} alt="Captured" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+        </div>
+        <div style={{ flexShrink: 0, background: '#000', padding: '14px 24px', paddingBottom: 'env(safe-area-inset-bottom, 14px)', display: 'flex', gap: 12 }}>
+          <button onClick={retake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer' }}>
+            Retake
+          </button>
+          <button onClick={confirmCapture} style={{ flex: 2, background: '#34C759', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Check size={16} /> {bulkMode ? 'Add Page' : 'Use This Photo'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ── BULK REVIEW PHASE ─────────────────────────────────────────────
   if (bulkMode && phase === 'review') {
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-        {/* Top bar */}
-        <div style={{
-          background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
-          paddingTop: 'env(safe-area-inset-top, 12px)'
-        }}>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
-            Cancel
-          </button>
-          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
-            {scannedPages.length} Page{scannedPages.length !== 1 ? 's' : ''} Scanned
-          </span>
-          <button
-            onClick={finishBulkScan}
-            disabled={bulkUploading || scannedPages.length === 0}
-            style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}
-          >
+        <div style={{ background: '#000', padding: '12px 20px', paddingTop: 'env(safe-area-inset-top, 12px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>Cancel</button>
+          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>{scannedPages.length} Page{scannedPages.length !== 1 ? 's' : ''} Scanned</span>
+          <button onClick={finishBulkScan} disabled={bulkUploading || scannedPages.length === 0}
+            style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}>
             {bulkUploading ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 4, verticalAlign: 'middle' }} /> Uploading…</> : <><CheckCircle size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Done ({scannedPages.length})</>}
           </button>
         </div>
-
-        {/* Scrollable pages grid — takes remaining space above bottom bar */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, alignContent: 'start' }}>
           {scannedPages.map((url, idx) => (
             <div key={idx} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#222', aspectRatio: '3/4' }}>
               <img src={url} alt={`Page ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>
-                Page {idx + 1}
-              </div>
-              <button
-                onClick={() => removeBulkPage(idx)}
-                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
-              ><X size={14} /></button>
+              <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>Page {idx + 1}</div>
+              <button onClick={() => removeBulkPage(idx)} style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
             </div>
           ))}
         </div>
-
-        {/* Bottom bar — always visible, never scrolled away */}
-        <div style={{
-          flexShrink: 0, background: '#000', padding: '14px 24px',
-          paddingBottom: 'env(safe-area-inset-bottom, 14px)',
-          display: 'flex', justifyContent: 'center'
-        }}>
-          <button
-            onClick={scanNextPage}
-            style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 48px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
-          >
+        <div style={{ flexShrink: 0, background: '#000', padding: '14px 24px', paddingBottom: 'env(safe-area-inset-bottom, 14px)', display: 'flex', justifyContent: 'center' }}>
+          <button onClick={scanNextPage} style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 48px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
             <Camera size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />Scan Next Page
           </button>
         </div>
@@ -1621,92 +1389,29 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
     );
   }
 
-  // ── CROP RENDER ──────────────────────────────────────────────────
-  if (phase === 'crop' && capturedDataUrl && corners) {
-    return <CropScreen
-      dataUrl={capturedDataUrl}
-      imgW={imgSize.w}
-      imgH={imgSize.h}
-      corners={corners}
-      setCorners={setCorners}
-      onConfirm={confirmCrop}
-      onRetake={retake}
-    />;
-  }
-
-  // Camera phase
+  // ── CAMERA PHASE ─────────────────────────────────────────────────
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-      {/* Status bar at top */}
-      <div style={{
-        flexShrink: 0, paddingTop: 'env(safe-area-inset-top, 12px)',
-        background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '12px 16px'
-      }}>
-        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 18px', fontSize: 15, cursor: 'pointer' }}>
-          Cancel
-        </button>
-        <div style={{
-          background: detected ? 'rgba(0,160,70,0.92)' : 'rgba(60,60,60,0.9)',
-          color: '#fff', padding: '6px 16px', borderRadius: 20,
-          fontSize: 13, fontWeight: 600
-        }}>
-          {detected
-            ? <><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#4cd964', marginRight: 6, verticalAlign: 'middle' }} />{status}</>
-            : <><Search size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />{status}</>
-          }
-        </div>
-        {/* Page counter / review shortcut */}
-        {bulkMode && scannedPages.length > 0 ? (
-          <button
-            onClick={() => setPhase('review')}
-            style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', minWidth: 60, textAlign: 'center' }}
-          >
-            {scannedPages.length}p ›
-          </button>
-        ) : (
-          <div style={{ width: 70 }} />
-        )}
+      <div style={{ flexShrink: 0, background: 'rgba(0,0,0,0.85)', paddingTop: 'env(safe-area-inset-top, 12px)', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 18px', fontSize: 15, cursor: 'pointer' }}>Cancel</button>
+        <div style={{ background: 'rgba(60,60,60,0.9)', color: '#fff', padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600 }}>{status}</div>
+        {bulkMode && scannedPages.length > 0
+          ? <button onClick={() => setPhase('review')} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Review ({scannedPages.length})</button>
+          : <div style={{ width: 80 }} />}
       </div>
-
-      {/* Camera viewfinder */}
-      <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
         <canvas ref={overlayCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
         <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-        {/* Dotted guide when nothing detected */}
-        {!detected && (
-          <div style={{
-            position: 'absolute', top: '6%', left: '5%', right: '5%', bottom: '6%',
-            border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 12, pointerEvents: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Place document inside</span>
-          </div>
-        )}
       </div>
-
-      {/* Bottom shutter bar - always visible, fixed height */}
-      <div style={{
-        flexShrink: 0, background: '#111',
-        paddingBottom: 'env(safe-area-inset-bottom, 12px)',
-        height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center'
-      }}>
-        <button onClick={takePhoto} style={{
-          background: '#fff', color: '#000', border: 'none', borderRadius: 50,
-          width: 72, height: 72, fontSize: 28, fontWeight: 700, cursor: 'pointer',
-          boxShadow: '0 0 0 5px rgba(255,255,255,0.25), 0 0 0 8px rgba(255,255,255,0.1)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0
-        }}>
-          <Camera size={30} color="#000" />
+      <div style={{ flexShrink: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 0', paddingBottom: 'env(safe-area-inset-bottom, 24px)' }}>
+        <button onClick={takePhoto} style={{ width: 72, height: 72, borderRadius: '50%', background: '#fff', border: '4px solid rgba(255,255,255,0.4)', boxShadow: '0 0 0 3px #fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Camera size={28} color="#000" />
         </button>
       </div>
     </div>
   );
 }
-
 
 // ── SETTINGS PAGE ────────────────────────────────────────────────────────────
 function SettingsPage({ batches, onClose, API }) {
