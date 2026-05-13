@@ -1249,8 +1249,6 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
 }
 
 // ── QUICK ADD EXAM MODAL ─────────────────────────────────────────────────────
-// Triggered from student profile after QR scan.
-// Lets teacher pick a category, scan a barcode for exam names, enter score/date.
 function QuickAddExamModal({ student, onSave, onClose }) {
   const categories = student.categories || [];
 
@@ -1266,12 +1264,8 @@ function QuickAddExamModal({ student, onSave, onClose }) {
 
   const handleBarcodeResult = (text) => {
     setShowScanner(false);
-    // Flash feedback
     setScanFlash(true);
-    setTimeout(() => setScanFlash(false), 600);
-
-    // Expected barcode format: "EN_NAME|JA_NAME"
-    // If no separator, put full text in EN field only
+    setTimeout(() => setScanFlash(false), 2000);
     if (text.includes('|')) {
       const [en, ja] = text.split('|');
       setExamNameEn(en.trim());
@@ -1292,140 +1286,104 @@ function QuickAddExamModal({ student, onSave, onClose }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div style={{ background: '#f2f2f7', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto', padding: '0 0 env(safe-area-inset-bottom,16px)' }}>
-        {/* Handle bar */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0' }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#c7c7cc' }} />
-        </div>
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-sheet">
+        <div className="modal-handle" />
+        <h2 className="modal-title">Quick Add Exam</h2>
 
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px 8px' }}>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#007AFF', fontSize: 16, cursor: 'pointer', padding: '4px 0' }}>Cancel</button>
-          <span style={{ fontWeight: 700, fontSize: 17 }}>Quick Add Exam</span>
-          <button
-            onClick={handleSave}
-            disabled={!canSave || saving}
-            style={{ background: 'none', border: 'none', color: canSave ? '#007AFF' : '#c7c7cc', fontSize: 16, fontWeight: 700, cursor: canSave ? 'pointer' : 'default', padding: '4px 0' }}
-          >{saving ? 'Saving...' : 'Save'}</button>
-        </div>
-
-        <div style={{ padding: '4px 16px 20px' }}>
-
-          {/* Category */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: '4px 16px', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #f0f0f0', padding: '12px 0' }}>
-              <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>Category</span>
-              <select
-                value={categoryId}
-                onChange={e => setCategoryId(e.target.value)}
-                style={{ border: 'none', background: 'transparent', fontSize: 15, color: categoryId ? '#3a3a3c' : '#c7c7cc', textAlign: 'right', outline: 'none', cursor: 'pointer', maxWidth: 200 }}
-              >
-                <option value="">Select category…</option>
-                {categories.map(cat => (
-                  <option key={cat._id} value={cat._id}>{cat.name}</option>
-                ))}
-              </select>
-            </div>
-            {categories.length === 0 && (
-              <p style={{ fontSize: 12, color: '#ff3b30', margin: '8px 0 4px', textAlign: 'center' }}>No categories yet — add one first from the profile.</p>
-            )}
-          </div>
-
-          {/* Barcode Scanner */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showScanner ? 12 : 0 }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>Scan Barcode</div>
-                <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 2 }}>Auto-fills exam name (EN + JP)</div>
-              </div>
-              <button
-                onClick={() => setShowScanner(v => !v)}
-                style={{ background: showScanner ? '#ff3b30' : '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-              >
-                {showScanner ? <><X size={13}/> Close</> : <><Camera size={13}/> Scan</>}
-              </button>
-            </div>
-            {showScanner && (
-              <InlineBarcodeScanner
-                onResult={handleBarcodeResult}
-                onCancel={() => setShowScanner(false)}
-              />
-            )}
-            {scanFlash && (
-              <div style={{ textAlign: 'center', color: '#34C759', fontWeight: 700, fontSize: 14, marginTop: 8 }}>
-                ✅ Barcode scanned!
-              </div>
-            )}
-          </div>
-
-          {/* Exam Names */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: '4px 16px', marginBottom: 12 }}>
-            <div style={{ borderBottom: '1px solid #f0f0f0', padding: '12px 0' }}>
-              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>Exam Name (English)</div>
-              <input
-                value={examNameEn}
-                onChange={e => setExamNameEn(e.target.value)}
-                placeholder="e.g. Chapter 3 Quiz"
-                style={{ width: '100%', border: 'none', outline: 'none', fontSize: 15, background: 'transparent', color: '#3a3a3c' }}
-              />
-            </div>
-            <div style={{ padding: '12px 0' }}>
-              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>試験名（日本語）</div>
-              <input
-                value={examNameJa}
-                onChange={e => setExamNameJa(e.target.value)}
-                placeholder="例：第3章テスト"
-                style={{ width: '100%', border: 'none', outline: 'none', fontSize: 15, background: 'transparent', color: '#3a3a3c' }}
-              />
-            </div>
-          </div>
-
-          {/* Score / Total */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: '4px 16px', marginBottom: 12, display: 'flex' }}>
-            <div style={{ flex: 1, borderRight: '1px solid #f0f0f0', padding: '12px 12px 12px 0' }}>
-              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>Score</div>
-              <input
-                type="number" min="0" value={score}
-                onChange={e => setScore(e.target.value)}
-                placeholder="85"
-                style={{ width: '100%', border: 'none', outline: 'none', fontSize: 22, fontWeight: 700, background: 'transparent', color: '#3a3a3c' }}
-              />
-            </div>
-            <div style={{ flex: 1, padding: '12px 0 12px 12px' }}>
-              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>Total</div>
-              <input
-                type="number" min="1" value={totalScore}
-                onChange={e => setTotalScore(e.target.value)}
-                placeholder="100"
-                style={{ width: '100%', border: 'none', outline: 'none', fontSize: 22, fontWeight: 700, background: 'transparent', color: '#3a3a3c' }}
-              />
-            </div>
-          </div>
-
-          {/* Date */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: '4px 16px', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 0' }}>
-              <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>Date</span>
-              <input
-                type="date" value={examDate}
-                onChange={e => setExamDate(e.target.value)}
-                style={{ border: 'none', background: 'transparent', fontSize: 15, color: '#3a3a3c', outline: 'none', cursor: 'pointer' }}
-              />
-            </div>
-          </div>
-
-          {/* Save button */}
-          <button
-            onClick={handleSave}
-            disabled={!canSave || saving}
-            style={{ width: '100%', background: canSave ? '#007AFF' : '#c7c7cc', color: '#fff', border: 'none', borderRadius: 14, padding: '16px', fontSize: 17, fontWeight: 700, cursor: canSave ? 'pointer' : 'default', transition: 'background 0.2s' }}
+        {/* Category */}
+        <div className="form-group">
+          <label>Category</label>
+          <select
+            value={categoryId}
+            onChange={e => setCategoryId(e.target.value)}
+            style={{ display:'block', width:'100%', padding:'13px 15px', fontSize:15, borderRadius:'var(--radius-md)', border:'1.5px solid var(--border-med)', background:'var(--surface2)', color:'var(--text-primary)', outline:'none' }}
           >
-            {saving ? 'Saving…' : '＋ Add Exam'}
-          </button>
+            <option value="">Select category…</option>
+            {categories.map(cat => (
+              <option key={cat._id} value={cat._id}>{cat.name}</option>
+            ))}
+          </select>
+          {categories.length === 0 && (
+            <p style={{ fontSize:12, color:'var(--red)', marginTop:6 }}>No categories yet — add one first from the profile.</p>
+          )}
         </div>
+
+        {/* Barcode Scanner */}
+        <div className="form-group">
+          <label>Scan Barcode <span style={{ fontWeight:400, color:'var(--text-tertiary)', fontSize:12 }}>— auto-fills exam names</span></label>
+          <button
+            onClick={() => setShowScanner(v => !v)}
+            className={showScanner ? 'btn-secondary' : 'btn-secondary'}
+            style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, borderColor: showScanner ? 'var(--red)' : 'var(--border-med)', color: showScanner ? 'var(--red)' : 'var(--text-secondary)' }}
+          >
+            {showScanner ? <><X size={14}/> Close Scanner</> : <><Camera size={14}/> Open Scanner</>}
+          </button>
+          {showScanner && (
+            <div style={{ marginTop:10 }}>
+              <InlineBarcodeScanner onResult={handleBarcodeResult} onCancel={() => setShowScanner(false)} />
+            </div>
+          )}
+          {scanFlash && (
+            <div style={{ marginTop:8, padding:'8px 12px', background:'var(--green-soft)', borderRadius:'var(--radius-sm)', color:'var(--green)', fontWeight:600, fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+              <CheckCircle size={14}/> Barcode scanned successfully!
+            </div>
+          )}
+        </div>
+
+        {/* Exam Name EN */}
+        <div className="form-group">
+          <label>Exam Name (English)</label>
+          <input
+            type="text"
+            value={examNameEn}
+            onChange={e => setExamNameEn(e.target.value)}
+            placeholder="e.g. Chapter 3 Quiz"
+          />
+        </div>
+
+        {/* Exam Name JP */}
+        <div className="form-group">
+          <label><Flag size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>試験名（日本語）</label>
+          <input
+            type="text"
+            value={examNameJa}
+            onChange={e => setExamNameJa(e.target.value)}
+            placeholder="例：第3章テスト"
+          />
+        </div>
+
+        {/* Score / Total */}
+        <div style={{ display:'flex', gap:12 }}>
+          <div className="form-group" style={{ flex:1 }}>
+            <label>Score</label>
+            <input type="number" min="0" value={score} onChange={e => setScore(e.target.value)} placeholder="85" />
+          </div>
+          <div className="form-group" style={{ flex:1 }}>
+            <label>Total</label>
+            <input type="number" min="1" value={totalScore} onChange={e => setTotalScore(e.target.value)} placeholder="100" />
+          </div>
+        </div>
+
+        {/* Date */}
+        <div className="form-group">
+          <label>Date</label>
+          <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} />
+        </div>
+
+        {/* Save */}
+        <button
+          className="btn-primary"
+          onClick={handleSave}
+          disabled={!canSave || saving}
+          style={{ opacity: canSave ? 1 : 0.45, cursor: canSave ? 'pointer' : 'default' }}
+        >
+          {saving ? 'Saving…' : '+ Add Exam'}
+        </button>
+
+        <button className="btn-secondary" onClick={onClose} style={{ marginTop:10 }}>
+          Cancel
+        </button>
       </div>
     </div>
   );
