@@ -1193,13 +1193,22 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
 
   useEffect(() => {
     let cancelled = false;
-    const reader = new BrowserMultiFormatReader();
-    readerRef.current = reader;
 
     const start = async () => {
       try {
+        // Import BarcodeFormat to restrict to linear barcodes only (no QR)
+        const { BrowserMultiFormatReader: BMF, BarcodeFormat, DecodeHintType } = await import('@zxing/browser');
+
+        const hints = new Map();
+        // Only scan Code128 — excludes QR codes completely
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+
+        const reader = new BMF(hints);
+        readerRef.current = reader;
+
         const videoEl = videoRef.current;
-        if (!videoEl) return;
+        if (!videoEl || cancelled) return;
         setStatus('Point at barcode — hold steady');
 
         await reader.decodeFromConstraints(
@@ -1208,12 +1217,11 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
           (result, err) => {
             if (doneRef.current || cancelled) return;
             if (result) {
+              const text = result.getText();
+              // Extra guard: ignore if it looks like a URL (student QR)
+              if (text.startsWith('http://') || text.startsWith('https://')) return;
               doneRef.current = true;
-              onResult(result.getText());
-            }
-            if (err && !(err instanceof NotFoundException)) {
-              // Ignore scan-miss errors, only log real errors
-              console.warn('[BarcodeScanner]', err);
+              onResult(text);
             }
           }
         );
@@ -1226,7 +1234,7 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
     return () => {
       cancelled = true;
       doneRef.current = true;
-      try { reader.reset(); } catch {}
+      try { readerRef.current?.reset(); } catch {}
     };
   }, []); // eslint-disable-line
 
