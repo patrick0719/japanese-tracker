@@ -1188,36 +1188,15 @@ function QRScanner({ onResult, onClose }) {
 function InlineBarcodeScanner({ onResult, onCancel }) {
   const videoRef  = useRef(null);
   const streamRef = useRef(null);
-  const animRef   = useRef(null);
+  const readerRef = useRef(null);
   const doneRef   = useRef(false);
   const [status, setStatus] = useState('Starting camera...');
 
   useEffect(() => {
     let cancelled = false;
-    let mfReader = null;
 
     const start = async () => {
       try {
-        // Import MultiFormatReader + helpers from @zxing/library
-        const {
-          MultiFormatReader,
-          BarcodeFormat,
-          DecodeHintType,
-          BinaryBitmap,
-          HybridBinarizer,
-          HTMLCanvasElementLuminanceSource,
-          RGBLuminanceSource,
-          NotFoundException: NF,
-        } = await import('@zxing/library');
-
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128]);
-        hints.set(DecodeHintType.TRY_HARDER, true);
-
-        mfReader = new MultiFormatReader();
-        mfReader.setHints(hints);
-
-        // Start camera
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
         });
@@ -1231,44 +1210,37 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
         await video.play();
         setStatus('Point camera at barcode');
 
-        // Canvas for frame capture
+        const reader = new BrowserMultiFormatReader();
+        readerRef.current = reader;
+
+        // Canvas loop — decode every frame
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         const scan = () => {
           if (doneRef.current || cancelled) return;
           if (video.readyState < 2 || !video.videoWidth) {
-            animRef.current = requestAnimationFrame(scan);
-            return;
+            requestAnimationFrame(scan); return;
           }
           canvas.width  = video.videoWidth;
           canvas.height = video.videoHeight;
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
           try {
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const src = new RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
-            const bmp = new BinaryBitmap(new HybridBinarizer(src));
-            const result = mfReader.decode(bmp);
+            const result = reader.decodeFromCanvas(canvas);
             const text = result.getText();
-            // Ignore QR/URL results
-            if (text.startsWith('http://') || text.startsWith('https://')) {
-              animRef.current = requestAnimationFrame(scan);
-              return;
-            }
+            // Skip if it's a URL (student QR code accidentally scanned)
+            if (text.startsWith('http')) { requestAnimationFrame(scan); return; }
             doneRef.current = true;
             stream.getTracks().forEach(t => t.stop());
             onResult(text);
-            return;
-          } catch (e) {
-            // NotFoundException is normal — no barcode in frame yet
+          } catch {
+            // No barcode detected in this frame — try next
+            requestAnimationFrame(scan);
           }
-          animRef.current = requestAnimationFrame(scan);
         };
 
-        animRef.current = requestAnimationFrame(scan);
+        requestAnimationFrame(scan);
       } catch (e) {
-        console.error('[InlineBarcodeScanner]', e);
         if (!cancelled) setStatus('Camera error: ' + e.message);
       }
     };
@@ -1277,7 +1249,7 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
     return () => {
       cancelled = true;
       doneRef.current = true;
-      if (animRef.current) cancelAnimationFrame(animRef.current);
+      try { readerRef.current?.reset(); } catch {}
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
   }, []); // eslint-disable-line
