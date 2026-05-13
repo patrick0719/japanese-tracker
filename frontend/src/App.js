@@ -851,104 +851,185 @@ function ProgressChart({ student, batch, onClose }) {
   );
 }
 
-// ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
+// ── CROP SCREEN COMPONENT — perspective warp (4 free corners) ───────────────
+// Each corner can be dragged independently to follow slanted paper edges.
+// On confirm, a homography transform straightens the quad into a rectangle.
 function CropScreen({ dataUrl, onConfirm, onRetake }) {
-  const imgRef       = useRef(null);
   const containerRef = useRef(null);
-  const dragging     = useRef(null);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const imgRef       = useRef(null);
+  const svgRef       = useRef(null);
+  const dragging     = useRef(null); // { idx, startX, startY, startPt }
+  const [imgLoaded,  setImgLoaded]  = useState(false);
   const [imgNatural, setImgNatural] = useState({ w: 1, h: 1 });
   const [processing, setProcessing] = useState(false);
 
-  // Default crop box — 8% inset on each side
-  const DEFAULT_BOX = { left: 8, top: 8, right: 92, bottom: 92 };
-  const [box, setBox] = useState(DEFAULT_BOX);
+  // ── Corners stored as % of the *container* (0–100), order: TL TR BR BL ──
+  const mkDefault = () => [
+    { x:  8, y:  8 },  // TL
+    { x: 92, y:  8 },  // TR
+    { x: 92, y: 92 },  // BR
+    { x:  8, y: 92 },  // BL
+  ];
+  const [corners, setCorners] = useState(mkDefault);
 
-  // ── Auto-enhance: boost contrast/brightness on the cropped output ──
+  // ── Auto-enhance: auto-levels + slight brightness boost ──────────
   const enhanceCanvas = (canvas) => {
     const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const d = imageData.data;
-    // Find min/max luminance for auto-levels
-    let min = 255, max = 0;
+    const id  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d   = id.data;
+    let mn = 255, mx = 0;
     for (let i = 0; i < d.length; i += 4) {
-      const lum = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-      if (lum < min) min = lum;
-      if (lum > max) max = lum;
+      const l = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      if (l < mn) mn = l; if (l > mx) mx = l;
     }
-    const range = max - min || 1;
-    // Apply auto-levels + slight brightness boost for scanned docs
+    const rng = mx - mn || 1;
     for (let i = 0; i < d.length; i += 4) {
-      d[i]   = Math.min(255, Math.round(((d[i]   - min) / range) * 255 * 1.05));
-      d[i+1] = Math.min(255, Math.round(((d[i+1] - min) / range) * 255 * 1.05));
-      d[i+2] = Math.min(255, Math.round(((d[i+2] - min) / range) * 255 * 1.05));
+      d[i]   = Math.min(255, ((d[i]   - mn) / rng) * 255 * 1.04 | 0);
+      d[i+1] = Math.min(255, ((d[i+1] - mn) / rng) * 255 * 1.04 | 0);
+      d[i+2] = Math.min(255, ((d[i+2] - mn) / rng) * 255 * 1.04 | 0);
     }
-    ctx.putImageData(imageData, 0, 0);
+    ctx.putImageData(id, 0, 0);
   };
 
-  // ── Confirm: convert container-% → image pixels → canvas crop ───
-  const confirmCrop = async () => {
-    const img = imgRef.current;
+  // ── Solve 8-unknown homography via Gaussian elimination ──────────
+  // Maps destination rect (0,0)→(W,H) back to source quad (the 4 corners).
+  const solveHomography = (src, outW, outH) => {
+    // src = [tl,tr,br,bl] in image pixels
+    const [tl,tr,br,bl] = src;
+    const corr = [
+      [0,    0,    tl.x, tl.y],
+      [outW, 0,    tr.x, tr.y],
+      [outW, outH, br.x, br.y],
+      [0,    outH, bl.x, bl.y],
+    ];
+    const A = [], b = [];
+    for (const [dx,dy,sx,sy] of corr) {
+      A.push([dx,dy,1,0,0,0,-sx*dx,-sx*dy]); b.push(sx);
+      A.push([0,0,0,dx,dy,1,-sy*dx,-sy*dy]); b.push(sy);
+    }
+    const n = 8;
+    const M = A.map((row,i) => [...row, b[i]]);
+    for (let col = 0; col < n; col++) {
+      let maxRow = col;
+      for (let r = col+1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[maxRow][col])) maxRow = r;
+      [M[col],M[maxRow]] = [M[maxRow],M[col]];
+      const pv = M[col][col];
+      if (Math.abs(pv) < 1e-10) continue;
+      for (let r = col+1; r < n; r++) {
+        const f = M[r][col] / pv;
+        for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+      }
+    }
+    const h = new Array(n).fill(0);
+    for (let r = n-1; r >= 0; r--) {
+      h[r] = M[r][n];
+      for (let c = r+1; c < n; c++) h[r] -= M[r][c] * h[c];
+      h[r] /= M[r][r];
+    }
+    return h; // [h0..h7], h8=1
+  };
+
+  // ── Perspective warp via inverse homography + bilinear sampling ──
+  const warpCanvas = (srcCanvas, srcPts, outW, outH) => {
+    const h = solveHomography(srcPts, outW, outH);
+    const [h0,h1,h2,h3,h4,h5,h6,h7] = h;
+    const srcCtx  = srcCanvas.getContext('2d');
+    const srcData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+    const sw = srcData.width, sh = srcData.height;
+    const dst = document.createElement('canvas');
+    dst.width = outW; dst.height = outH;
+    const outData = dst.getContext('2d').createImageData(outW, outH);
+    for (let dy = 0; dy < outH; dy++) {
+      for (let dx = 0; dx < outW; dx++) {
+        const w_ = h6*dx + h7*dy + 1;
+        const sx = (h0*dx + h1*dy + h2) / w_;
+        const sy = (h3*dx + h4*dy + h5) / w_;
+        const x0 = sx|0, y0 = sy|0, x1 = x0+1, y1 = y0+1;
+        const fx = sx-x0, fy = sy-y0;
+        const di = (dy*outW + dx) * 4;
+        if (x0 < 0 || y0 < 0 || x1 >= sw || y1 >= sh) { outData.data[di+3]=0; continue; }
+        const i00=(y0*sw+x0)*4, i10=(y0*sw+x1)*4;
+        const i01=(y1*sw+x0)*4, i11=(y1*sw+x1)*4;
+        for (let c=0; c<3; c++) {
+          outData.data[di+c] = (
+            srcData.data[i00+c]*(1-fx)*(1-fy) +
+            srcData.data[i10+c]*fx*(1-fy) +
+            srcData.data[i01+c]*(1-fx)*fy +
+            srcData.data[i11+c]*fx*fy
+          ) | 0;
+        }
+        outData.data[di+3] = 255;
+      }
+    }
+    dst.getContext('2d').putImageData(outData, 0, 0);
+    return dst;
+  };
+
+  // ── Convert container-% corners → image-pixel corners ────────────
+  const cornersToImagePx = () => {
     const container = containerRef.current;
-    if (!img || !container || processing) return;
+    const img       = imgRef.current;
+    if (!container || !img) return null;
+    const { w: iw, h: ih } = imgNatural;
+    const cw = container.offsetWidth, ch = container.offsetHeight;
+    const scale = Math.min(cw/iw, ch/ih);
+    const ox = (cw - iw*scale)/2, oy = (ch - ih*scale)/2;
+    return corners.map(p => ({
+      x: Math.max(0, Math.min(iw, ((p.x/100)*cw - ox) / scale)),
+      y: Math.max(0, Math.min(ih, ((p.y/100)*ch - oy) / scale)),
+    }));
+  };
 
+  // ── Sort 4 pts into TL, TR, BR, BL (robust, angle-independent) ──
+  const sortQuad = (pts) => {
+    const cx = pts.reduce((s,p)=>s+p.x,0)/4;
+    const cy = pts.reduce((s,p)=>s+p.y,0)/4;
+    const above = pts.filter(p=>p.y<=cy).sort((a,b)=>a.x-b.x);
+    const below = pts.filter(p=>p.y>cy).sort((a,b)=>a.x-b.x);
+    const tl = above[0]||pts[0], tr = above[above.length-1]||pts[1];
+    const bl = below[0]||pts[3], br = below[below.length-1]||pts[2];
+    return [tl, tr, br, bl];
+  };
+
+  // ── Confirm: warp + enhance ───────────────────────────────────────
+  const confirmCrop = async () => {
+    if (processing) return;
+    const imgEl = imgRef.current;
+    if (!imgEl) return;
     setProcessing(true);
-    // Yield to React so the spinner renders before heavy canvas work
     await new Promise(r => setTimeout(r, 0));
-
     try {
-      const { w: iw, h: ih } = imgNatural;
-      const cw = container.offsetWidth;
-      const ch = container.offsetHeight;
-      const scale = Math.min(cw / iw, ch / ih);
-      const drawW = iw * scale, drawH = ih * scale;
-      const ox = (cw - drawW) / 2;
-      const oy = (ch - drawH) / 2;
+      const imgPts = cornersToImagePx();
+      if (!imgPts) { onConfirm(dataUrl); return; }
+      const sorted = sortQuad(imgPts);
+      const [tl,tr,br,bl] = sorted;
 
-      const x1 = Math.max(0,  Math.round(((box.left   / 100) * cw - ox) / scale));
-      const y1 = Math.max(0,  Math.round(((box.top    / 100) * ch - oy) / scale));
-      const x2 = Math.min(iw, Math.round(((box.right  / 100) * cw - ox) / scale));
-      const y2 = Math.min(ih, Math.round(((box.bottom / 100) * ch - oy) / scale));
-      const cropW = x2 - x1;
-      const cropH = y2 - y1;
+      // Output size: average of top/bottom widths and left/right heights
+      const outW = Math.round((Math.hypot(tr.x-tl.x,tr.y-tl.y) + Math.hypot(br.x-bl.x,br.y-bl.y)) / 2);
+      const outH = Math.round((Math.hypot(bl.x-tl.x,bl.y-tl.y) + Math.hypot(br.x-tr.x,br.y-tr.y)) / 2);
+      if (outW < 20 || outH < 20) { onConfirm(dataUrl); return; }
 
-      // Guard: if crop is too small just use the full image — never show white
-      if (cropW < 20 || cropH < 20) {
-        onConfirm(dataUrl);
-        return;
-      }
+      // Draw full source image onto a canvas for pixel access
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width  = imgEl.naturalWidth;
+      srcCanvas.height = imgEl.naturalHeight;
+      srcCanvas.getContext('2d').drawImage(imgEl, 0, 0);
 
-      const dst = document.createElement('canvas');
-      dst.width  = cropW;
-      dst.height = cropH;
-      dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
-
-      // Auto-enhance the cropped scan
-      try { enhanceCanvas(dst); } catch { /* non-fatal */ }
-
-      const result = dst.toDataURL('image/jpeg', 0.92);
-      // Guard: if canvas produced a blank result, fall back to full image
-      if (!result || result.length < 1000) {
-        onConfirm(dataUrl);
-        return;
-      }
+      const warped = warpCanvas(srcCanvas, sorted, outW, outH);
+      try { enhanceCanvas(warped); } catch {}
+      const result = warped.toDataURL('image/jpeg', 0.92);
+      if (!result || result.length < 1000) { onConfirm(dataUrl); return; }
       onConfirm(result);
     } finally {
       setProcessing(false);
     }
   };
 
-  // ── Dragging logic ───────────────────────────────────────────────
-  const onHandleStart = (e, corner) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // ── Drag handlers ─────────────────────────────────────────────────
+  const onHandleDown = (e, idx) => {
+    e.preventDefault(); e.stopPropagation();
     const src = e.touches ? e.touches[0] : e;
-    dragging.current = {
-      corner,
-      startX:   src.clientX,
-      startY:   src.clientY,
-      startBox: { ...box },
-    };
+    dragging.current = { idx, startX: src.clientX, startY: src.clientY, startPt: { ...corners[idx] } };
   };
 
   const onMove = (e) => {
@@ -957,72 +1038,58 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     const src = e.touches ? e.touches[0] : e;
     const container = containerRef.current;
     if (!container) return;
-    const cw = container.offsetWidth;
-    const ch = container.offsetHeight;
-    const dx = ((src.clientX - d.startX) / cw) * 100;
-    const dy = ((src.clientY - d.startY) / ch) * 100;
-    const sb = d.startBox;
-    const MIN = 10;
-
-    const corner = d.corner;
-    let { left, top, right, bottom } = sb;
-    switch (corner) {
-      case 'tl':
-        left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
-        top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
-        break;
-      case 'tr':
-        right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
-        top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
-        break;
-      case 'br':
-        right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
-        bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
-        break;
-      case 'bl':
-        left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
-        bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
-        break;
-      default: break;
-    }
-    setBox({ left, top, right, bottom });
+    const cw = container.offsetWidth, ch = container.offsetHeight;
+    const nx = Math.max(0, Math.min(100, d.startPt.x + ((src.clientX - d.startX) / cw) * 100));
+    const ny = Math.max(0, Math.min(100, d.startPt.y + ((src.clientY - d.startY) / ch) * 100));
+    setCorners(prev => prev.map((p, i) => i === d.idx ? { x: nx, y: ny } : p));
   };
 
   const onEnd = () => { dragging.current = null; };
 
-  // ── Handle style helper — larger touch targets on mobile ────────
-  const handle = (corner, posStyle, label) => (
-    <div
-      key={corner}
-      style={{
-        position: 'absolute',
-        // Outer hit area: 56px (finger-friendly), visually 44px circle
-        width: 56, height: 56,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'grab', zIndex: 10,
-        touchAction: 'none',
-        transform: 'translate(-50%,-50%)',
-        ...posStyle,
-      }}
-      onMouseDown={e => onHandleStart(e, corner)}
-      onTouchStart={e => onHandleStart(e, corner)}
-    >
-      <div style={{
-        width: 44, height: 44,
-        borderRadius: '50%',
-        background: '#00FF88',
-        border: '3px solid #fff',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 15, fontWeight: 700, color: '#000',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
-      }}>{label}</div>
-    </div>
-  );
+  // ── SVG overlay: quad fill + outline + grid lines ─────────────────
+  const renderOverlay = () => {
+    if (!imgLoaded) return null;
+    const [tl,tr,br,bl] = corners;
+    const poly = `${tl.x}%,${tl.y}% ${tr.x}%,${tr.y}% ${br.x}%,${br.y}% ${bl.x}%,${bl.y}%`;
+
+    // Mid-points for the grid cross inside the quad (approximate)
+    const midT = { x:(tl.x+tr.x)/2, y:(tl.y+tr.y)/2 };
+    const midB = { x:(bl.x+br.x)/2, y:(bl.y+br.y)/2 };
+    const midL = { x:(tl.x+bl.x)/2, y:(tl.y+bl.y)/2 };
+    const midR = { x:(tr.x+br.x)/2, y:(tr.y+br.y)/2 };
+
+    return (
+      <svg
+        ref={svgRef}
+        style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', zIndex:5, pointerEvents:'none' }}
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+      >
+        {/* Dark mask outside quad */}
+        <defs>
+          <mask id="quad-mask">
+            <rect width="100" height="100" fill="white"/>
+            <polygon points={poly} fill="black"/>
+          </mask>
+        </defs>
+        <rect width="100" height="100" fill="rgba(0,0,0,0.55)" mask="url(#quad-mask)"/>
+
+        {/* Quad outline */}
+        <polygon points={poly} fill="none" stroke="#00FF88" strokeWidth="0.6" strokeLinejoin="round"/>
+
+        {/* Grid lines — cross through centre of quad */}
+        <line x1={`${midT.x}%`} y1={`${midT.y}%`} x2={`${midB.x}%`} y2={`${midB.y}%`} stroke="rgba(0,255,136,0.25)" strokeWidth="0.4"/>
+        <line x1={`${midL.x}%`} y1={`${midL.y}%`} x2={`${midR.x}%`} y2={`${midR.y}%`} stroke="rgba(0,255,136,0.25)" strokeWidth="0.4"/>
+      </svg>
+    );
+  };
+
+  const LABELS = ['↖','↗','↘','↙'];
 
   return (
     <div
       style={{ position:'fixed', inset:0, background:'#000', zIndex:9999, display:'flex', flexDirection:'column' }}
-      onMouseMove={onMove} onMouseUp={onEnd}
+      onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
       onTouchMove={onMove} onTouchEnd={onEnd}
     >
       {/* Top bar */}
@@ -1031,70 +1098,61 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
           <ArrowLeft size={15}/> Retake
         </button>
         <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>Adjust Crop</span>
-        <button onClick={confirmCrop} disabled={processing} style={{ background: processing ? 'rgba(0,122,255,0.5)' : '#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor: processing ? 'default' : 'pointer', display:'flex', alignItems:'center', gap:6 }}>
+        <button onClick={confirmCrop} disabled={processing} style={{ background: processing ? 'rgba(0,122,255,0.5)':'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor: processing?'default':'pointer', display:'flex', alignItems:'center', gap:6 }}>
           {processing ? <><Loader size={14} style={{ animation:'spin 1s linear infinite' }}/> Processing…</> : <>Use <Check size={15}/></>}
         </button>
       </div>
-      <div style={{ color:'rgba(255,255,255,0.5)', fontSize:12, textAlign:'center', padding:'4px 0', flexShrink:0 }}>
-        Drag each green corner to adjust
+
+      <div style={{ color:'rgba(255,255,255,0.45)', fontSize:12, textAlign:'center', padding:'4px 0 2px', flexShrink:0 }}>
+        Drag each corner to the edge of the paper
       </div>
 
-      {/* Image + crop overlay */}
+      {/* Viewport */}
       <div
         ref={containerRef}
-        style={{ flex:1, position:'relative', overflow:'hidden', background:'#000', display:'flex', alignItems:'center', justifyContent:'center' }}
+        style={{ flex:1, position:'relative', overflow:'hidden', background:'#111', display:'flex', alignItems:'center', justifyContent:'center' }}
       >
-        {!imgLoaded && (
-          <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }} />
-        )}
+        {!imgLoaded && <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }}/>}
+
         <img
           ref={imgRef}
           src={dataUrl}
-          onLoad={(e) => {
-            setImgNatural({ w: e.target.naturalWidth, h: e.target.naturalHeight });
-            setImgLoaded(true);
-          }}
+          onLoad={e => { setImgNatural({ w:e.target.naturalWidth, h:e.target.naturalHeight }); setImgLoaded(true); }}
           alt="Captured"
           draggable={false}
-          style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain', display: imgLoaded ? 'block' : 'none', userSelect:'none', pointerEvents:'none' }}
+          style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain', display: imgLoaded?'block':'none', userSelect:'none', pointerEvents:'none' }}
         />
 
-        {imgLoaded && (() => {
-          const L  = `${box.left}%`;
-          const T  = `${box.top}%`;
-          const R  = `${100 - box.right}%`;
-          const B  = `${100 - box.bottom}%`;
-          return (
-            <>
-              {/* Dark mask — 4 sides */}
-              <div style={{ position:'absolute', inset:0, pointerEvents:'none' }}>
-                <div style={{ position:'absolute', top:0,    left:0, right:0,  height:T,              background:'rgba(0,0,0,0.6)' }}/>
-                <div style={{ position:'absolute', bottom:0, left:0, right:0,  height:B,              background:'rgba(0,0,0,0.6)' }}/>
-                <div style={{ position:'absolute', top:T,    left:0, width:L,  bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
-                <div style={{ position:'absolute', top:T,    right:0, width:R, bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
-                <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, border:'2.5px solid #00FF88' }}/>
-                {/* Rule-of-thirds grid lines inside crop area */}
-                <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, pointerEvents:'none', overflow:'hidden' }}>
-                  <div style={{ position:'absolute', left:'33.33%', top:0, bottom:0, width:1, background:'rgba(0,255,136,0.2)' }}/>
-                  <div style={{ position:'absolute', left:'66.66%', top:0, bottom:0, width:1, background:'rgba(0,255,136,0.2)' }}/>
-                  <div style={{ position:'absolute', top:'33.33%', left:0, right:0, height:1, background:'rgba(0,255,136,0.2)' }}/>
-                  <div style={{ position:'absolute', top:'66.66%', left:0, right:0, height:1, background:'rgba(0,255,136,0.2)' }}/>
-                </div>
-              </div>
-              {/* Corner handles */}
-              {handle('tl', { top: T,              left: L              }, '↖')}
-              {handle('tr', { top: T,              left: `${box.right}%`}, '↗')}
-              {handle('br', { top: `${box.bottom}%`, left: `${box.right}%`}, '↘')}
-              {handle('bl', { top: `${box.bottom}%`, left: L              }, '↙')}
-            </>
-          );
-        })()}
+        {/* SVG overlay */}
+        {renderOverlay()}
+
+        {/* Draggable corner handles */}
+        {imgLoaded && corners.map((pt, idx) => (
+          <div
+            key={idx}
+            style={{
+              position:'absolute',
+              left: `${pt.x}%`, top: `${pt.y}%`,
+              width:60, height:60,
+              transform:'translate(-50%,-50%)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              cursor:'grab', zIndex:10, touchAction:'none',
+            }}
+            onMouseDown={e => onHandleDown(e, idx)}
+            onTouchStart={e => onHandleDown(e, idx)}
+          >
+            {/* Visual handle */}
+            <div style={{ width:44, height:44, borderRadius:'50%', background:'#00FF88', border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, color:'#000', boxShadow:'0 2px 12px rgba(0,0,0,0.7)' }}>
+              {LABELS[idx]}
+            </div>
+          </div>
+        ))}
 
         {/* Processing overlay */}
         {processing && (
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.65)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, zIndex:20 }}>
-            <Loader size={40} color="#00FF88" style={{ animation:'spin 1s linear infinite' }}/>
-            <span style={{ color:'#fff', fontSize:14, fontWeight:600 }}>Enhancing image…</span>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, zIndex:20 }}>
+            <Loader size={44} color="#00FF88" style={{ animation:'spin 1s linear infinite' }}/>
+            <span style={{ color:'#fff', fontSize:14, fontWeight:600 }}>Straightening & enhancing…</span>
           </div>
         )}
       </div>
@@ -1104,17 +1162,11 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
         <button onClick={onRetake} style={{ flex:1, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, fontWeight:600, padding:'14px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
           <ArrowLeft size={15}/> Retake
         </button>
-        {/* Reset crop to default */}
-        <button
-          onClick={() => setBox(DEFAULT_BOX)}
-          title="Reset crop"
-          style={{ background:'rgba(255,255,255,0.12)', border:'1.5px solid rgba(255,255,255,0.2)', color:'#fff', fontSize:13, fontWeight:600, padding:'14px 16px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+        <button onClick={() => setCorners(mkDefault())} style={{ background:'rgba(255,255,255,0.12)', border:'1.5px solid rgba(255,255,255,0.2)', color:'#fff', fontSize:13, fontWeight:600, padding:'14px 16px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
           ↺ Reset
         </button>
-        <button onClick={confirmCrop} disabled={processing} style={{ flex:2, background: processing ? 'rgba(0,122,255,0.5)' : '#007AFF', color:'#fff', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: processing ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          {processing
-            ? <><Loader size={16} style={{ animation:'spin 1s linear infinite' }}/> Processing…</>
-            : <><Check size={16}/> Use This Page</>}
+        <button onClick={confirmCrop} disabled={processing} style={{ flex:2, background: processing?'rgba(0,122,255,0.5)':'#007AFF', color:'#fff', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: processing?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          {processing ? <><Loader size={16} style={{ animation:'spin 1s linear infinite' }}/> Processing…</> : <><Check size={16}/> Use This Page</>}
         </button>
       </div>
     </div>
