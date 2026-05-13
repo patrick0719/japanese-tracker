@@ -1292,7 +1292,10 @@ function QuickAddExamModal({ student, onSave, onClose }) {
     setScanFlash(true);
     setTimeout(() => setScanFlash(false), 2000);
     if (text.includes('|')) {
-      const [en, ja] = text.split('|');
+      const [en, jaEncoded] = text.split('|');
+      // Decode base64-encoded Japanese back to UTF-8
+      let ja = '';
+      try { ja = decodeURIComponent(escape(atob(jaEncoded))); } catch { ja = jaEncoded; }
       setExamNameEn(en.trim());
       setExamNameJa(ja.trim());
     } else {
@@ -1604,7 +1607,9 @@ function BarcodeItem({ entry, onDelete }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
+    // Encode Japanese as base64 so Code128 (ASCII-only) can carry it safely
+    const jaEncoded = entry.nameJa ? btoa(unescape(encodeURIComponent(entry.nameJa))) : '';
+    const value = jaEncoded ? `${entry.nameEn}|${jaEncoded}` : entry.nameEn;
     try {
       bwipjs.toCanvas(canvas, {
         bcid:        'code128',
