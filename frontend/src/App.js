@@ -1783,8 +1783,6 @@ function BarcodeGeneratorTab() {
       {/* Hidden SVGs for Print All */}
       <div style={{ display:'none' }}>
         {libReady && entries.map(entry => {
-          const ref = React.createRef();
-          // Draw after mount via callback ref
           const setRef = (el) => {
             if (!el) return;
             const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
