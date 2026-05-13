@@ -12,6 +12,7 @@ import {
   BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check
 } from 'lucide-react';
 import jsQR from 'jsqr';
+import { BrowserMultiFormatReader, NotFoundException } from '@zxing/browser';
 
 // Returns correct name based on role — JA for kumiai, EN for admin/PHGIC
 function displayName(item) {
@@ -400,7 +401,7 @@ function ProgressChart({ student, batch, onClose }) {
   // Cleanup PTR refresh timer on unmount to prevent setState on unmounted component
   useEffect(() => {
     return () => {
-      if (ptrTimerRef.current) clearTimeout(ptrTimerRef.current);
+      if (ptrRefreshingRef._timer) clearTimeout(ptrRefreshingRef._timer);
       ptrRefreshingRef.current = false;
     };
   }, []);
@@ -506,7 +507,6 @@ function ProgressChart({ student, batch, onClose }) {
   const ptrDistRef = useRef(0);
   const ptrTriggeredRef = useRef(false);
   const ptrRefreshingRef = useRef(false);
-  const ptrTimerRef = useRef(null); // fix: dedicated ref for the refresh timer
   const ptrStartY = useRef(null);
   const ptrScrollRef = useRef(null);
   const PTR_THRESHOLD = 80;
@@ -545,7 +545,7 @@ function ProgressChart({ student, batch, onClose }) {
         ptrRefreshingRef.current = false;
       }, 800);
       // store timer so it can be cleared on unmount
-      ptrTimerRef.current = timer;
+      ptrRefreshingRef._timer = timer;
     } else {
       ptrStartY.current = null;
       setPtrDist(0); ptrDistRef.current = 0;
@@ -851,185 +851,68 @@ function ProgressChart({ student, batch, onClose }) {
   );
 }
 
-// ── CROP SCREEN COMPONENT — perspective warp (4 free corners) ───────────────
-// Each corner can be dragged independently to follow slanted paper edges.
-// On confirm, a homography transform straightens the quad into a rectangle.
+// ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
 function CropScreen({ dataUrl, onConfirm, onRetake }) {
-  const containerRef = useRef(null);
   const imgRef       = useRef(null);
-  const svgRef       = useRef(null);
-  const dragging     = useRef(null); // { idx, startX, startY, startPt }
-  const [imgLoaded,  setImgLoaded]  = useState(false);
+  const containerRef = useRef(null);
+  const dragging     = useRef(null);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const [imgNatural, setImgNatural] = useState({ w: 1, h: 1 });
-  const [processing, setProcessing] = useState(false);
 
-  // ── Corners stored as % of the *container* (0–100), order: TL TR BR BL ──
-  const mkDefault = () => [
-    { x:  8, y:  8 },  // TL
-    { x: 92, y:  8 },  // TR
-    { x: 92, y: 92 },  // BR
-    { x:  8, y: 92 },  // BL
-  ];
-  const [corners, setCorners] = useState(mkDefault);
+  // crop box as % of the CONTAINER (0–100)
+  const [box, setBox] = useState({ left: 8, top: 8, right: 92, bottom: 92 });
 
-  // ── Auto-enhance: auto-levels + slight brightness boost ──────────
-  const enhanceCanvas = (canvas) => {
-    const ctx = canvas.getContext('2d');
-    const id  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const d   = id.data;
-    let mn = 255, mx = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const l = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-      if (l < mn) mn = l; if (l > mx) mx = l;
-    }
-    const rng = mx - mn || 1;
-    for (let i = 0; i < d.length; i += 4) {
-      d[i]   = Math.min(255, ((d[i]   - mn) / rng) * 255 * 1.04 | 0);
-      d[i+1] = Math.min(255, ((d[i+1] - mn) / rng) * 255 * 1.04 | 0);
-      d[i+2] = Math.min(255, ((d[i+2] - mn) / rng) * 255 * 1.04 | 0);
-    }
-    ctx.putImageData(id, 0, 0);
-  };
-
-  // ── Solve 8-unknown homography via Gaussian elimination ──────────
-  // Maps destination rect (0,0)→(W,H) back to source quad (the 4 corners).
-  const solveHomography = (src, outW, outH) => {
-    // src = [tl,tr,br,bl] in image pixels
-    const [tl,tr,br,bl] = src;
-    const corr = [
-      [0,    0,    tl.x, tl.y],
-      [outW, 0,    tr.x, tr.y],
-      [outW, outH, br.x, br.y],
-      [0,    outH, bl.x, bl.y],
-    ];
-    const A = [], b = [];
-    for (const [dx,dy,sx,sy] of corr) {
-      A.push([dx,dy,1,0,0,0,-sx*dx,-sx*dy]); b.push(sx);
-      A.push([0,0,0,dx,dy,1,-sy*dx,-sy*dy]); b.push(sy);
-    }
-    const n = 8;
-    const M = A.map((row,i) => [...row, b[i]]);
-    for (let col = 0; col < n; col++) {
-      let maxRow = col;
-      for (let r = col+1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[maxRow][col])) maxRow = r;
-      [M[col],M[maxRow]] = [M[maxRow],M[col]];
-      const pv = M[col][col];
-      if (Math.abs(pv) < 1e-10) continue;
-      for (let r = col+1; r < n; r++) {
-        const f = M[r][col] / pv;
-        for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
-      }
-    }
-    const h = new Array(n).fill(0);
-    for (let r = n-1; r >= 0; r--) {
-      h[r] = M[r][n];
-      for (let c = r+1; c < n; c++) h[r] -= M[r][c] * h[c];
-      h[r] /= M[r][r];
-    }
-    return h; // [h0..h7], h8=1
-  };
-
-  // ── Perspective warp via inverse homography + bilinear sampling ──
-  const warpCanvas = (srcCanvas, srcPts, outW, outH) => {
-    const h = solveHomography(srcPts, outW, outH);
-    const [h0,h1,h2,h3,h4,h5,h6,h7] = h;
-    const srcCtx  = srcCanvas.getContext('2d');
-    const srcData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
-    const sw = srcData.width, sh = srcData.height;
-    const dst = document.createElement('canvas');
-    dst.width = outW; dst.height = outH;
-    const outData = dst.getContext('2d').createImageData(outW, outH);
-    for (let dy = 0; dy < outH; dy++) {
-      for (let dx = 0; dx < outW; dx++) {
-        const w_ = h6*dx + h7*dy + 1;
-        const sx = (h0*dx + h1*dy + h2) / w_;
-        const sy = (h3*dx + h4*dy + h5) / w_;
-        const x0 = sx|0, y0 = sy|0, x1 = x0+1, y1 = y0+1;
-        const fx = sx-x0, fy = sy-y0;
-        const di = (dy*outW + dx) * 4;
-        if (x0 < 0 || y0 < 0 || x1 >= sw || y1 >= sh) { outData.data[di+3]=0; continue; }
-        const i00=(y0*sw+x0)*4, i10=(y0*sw+x1)*4;
-        const i01=(y1*sw+x0)*4, i11=(y1*sw+x1)*4;
-        for (let c=0; c<3; c++) {
-          outData.data[di+c] = (
-            srcData.data[i00+c]*(1-fx)*(1-fy) +
-            srcData.data[i10+c]*fx*(1-fy) +
-            srcData.data[i01+c]*(1-fx)*fy +
-            srcData.data[i11+c]*fx*fy
-          ) | 0;
-        }
-        outData.data[di+3] = 255;
-      }
-    }
-    dst.getContext('2d').putImageData(outData, 0, 0);
-    return dst;
-  };
-
-  // ── Convert container-% corners → image-pixel corners ────────────
-  const cornersToImagePx = () => {
+  // ── Confirm: convert container-% → image pixels → canvas crop ───
+  const confirmCrop = () => {
+    const img = imgRef.current;
     const container = containerRef.current;
-    const img       = imgRef.current;
-    if (!container || !img) return null;
+    if (!img || !container) return;
+
     const { w: iw, h: ih } = imgNatural;
-    const cw = container.offsetWidth, ch = container.offsetHeight;
-    const scale = Math.min(cw/iw, ch/ih);
-    const ox = (cw - iw*scale)/2, oy = (ch - ih*scale)/2;
-    return corners.map(p => ({
-      x: Math.max(0, Math.min(iw, ((p.x/100)*cw - ox) / scale)),
-      y: Math.max(0, Math.min(ih, ((p.y/100)*ch - oy) / scale)),
-    }));
-  };
+    const cw = container.offsetWidth;
+    const ch = container.offsetHeight;
+    const scale = Math.min(cw / iw, ch / ih);
+    const drawW = iw * scale, drawH = ih * scale;
+    const ox = (cw - drawW) / 2;
+    const oy = (ch - drawH) / 2;
 
-  // ── Sort 4 pts into TL, TR, BR, BL (robust, angle-independent) ──
-  const sortQuad = (pts) => {
-    const cx = pts.reduce((s,p)=>s+p.x,0)/4;
-    const cy = pts.reduce((s,p)=>s+p.y,0)/4;
-    const above = pts.filter(p=>p.y<=cy).sort((a,b)=>a.x-b.x);
-    const below = pts.filter(p=>p.y>cy).sort((a,b)=>a.x-b.x);
-    const tl = above[0]||pts[0], tr = above[above.length-1]||pts[1];
-    const bl = below[0]||pts[3], br = below[below.length-1]||pts[2];
-    return [tl, tr, br, bl];
-  };
+    const x1 = Math.max(0,  Math.round(((box.left   / 100) * cw - ox) / scale));
+    const y1 = Math.max(0,  Math.round(((box.top    / 100) * ch - oy) / scale));
+    const x2 = Math.min(iw, Math.round(((box.right  / 100) * cw - ox) / scale));
+    const y2 = Math.min(ih, Math.round(((box.bottom / 100) * ch - oy) / scale));
+    const cropW = x2 - x1;
+    const cropH = y2 - y1;
 
-  // ── Confirm: warp + enhance ───────────────────────────────────────
-  const confirmCrop = async () => {
-    if (processing) return;
-    const imgEl = imgRef.current;
-    if (!imgEl) return;
-    setProcessing(true);
-    await new Promise(r => setTimeout(r, 0));
-    try {
-      const imgPts = cornersToImagePx();
-      if (!imgPts) { onConfirm(dataUrl); return; }
-      const sorted = sortQuad(imgPts);
-      const [tl,tr,br,bl] = sorted;
-
-      // Output size: average of top/bottom widths and left/right heights
-      const outW = Math.round((Math.hypot(tr.x-tl.x,tr.y-tl.y) + Math.hypot(br.x-bl.x,br.y-bl.y)) / 2);
-      const outH = Math.round((Math.hypot(bl.x-tl.x,bl.y-tl.y) + Math.hypot(br.x-tr.x,br.y-tr.y)) / 2);
-      if (outW < 20 || outH < 20) { onConfirm(dataUrl); return; }
-
-      // Draw full source image onto a canvas for pixel access
-      const srcCanvas = document.createElement('canvas');
-      srcCanvas.width  = imgEl.naturalWidth;
-      srcCanvas.height = imgEl.naturalHeight;
-      srcCanvas.getContext('2d').drawImage(imgEl, 0, 0);
-
-      const warped = warpCanvas(srcCanvas, sorted, outW, outH);
-      try { enhanceCanvas(warped); } catch {}
-      const result = warped.toDataURL('image/jpeg', 0.92);
-      if (!result || result.length < 1000) { onConfirm(dataUrl); return; }
-      onConfirm(result);
-    } finally {
-      setProcessing(false);
+    // Guard: if crop is too small just use the full image — never show white
+    if (cropW < 20 || cropH < 20) {
+      onConfirm(dataUrl);
+      return;
     }
+
+    const dst = document.createElement('canvas');
+    dst.width  = cropW;
+    dst.height = cropH;
+    dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
+    const result = dst.toDataURL('image/jpeg', 0.92);
+    // Guard: if canvas produced a blank result, fall back to full image
+    if (!result || result.length < 1000) {
+      onConfirm(dataUrl);
+      return;
+    }
+    onConfirm(result);
   };
 
-  // ── Drag handlers ─────────────────────────────────────────────────
-  const onHandleDown = (e, idx) => {
-    e.preventDefault(); e.stopPropagation();
+  // ── Dragging logic ───────────────────────────────────────────────
+  const onHandleStart = (e, corner) => {
+    e.preventDefault();
+    e.stopPropagation();
     const src = e.touches ? e.touches[0] : e;
-    dragging.current = { idx, startX: src.clientX, startY: src.clientY, startPt: { ...corners[idx] } };
+    dragging.current = {
+      corner,
+      startX:   src.clientX,
+      startY:   src.clientY,
+      startBox: { ...box },
+    };
   };
 
   const onMove = (e) => {
@@ -1038,58 +921,67 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     const src = e.touches ? e.touches[0] : e;
     const container = containerRef.current;
     if (!container) return;
-    const cw = container.offsetWidth, ch = container.offsetHeight;
-    const nx = Math.max(0, Math.min(100, d.startPt.x + ((src.clientX - d.startX) / cw) * 100));
-    const ny = Math.max(0, Math.min(100, d.startPt.y + ((src.clientY - d.startY) / ch) * 100));
-    setCorners(prev => prev.map((p, i) => i === d.idx ? { x: nx, y: ny } : p));
+    const cw = container.offsetWidth;
+    const ch = container.offsetHeight;
+    const dx = ((src.clientX - d.startX) / cw) * 100;
+    const dy = ((src.clientY - d.startY) / ch) * 100;
+    const sb = d.startBox;
+    const MIN = 10;
+
+    // Read corner OUTSIDE setBox to avoid stale closure
+    const corner = d.corner;
+    let { left, top, right, bottom } = sb;
+    switch (corner) {
+      case 'tl':
+        left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
+        top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
+        break;
+      case 'tr':
+        right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
+        top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
+        break;
+      case 'br':
+        right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
+        bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
+        break;
+      case 'bl':
+        left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
+        bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
+        break;
+      default: break;
+    }
+    setBox({ left, top, right, bottom });
   };
 
   const onEnd = () => { dragging.current = null; };
 
-  // ── SVG overlay: quad fill + outline + grid lines ─────────────────
-  const renderOverlay = () => {
-    if (!imgLoaded) return null;
-    const [tl,tr,br,bl] = corners;
-    const poly = `${tl.x}%,${tl.y}% ${tr.x}%,${tr.y}% ${br.x}%,${br.y}% ${bl.x}%,${bl.y}%`;
-
-    // Mid-points for the grid cross inside the quad (approximate)
-    const midT = { x:(tl.x+tr.x)/2, y:(tl.y+tr.y)/2 };
-    const midB = { x:(bl.x+br.x)/2, y:(bl.y+br.y)/2 };
-    const midL = { x:(tl.x+bl.x)/2, y:(tl.y+bl.y)/2 };
-    const midR = { x:(tr.x+br.x)/2, y:(tr.y+br.y)/2 };
-
-    return (
-      <svg
-        ref={svgRef}
-        style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', zIndex:5, pointerEvents:'none' }}
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-      >
-        {/* Dark mask outside quad */}
-        <defs>
-          <mask id="quad-mask">
-            <rect width="100" height="100" fill="white"/>
-            <polygon points={poly} fill="black"/>
-          </mask>
-        </defs>
-        <rect width="100" height="100" fill="rgba(0,0,0,0.55)" mask="url(#quad-mask)"/>
-
-        {/* Quad outline */}
-        <polygon points={poly} fill="none" stroke="#00FF88" strokeWidth="0.6" strokeLinejoin="round"/>
-
-        {/* Grid lines — cross through centre of quad */}
-        <line x1={`${midT.x}%`} y1={`${midT.y}%`} x2={`${midB.x}%`} y2={`${midB.y}%`} stroke="rgba(0,255,136,0.25)" strokeWidth="0.4"/>
-        <line x1={`${midL.x}%`} y1={`${midL.y}%`} x2={`${midR.x}%`} y2={`${midR.y}%`} stroke="rgba(0,255,136,0.25)" strokeWidth="0.4"/>
-      </svg>
-    );
-  };
-
-  const LABELS = ['↖','↗','↘','↙'];
+  // ── Handle style helper ──────────────────────────────────────────
+  const handle = (corner, posStyle, label) => (
+    <div
+      key={corner}
+      style={{
+        position: 'absolute',
+        width: 40, height: 40,
+        borderRadius: '50%',
+        background: '#00FF88',
+        border: '3px solid #fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 15, fontWeight: 700, color: '#000',
+        cursor: 'grab', zIndex: 10,
+        touchAction: 'none',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+        transform: 'translate(-50%,-50%)',
+        ...posStyle,
+      }}
+      onMouseDown={e => onHandleStart(e, corner)}
+      onTouchStart={e => onHandleStart(e, corner)}
+    >{label}</div>
+  );
 
   return (
     <div
       style={{ position:'fixed', inset:0, background:'#000', zIndex:9999, display:'flex', flexDirection:'column' }}
-      onMouseMove={onMove} onMouseUp={onEnd} onMouseLeave={onEnd}
+      onMouseMove={onMove} onMouseUp={onEnd}
       onTouchMove={onMove} onTouchEnd={onEnd}
     >
       {/* Top bar */}
@@ -1098,63 +990,57 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
           <ArrowLeft size={15}/> Retake
         </button>
         <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>Adjust Crop</span>
-        <button onClick={confirmCrop} disabled={processing} style={{ background: processing ? 'rgba(0,122,255,0.5)':'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor: processing?'default':'pointer', display:'flex', alignItems:'center', gap:6 }}>
-          {processing ? <><Loader size={14} style={{ animation:'spin 1s linear infinite' }}/> Processing…</> : <>Use <Check size={15}/></>}
+        <button onClick={confirmCrop} style={{ background:'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+          Use <Check size={15}/>
         </button>
       </div>
-
-      <div style={{ color:'rgba(255,255,255,0.45)', fontSize:12, textAlign:'center', padding:'4px 0 2px', flexShrink:0 }}>
-        Drag each corner to the edge of the paper
+      <div style={{ color:'rgba(255,255,255,0.5)', fontSize:12, textAlign:'center', padding:'4px 0', flexShrink:0 }}>
+        Drag each green corner individually
       </div>
 
-      {/* Viewport */}
+      {/* Image + crop overlay */}
       <div
         ref={containerRef}
-        style={{ flex:1, position:'relative', overflow:'hidden', background:'#111', display:'flex', alignItems:'center', justifyContent:'center' }}
+        style={{ flex:1, position:'relative', overflow:'hidden', background:'#000', display:'flex', alignItems:'center', justifyContent:'center' }}
       >
-        {!imgLoaded && <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }}/>}
-
+        {!imgLoaded && (
+          <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }} />
+        )}
         <img
           ref={imgRef}
           src={dataUrl}
-          onLoad={e => { setImgNatural({ w:e.target.naturalWidth, h:e.target.naturalHeight }); setImgLoaded(true); }}
+          onLoad={(e) => {
+            setImgNatural({ w: e.target.naturalWidth, h: e.target.naturalHeight });
+            setImgLoaded(true);
+          }}
           alt="Captured"
           draggable={false}
-          style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain', display: imgLoaded?'block':'none', userSelect:'none', pointerEvents:'none' }}
+          style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain', display: imgLoaded ? 'block' : 'none', userSelect:'none', pointerEvents:'none' }}
         />
 
-        {/* SVG overlay */}
-        {renderOverlay()}
-
-        {/* Draggable corner handles */}
-        {imgLoaded && corners.map((pt, idx) => (
-          <div
-            key={idx}
-            style={{
-              position:'absolute',
-              left: `${pt.x}%`, top: `${pt.y}%`,
-              width:60, height:60,
-              transform:'translate(-50%,-50%)',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              cursor:'grab', zIndex:10, touchAction:'none',
-            }}
-            onMouseDown={e => onHandleDown(e, idx)}
-            onTouchStart={e => onHandleDown(e, idx)}
-          >
-            {/* Visual handle */}
-            <div style={{ width:44, height:44, borderRadius:'50%', background:'#00FF88', border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, color:'#000', boxShadow:'0 2px 12px rgba(0,0,0,0.7)' }}>
-              {LABELS[idx]}
-            </div>
-          </div>
-        ))}
-
-        {/* Processing overlay */}
-        {processing && (
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, zIndex:20 }}>
-            <Loader size={44} color="#00FF88" style={{ animation:'spin 1s linear infinite' }}/>
-            <span style={{ color:'#fff', fontSize:14, fontWeight:600 }}>Straightening & enhancing…</span>
-          </div>
-        )}
+        {imgLoaded && (() => {
+          const L  = `${box.left}%`;
+          const T  = `${box.top}%`;
+          const R  = `${100 - box.right}%`;
+          const B  = `${100 - box.bottom}%`;
+          return (
+            <>
+              {/* Dark mask — 4 sides */}
+              <div style={{ position:'absolute', inset:0, pointerEvents:'none' }}>
+                <div style={{ position:'absolute', top:0,    left:0, right:0,  height:T,              background:'rgba(0,0,0,0.6)' }}/>
+                <div style={{ position:'absolute', bottom:0, left:0, right:0,  height:B,              background:'rgba(0,0,0,0.6)' }}/>
+                <div style={{ position:'absolute', top:T,    left:0, width:L,  bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
+                <div style={{ position:'absolute', top:T,    right:0, width:R, bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
+                <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, border:'2.5px solid #00FF88' }}/>
+              </div>
+              {/* Individual corner handles — each pinned to its own coordinate */}
+              {handle('tl', { top: T,              left: L              }, '↖')}
+              {handle('tr', { top: T,              left: `${box.right}%`}, '↗')}
+              {handle('br', { top: `${box.bottom}%`, left: `${box.right}%`}, '↘')}
+              {handle('bl', { top: `${box.bottom}%`, left: L              }, '↙')}
+            </>
+          );
+        })()}
       </div>
 
       {/* Bottom bar */}
@@ -1162,11 +1048,8 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
         <button onClick={onRetake} style={{ flex:1, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, fontWeight:600, padding:'14px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
           <ArrowLeft size={15}/> Retake
         </button>
-        <button onClick={() => setCorners(mkDefault())} style={{ background:'rgba(255,255,255,0.12)', border:'1.5px solid rgba(255,255,255,0.2)', color:'#fff', fontSize:13, fontWeight:600, padding:'14px 16px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
-          ↺ Reset
-        </button>
-        <button onClick={confirmCrop} disabled={processing} style={{ flex:2, background: processing?'rgba(0,122,255,0.5)':'#007AFF', color:'#fff', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: processing?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          {processing ? <><Loader size={16} style={{ animation:'spin 1s linear infinite' }}/> Processing…</> : <><Check size={16}/> Use This Page</>}
+        <button onClick={confirmCrop} style={{ flex:2, background:'#007AFF', color:'#fff', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          <Check size={16}/> Use This Page
         </button>
       </div>
     </div>
@@ -1297,6 +1180,256 @@ function QRScanner({ onResult, onClose }) {
     </div>
   );
 }
+
+// ── INLINE BARCODE SCANNER ───────────────────────────────────────────────────
+// Uses @zxing/browser (npm) — supports Code128, QR, EAN, and more.
+function InlineBarcodeScanner({ onResult, onCancel }) {
+  const videoRef  = useRef(null);
+  const readerRef = useRef(null);
+  const doneRef   = useRef(false);
+  const [status, setStatus] = useState('Starting camera...');
+
+  useEffect(() => {
+    let cancelled = false;
+    const reader = new BrowserMultiFormatReader();
+    readerRef.current = reader;
+
+    const start = async () => {
+      try {
+        const videoEl = videoRef.current;
+        if (!videoEl) return;
+        setStatus('Point at barcode — hold steady');
+
+        await reader.decodeFromConstraints(
+          { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+          videoEl,
+          (result, err) => {
+            if (doneRef.current || cancelled) return;
+            if (result) {
+              doneRef.current = true;
+              onResult(result.getText());
+            }
+            if (err && !(err instanceof NotFoundException)) {
+              // Ignore scan-miss errors, only log real errors
+              console.warn('[BarcodeScanner]', err);
+            }
+          }
+        );
+      } catch (e) {
+        if (!cancelled) setStatus('Camera access denied.');
+      }
+    };
+
+    start();
+    return () => {
+      cancelled = true;
+      doneRef.current = true;
+      try { reader.reset(); } catch {}
+    };
+  }, []); // eslint-disable-line
+
+  return (
+    <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', aspectRatio: '16/9' }}>
+      <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} playsInline muted />
+      {/* Scan guide */}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+        <div style={{ width: '85%', height: 56, border: '2.5px solid #00FF88', borderRadius: 6, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
+          <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1.4s ease-in-out infinite' }} />
+        </div>
+        <div style={{ color: '#fff', fontSize: 12, marginTop: 10, fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>{status}</div>
+      </div>
+      {/* Cancel button */}
+      <button
+        onClick={onCancel}
+        style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      ><X size={14} /></button>
+    </div>
+  );
+}
+
+// ── QUICK ADD EXAM MODAL ─────────────────────────────────────────────────────
+// Triggered from student profile after QR scan.
+// Lets teacher pick a category, scan a barcode for exam names, enter score/date.
+function QuickAddExamModal({ student, onSave, onClose }) {
+  const categories = student.categories || [];
+
+  const [categoryId,  setCategoryId]  = useState(categories.length === 1 ? categories[0]._id : '');
+  const [examNameEn,  setExamNameEn]  = useState('');
+  const [examNameJa,  setExamNameJa]  = useState('');
+  const [score,       setScore]       = useState('');
+  const [totalScore,  setTotalScore]  = useState('100');
+  const [examDate,    setExamDate]    = useState(new Date().toISOString().split('T')[0]);
+  const [showScanner, setShowScanner] = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [scanFlash,   setScanFlash]   = useState(false);
+
+  const handleBarcodeResult = (text) => {
+    setShowScanner(false);
+    // Flash feedback
+    setScanFlash(true);
+    setTimeout(() => setScanFlash(false), 600);
+
+    // Expected barcode format: "EN_NAME|JA_NAME"
+    // If no separator, put full text in EN field only
+    if (text.includes('|')) {
+      const [en, ja] = text.split('|');
+      setExamNameEn(en.trim());
+      setExamNameJa(ja.trim());
+    } else {
+      setExamNameEn(text.trim());
+    }
+  };
+
+  const canSave = categoryId && examNameEn && score && totalScore;
+
+  const handleSave = async () => {
+    if (!canSave || saving) return;
+    setSaving(true);
+    const cat = categories.find(c => c._id === categoryId);
+    await onSave({ category: cat, examNameEn, examNameJa, score: parseInt(score), totalScore: parseInt(totalScore), date: examDate });
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: '#f2f2f7', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto', padding: '0 0 env(safe-area-inset-bottom,16px)' }}>
+        {/* Handle bar */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0' }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#c7c7cc' }} />
+        </div>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px 8px' }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#007AFF', fontSize: 16, cursor: 'pointer', padding: '4px 0' }}>Cancel</button>
+          <span style={{ fontWeight: 700, fontSize: 17 }}>Quick Add Exam</span>
+          <button
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            style={{ background: 'none', border: 'none', color: canSave ? '#007AFF' : '#c7c7cc', fontSize: 16, fontWeight: 700, cursor: canSave ? 'pointer' : 'default', padding: '4px 0' }}
+          >{saving ? 'Saving...' : 'Save'}</button>
+        </div>
+
+        <div style={{ padding: '4px 16px 20px' }}>
+
+          {/* Category */}
+          <div style={{ background: '#fff', borderRadius: 12, padding: '4px 16px', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #f0f0f0', padding: '12px 0' }}>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>Category</span>
+              <select
+                value={categoryId}
+                onChange={e => setCategoryId(e.target.value)}
+                style={{ border: 'none', background: 'transparent', fontSize: 15, color: categoryId ? '#3a3a3c' : '#c7c7cc', textAlign: 'right', outline: 'none', cursor: 'pointer', maxWidth: 200 }}
+              >
+                <option value="">Select category…</option>
+                {categories.map(cat => (
+                  <option key={cat._id} value={cat._id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            {categories.length === 0 && (
+              <p style={{ fontSize: 12, color: '#ff3b30', margin: '8px 0 4px', textAlign: 'center' }}>No categories yet — add one first from the profile.</p>
+            )}
+          </div>
+
+          {/* Barcode Scanner */}
+          <div style={{ background: '#fff', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showScanner ? 12 : 0 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>Scan Barcode</div>
+                <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 2 }}>Auto-fills exam name (EN + JP)</div>
+              </div>
+              <button
+                onClick={() => setShowScanner(v => !v)}
+                style={{ background: showScanner ? '#ff3b30' : '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                {showScanner ? <><X size={13}/> Close</> : <><Camera size={13}/> Scan</>}
+              </button>
+            </div>
+            {showScanner && (
+              <InlineBarcodeScanner
+                onResult={handleBarcodeResult}
+                onCancel={() => setShowScanner(false)}
+              />
+            )}
+            {scanFlash && (
+              <div style={{ textAlign: 'center', color: '#34C759', fontWeight: 700, fontSize: 14, marginTop: 8 }}>
+                ✅ Barcode scanned!
+              </div>
+            )}
+          </div>
+
+          {/* Exam Names */}
+          <div style={{ background: '#fff', borderRadius: 12, padding: '4px 16px', marginBottom: 12 }}>
+            <div style={{ borderBottom: '1px solid #f0f0f0', padding: '12px 0' }}>
+              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>Exam Name (English)</div>
+              <input
+                value={examNameEn}
+                onChange={e => setExamNameEn(e.target.value)}
+                placeholder="e.g. Chapter 3 Quiz"
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: 15, background: 'transparent', color: '#3a3a3c' }}
+              />
+            </div>
+            <div style={{ padding: '12px 0' }}>
+              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>試験名（日本語）</div>
+              <input
+                value={examNameJa}
+                onChange={e => setExamNameJa(e.target.value)}
+                placeholder="例：第3章テスト"
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: 15, background: 'transparent', color: '#3a3a3c' }}
+              />
+            </div>
+          </div>
+
+          {/* Score / Total */}
+          <div style={{ background: '#fff', borderRadius: 12, padding: '4px 16px', marginBottom: 12, display: 'flex' }}>
+            <div style={{ flex: 1, borderRight: '1px solid #f0f0f0', padding: '12px 12px 12px 0' }}>
+              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>Score</div>
+              <input
+                type="number" min="0" value={score}
+                onChange={e => setScore(e.target.value)}
+                placeholder="85"
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: 22, fontWeight: 700, background: 'transparent', color: '#3a3a3c' }}
+              />
+            </div>
+            <div style={{ flex: 1, padding: '12px 0 12px 12px' }}>
+              <div style={{ fontSize: 12, color: '#8e8e93', marginBottom: 4 }}>Total</div>
+              <input
+                type="number" min="1" value={totalScore}
+                onChange={e => setTotalScore(e.target.value)}
+                placeholder="100"
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: 22, fontWeight: 700, background: 'transparent', color: '#3a3a3c' }}
+              />
+            </div>
+          </div>
+
+          {/* Date */}
+          <div style={{ background: '#fff', borderRadius: 12, padding: '4px 16px', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 0' }}>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>Date</span>
+              <input
+                type="date" value={examDate}
+                onChange={e => setExamDate(e.target.value)}
+                style={{ border: 'none', background: 'transparent', fontSize: 15, color: '#3a3a3c', outline: 'none', cursor: 'pointer' }}
+              />
+            </div>
+          </div>
+
+          {/* Save button */}
+          <button
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            style={{ width: '100%', background: canSave ? '#007AFF' : '#c7c7cc', color: '#fff', border: 'none', borderRadius: 14, padding: '16px', fontSize: 17, fontWeight: 700, cursor: canSave ? 'pointer' : 'default', transition: 'background 0.2s' }}
+          >
+            {saving ? 'Saving…' : '＋ Add Exam'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // ── DOCUMENT SCANNER COMPONENT (CamScanner-style) ──────────────────────────
 function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
@@ -3003,6 +3136,7 @@ function App() {
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showQuickAddExam, setShowQuickAddExam] = useState(false);
   const [scanningExamId, setScanningExamId] = useState(null);
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
   const [resolvedImages, setResolvedImages] = useState({}); // imageId -> base64
@@ -3725,6 +3859,27 @@ function App() {
     setShowScanner(true);
   };
 
+  const handleQuickAddExamSave = async ({ category, examNameEn, examNameJa, score, totalScore, date }) => {
+    if (!selectedStudent || !selectedBatch || !category) return;
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${category._id}/items`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: examNameEn, name_ja: examNameJa, score, totalScore, date })
+      });
+      const newItem = await res.json();
+      const updatedCat = { ...category, items: [...(category.items || []), newItem] };
+      const updatedStudent = {
+        ...selectedStudent,
+        categories: selectedStudent.categories.map(c => c._id === category._id ? updatedCat : c)
+      };
+      setSelectedStudent(updatedStudent);
+      setBatches(prev => prev.map(b => b._id === selectedBatch._id ? {
+        ...b, students: b.students.map(s => s._id === selectedStudent._id ? updatedStudent : s)
+      } : b));
+      setShowQuickAddExam(false);
+    } catch { alert('Error saving exam.'); }
+  };
+
   const handleScanCapture = async (imageDataOrArray) => {
     setShowScanner(false);
     if (!scanningExamId) return;
@@ -4423,6 +4578,12 @@ function App() {
         onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}
         style={{ background: '#5856D6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
       ><KeyRound size={14} style={{ marginRight: 5, verticalAlign: "middle" }} />Parent QR</button>
+
+      {/* ── Quick Add Exam shortcut ── */}
+      <button
+        onClick={() => setShowQuickAddExam(true)}
+        style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+      ><Plus size={14} />Quick Add Exam</button>
 
       <button
         onClick={async () => {
@@ -5760,6 +5921,14 @@ function App() {
       {view === 'examDetail' && renderExamDetail()}
       {renderModal()}
       {renderPrintQRs()}
+      {showQuickAddExam && selectedStudent && (
+        <QuickAddExamModal
+          student={selectedStudent}
+          onSave={handleQuickAddExamSave}
+          onClose={() => setShowQuickAddExam(false)}
+        />
+      )}
+
       {showQRScanner && (
         <QRScanner
           onResult={handleQRResult}
