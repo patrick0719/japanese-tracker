@@ -400,7 +400,7 @@ function ProgressChart({ student, batch, onClose }) {
   // Cleanup PTR refresh timer on unmount to prevent setState on unmounted component
   useEffect(() => {
     return () => {
-      if (ptrRefreshingRef._timer) clearTimeout(ptrRefreshingRef._timer);
+      if (ptrTimerRef.current) clearTimeout(ptrTimerRef.current);
       ptrRefreshingRef.current = false;
     };
   }, []);
@@ -506,6 +506,7 @@ function ProgressChart({ student, batch, onClose }) {
   const ptrDistRef = useRef(0);
   const ptrTriggeredRef = useRef(false);
   const ptrRefreshingRef = useRef(false);
+  const ptrTimerRef = useRef(null); // fix: dedicated ref for the refresh timer
   const ptrStartY = useRef(null);
   const ptrScrollRef = useRef(null);
   const PTR_THRESHOLD = 80;
@@ -544,7 +545,7 @@ function ProgressChart({ student, batch, onClose }) {
         ptrRefreshingRef.current = false;
       }, 800);
       // store timer so it can be cleared on unmount
-      ptrRefreshingRef._timer = timer;
+      ptrTimerRef.current = timer;
     } else {
       ptrStartY.current = null;
       setPtrDist(0); ptrDistRef.current = 0;
@@ -857,48 +858,84 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
   const dragging     = useRef(null);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgNatural, setImgNatural] = useState({ w: 1, h: 1 });
+  const [processing, setProcessing] = useState(false);
 
-  // crop box as % of the CONTAINER (0–100)
-  const [box, setBox] = useState({ left: 8, top: 8, right: 92, bottom: 92 });
+  // Default crop box — 8% inset on each side
+  const DEFAULT_BOX = { left: 8, top: 8, right: 92, bottom: 92 };
+  const [box, setBox] = useState(DEFAULT_BOX);
+
+  // ── Auto-enhance: boost contrast/brightness on the cropped output ──
+  const enhanceCanvas = (canvas) => {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = imageData.data;
+    // Find min/max luminance for auto-levels
+    let min = 255, max = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+      if (lum < min) min = lum;
+      if (lum > max) max = lum;
+    }
+    const range = max - min || 1;
+    // Apply auto-levels + slight brightness boost for scanned docs
+    for (let i = 0; i < d.length; i += 4) {
+      d[i]   = Math.min(255, Math.round(((d[i]   - min) / range) * 255 * 1.05));
+      d[i+1] = Math.min(255, Math.round(((d[i+1] - min) / range) * 255 * 1.05));
+      d[i+2] = Math.min(255, Math.round(((d[i+2] - min) / range) * 255 * 1.05));
+    }
+    ctx.putImageData(imageData, 0, 0);
+  };
 
   // ── Confirm: convert container-% → image pixels → canvas crop ───
-  const confirmCrop = () => {
+  const confirmCrop = async () => {
     const img = imgRef.current;
     const container = containerRef.current;
-    if (!img || !container) return;
+    if (!img || !container || processing) return;
 
-    const { w: iw, h: ih } = imgNatural;
-    const cw = container.offsetWidth;
-    const ch = container.offsetHeight;
-    const scale = Math.min(cw / iw, ch / ih);
-    const drawW = iw * scale, drawH = ih * scale;
-    const ox = (cw - drawW) / 2;
-    const oy = (ch - drawH) / 2;
+    setProcessing(true);
+    // Yield to React so the spinner renders before heavy canvas work
+    await new Promise(r => setTimeout(r, 0));
 
-    const x1 = Math.max(0,  Math.round(((box.left   / 100) * cw - ox) / scale));
-    const y1 = Math.max(0,  Math.round(((box.top    / 100) * ch - oy) / scale));
-    const x2 = Math.min(iw, Math.round(((box.right  / 100) * cw - ox) / scale));
-    const y2 = Math.min(ih, Math.round(((box.bottom / 100) * ch - oy) / scale));
-    const cropW = x2 - x1;
-    const cropH = y2 - y1;
+    try {
+      const { w: iw, h: ih } = imgNatural;
+      const cw = container.offsetWidth;
+      const ch = container.offsetHeight;
+      const scale = Math.min(cw / iw, ch / ih);
+      const drawW = iw * scale, drawH = ih * scale;
+      const ox = (cw - drawW) / 2;
+      const oy = (ch - drawH) / 2;
 
-    // Guard: if crop is too small just use the full image — never show white
-    if (cropW < 20 || cropH < 20) {
-      onConfirm(dataUrl);
-      return;
+      const x1 = Math.max(0,  Math.round(((box.left   / 100) * cw - ox) / scale));
+      const y1 = Math.max(0,  Math.round(((box.top    / 100) * ch - oy) / scale));
+      const x2 = Math.min(iw, Math.round(((box.right  / 100) * cw - ox) / scale));
+      const y2 = Math.min(ih, Math.round(((box.bottom / 100) * ch - oy) / scale));
+      const cropW = x2 - x1;
+      const cropH = y2 - y1;
+
+      // Guard: if crop is too small just use the full image — never show white
+      if (cropW < 20 || cropH < 20) {
+        onConfirm(dataUrl);
+        return;
+      }
+
+      const dst = document.createElement('canvas');
+      dst.width  = cropW;
+      dst.height = cropH;
+      dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
+
+      // Auto-enhance the cropped scan
+      try { enhanceCanvas(dst); } catch { /* non-fatal */ }
+
+      const result = dst.toDataURL('image/jpeg', 0.92);
+      // Guard: if canvas produced a blank result, fall back to full image
+      if (!result || result.length < 1000) {
+        onConfirm(dataUrl);
+        return;
+      }
+      onConfirm(result);
+    } finally {
+      setProcessing(false);
     }
-
-    const dst = document.createElement('canvas');
-    dst.width  = cropW;
-    dst.height = cropH;
-    dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
-    const result = dst.toDataURL('image/jpeg', 0.92);
-    // Guard: if canvas produced a blank result, fall back to full image
-    if (!result || result.length < 1000) {
-      onConfirm(dataUrl);
-      return;
-    }
-    onConfirm(result);
   };
 
   // ── Dragging logic ───────────────────────────────────────────────
@@ -927,7 +964,6 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
     const sb = d.startBox;
     const MIN = 10;
 
-    // Read corner OUTSIDE setBox to avoid stale closure
     const corner = d.corner;
     let { left, top, right, bottom } = sb;
     switch (corner) {
@@ -954,27 +990,33 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
 
   const onEnd = () => { dragging.current = null; };
 
-  // ── Handle style helper ──────────────────────────────────────────
+  // ── Handle style helper — larger touch targets on mobile ────────
   const handle = (corner, posStyle, label) => (
     <div
       key={corner}
       style={{
         position: 'absolute',
-        width: 40, height: 40,
-        borderRadius: '50%',
-        background: '#00FF88',
-        border: '3px solid #fff',
+        // Outer hit area: 56px (finger-friendly), visually 44px circle
+        width: 56, height: 56,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 15, fontWeight: 700, color: '#000',
         cursor: 'grab', zIndex: 10,
         touchAction: 'none',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
         transform: 'translate(-50%,-50%)',
         ...posStyle,
       }}
       onMouseDown={e => onHandleStart(e, corner)}
       onTouchStart={e => onHandleStart(e, corner)}
-    >{label}</div>
+    >
+      <div style={{
+        width: 44, height: 44,
+        borderRadius: '50%',
+        background: '#00FF88',
+        border: '3px solid #fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 15, fontWeight: 700, color: '#000',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+      }}>{label}</div>
+    </div>
   );
 
   return (
@@ -989,12 +1031,12 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
           <ArrowLeft size={15}/> Retake
         </button>
         <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>Adjust Crop</span>
-        <button onClick={confirmCrop} style={{ background:'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-          Use <Check size={15}/>
+        <button onClick={confirmCrop} disabled={processing} style={{ background: processing ? 'rgba(0,122,255,0.5)' : '#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor: processing ? 'default' : 'pointer', display:'flex', alignItems:'center', gap:6 }}>
+          {processing ? <><Loader size={14} style={{ animation:'spin 1s linear infinite' }}/> Processing…</> : <>Use <Check size={15}/></>}
         </button>
       </div>
       <div style={{ color:'rgba(255,255,255,0.5)', fontSize:12, textAlign:'center', padding:'4px 0', flexShrink:0 }}>
-        Drag each green corner individually
+        Drag each green corner to adjust
       </div>
 
       {/* Image + crop overlay */}
@@ -1031,8 +1073,15 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
                 <div style={{ position:'absolute', top:T,    left:0, width:L,  bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
                 <div style={{ position:'absolute', top:T,    right:0, width:R, bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
                 <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, border:'2.5px solid #00FF88' }}/>
+                {/* Rule-of-thirds grid lines inside crop area */}
+                <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, pointerEvents:'none', overflow:'hidden' }}>
+                  <div style={{ position:'absolute', left:'33.33%', top:0, bottom:0, width:1, background:'rgba(0,255,136,0.2)' }}/>
+                  <div style={{ position:'absolute', left:'66.66%', top:0, bottom:0, width:1, background:'rgba(0,255,136,0.2)' }}/>
+                  <div style={{ position:'absolute', top:'33.33%', left:0, right:0, height:1, background:'rgba(0,255,136,0.2)' }}/>
+                  <div style={{ position:'absolute', top:'66.66%', left:0, right:0, height:1, background:'rgba(0,255,136,0.2)' }}/>
+                </div>
               </div>
-              {/* Individual corner handles — each pinned to its own coordinate */}
+              {/* Corner handles */}
               {handle('tl', { top: T,              left: L              }, '↖')}
               {handle('tr', { top: T,              left: `${box.right}%`}, '↗')}
               {handle('br', { top: `${box.bottom}%`, left: `${box.right}%`}, '↘')}
@@ -1040,6 +1089,14 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
             </>
           );
         })()}
+
+        {/* Processing overlay */}
+        {processing && (
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.65)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, zIndex:20 }}>
+            <Loader size={40} color="#00FF88" style={{ animation:'spin 1s linear infinite' }}/>
+            <span style={{ color:'#fff', fontSize:14, fontWeight:600 }}>Enhancing image…</span>
+          </div>
+        )}
       </div>
 
       {/* Bottom bar */}
@@ -1047,8 +1104,17 @@ function CropScreen({ dataUrl, onConfirm, onRetake }) {
         <button onClick={onRetake} style={{ flex:1, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, fontWeight:600, padding:'14px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
           <ArrowLeft size={15}/> Retake
         </button>
-        <button onClick={confirmCrop} style={{ flex:2, background:'#007AFF', color:'#fff', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          <Check size={16}/> Use This Page
+        {/* Reset crop to default */}
+        <button
+          onClick={() => setBox(DEFAULT_BOX)}
+          title="Reset crop"
+          style={{ background:'rgba(255,255,255,0.12)', border:'1.5px solid rgba(255,255,255,0.2)', color:'#fff', fontSize:13, fontWeight:600, padding:'14px 16px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+          ↺ Reset
+        </button>
+        <button onClick={confirmCrop} disabled={processing} style={{ flex:2, background: processing ? 'rgba(0,122,255,0.5)' : '#007AFF', color:'#fff', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: processing ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          {processing
+            ? <><Loader size={16} style={{ animation:'spin 1s linear infinite' }}/> Processing…</>
+            : <><Check size={16}/> Use This Page</>}
         </button>
       </div>
     </div>
