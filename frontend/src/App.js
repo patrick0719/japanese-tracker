@@ -1571,13 +1571,94 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
 
 // ── SETTINGS PAGE ────────────────────────────────────────────────────────────
 // ── BARCODE GENERATOR TAB ────────────────────────────────────────────────────
-// Generates Code128 barcodes for exam names. Uses JsBarcode via CDN.
-// Format encoded: "ExamNameEN|試験名JP"
+
+// Standalone BarcodeItem — must be outside BarcodeGeneratorTab to avoid remount on every render
+function BarcodeItem({ entry, onDelete, libReady }) {
+  // Callback ref — fires immediately when the SVG element is mounted/updated
+  const drawBarcode = useCallback((el) => {
+    if (!el || !libReady || !window.JsBarcode) return;
+    const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
+    try {
+      window.JsBarcode(el, value, {
+        format: 'CODE128',
+        lineColor: '#111',
+        width: 2,
+        height: 64,
+        displayValue: false,
+        margin: 10,
+      });
+    } catch (e) { console.warn('JsBarcode error', e); }
+  }, [libReady, entry.nameEn, entry.nameJa]); // eslint-disable-line
+
+  const handleDownload = () => {
+    const svg = document.getElementById(`barcode-svg-${entry.id}`);
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([svgData], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${entry.nameEn.replace(/\s+/g, '-')}-barcode.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = () => {
+    const svg = document.getElementById(`barcode-svg-${entry.id}`);
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const win = window.open('', '_blank');
+    win.document.write(`
+      <html><head><title>${entry.nameEn}</title>
+      <style>body{margin:24px;font-family:-apple-system,sans-serif;}@media print{button{display:none;}}</style>
+      </head><body>
+        <div style="font-size:18px;font-weight:700;color:#111;margin-bottom:2px;">${entry.nameEn}</div>
+        ${entry.nameJa ? `<div style="font-size:14px;color:#555;margin-bottom:10px;">${entry.nameJa}</div>` : '<div style="margin-bottom:10px;"></div>'}
+        ${svgData}
+        <script>window.onload=()=>{window.print();}<\/script>
+      </body></html>`);
+    win.document.close();
+  };
+
+  return (
+    <div style={{ background:'#fff', borderRadius:16, padding:16, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:12 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e' }}>{entry.nameEn}</div>
+          {entry.nameJa && <div style={{ fontSize:13, color:'#8e8e93', marginTop:2 }}>{entry.nameJa}</div>}
+        </div>
+        <button onClick={() => onDelete(entry.id)} style={{ background:'none', border:'none', color:'#ff3b30', cursor:'pointer', padding:4 }}>
+          <Trash2 size={16}/>
+        </button>
+      </div>
+
+      {/* Barcode — callback ref draws immediately on mount */}
+      <div style={{ background:'#fafafa', borderRadius:10, textAlign:'center', overflow:'hidden', marginBottom:10 }}>
+        {libReady
+          ? <svg id={`barcode-svg-${entry.id}`} ref={drawBarcode} style={{ maxWidth:'100%', display:'block', margin:'0 auto' }} />
+          : <div style={{ padding:24, color:'#8e8e93', fontSize:13 }}>Loading barcode library…</div>
+        }
+      </div>
+
+      <div style={{ display:'flex', gap:8 }}>
+        <button onClick={handlePrint}
+          style={{ flex:1, background:'#8B0000', color:'#fff', border:'none', borderRadius:10, padding:'10px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+          🖨️ Print
+        </button>
+        <button onClick={handleDownload}
+          style={{ flex:1, background:'#f2f2f7', color:'#3a3a3c', border:'none', borderRadius:10, padding:'10px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+          ⬇️ Save SVG
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BarcodeGeneratorTab() {
   const [nameEn,   setNameEn]   = useState('');
   const [nameJa,   setNameJa]   = useState('');
-  const [entries,  setEntries]  = useState([]); // { id, nameEn, nameJa }
-  const [libReady, setLibReady] = useState(false);
+  const [entries,  setEntries]  = useState([]);
+  const [libReady, setLibReady] = useState(!!window.JsBarcode);
   const [libError, setLibError] = useState(false);
 
   // Load JsBarcode from CDN once
@@ -1590,102 +1671,6 @@ function BarcodeGeneratorTab() {
     document.head.appendChild(script);
   }, []);
 
-  // Draw barcode into an <svg> element by ref
-  const BarcodeItem = ({ entry, onDelete }) => {
-    const svgRef = useRef(null);
-
-    useEffect(() => {
-      if (!libReady || !svgRef.current) return;
-      const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
-      try {
-        window.JsBarcode(svgRef.current, value, {
-          format:      'CODE128',
-          lineColor:   '#111',
-          width:       2,
-          height:      64,
-          displayValue: false,
-          margin:      10,
-        });
-      } catch {}
-    }, [libReady, entry]);
-
-    const handleDownload = () => {
-      const svg = svgRef.current;
-      if (!svg) return;
-      const svgData = new XMLSerializer().serializeToString(svg);
-      const blob = new Blob([svgData], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${entry.nameEn.replace(/\s+/g,'-')}-barcode.svg`;
-      a.click();
-      URL.revokeObjectURL(url);
-    };
-
-    const handlePrint = () => {
-      const svg = svgRef.current;
-      if (!svg) return;
-      const svgData = new XMLSerializer().serializeToString(svg);
-      const win = window.open('', '_blank');
-      win.document.write(`
-        <html><head><title>${entry.nameEn}</title>
-        <style>
-          body { margin: 20px; font-family: -apple-system, sans-serif; }
-          .label { font-size: 13px; color: #555; margin-bottom: 4px; }
-          .name-en { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 2px; }
-          .name-ja { font-size: 15px; color: #444; margin-bottom: 12px; }
-          svg { display: block; }
-          @media print { button { display: none; } }
-        </style></head>
-        <body>
-          <div class="label">Exam Barcode</div>
-          <div class="name-en">${entry.nameEn}</div>
-          ${entry.nameJa ? `<div class="name-ja">${entry.nameJa}</div>` : ''}
-          ${svgData}
-          <script>window.onload = () => { window.print(); }<\/script>
-        </body></html>
-      `);
-      win.document.close();
-    };
-
-    return (
-      <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>{entry.nameEn}</div>
-            {entry.nameJa && <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{entry.nameJa}</div>}
-          </div>
-          <button
-            onClick={() => onDelete(entry.id)}
-            style={{ background: 'none', border: 'none', color: '#ff3b30', cursor: 'pointer', padding: 4 }}
-          ><Trash2 size={16} /></button>
-        </div>
-
-        {/* Barcode SVG */}
-        <div style={{ background: '#fafafa', borderRadius: 10, padding: '8px 0', textAlign: 'center', marginBottom: 10, overflow: 'hidden' }}>
-          {libReady
-            ? <svg ref={svgRef} style={{ maxWidth: '100%' }} />
-            : <div style={{ padding: 24, color: '#8e8e93', fontSize: 13 }}>
-                {libError ? '⚠️ Failed to load barcode library' : 'Loading…'}
-              </div>
-          }
-        </div>
-
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={handlePrint}
-            style={{ flex: 1, background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
-          >🖨️ Print</button>
-          <button
-            onClick={handleDownload}
-            style={{ flex: 1, background: '#f2f2f7', color: '#3a3a3c', border: 'none', borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
-          >⬇️ Save SVG</button>
-        </div>
-      </div>
-    );
-  };
-
   const addEntry = () => {
     if (!nameEn.trim()) return;
     setEntries(prev => [...prev, { id: Date.now(), nameEn: nameEn.trim(), nameJa: nameJa.trim() }]);
@@ -1696,14 +1681,13 @@ function BarcodeGeneratorTab() {
   const deleteEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id));
 
   const printAll = () => {
-    if (!entries.length || !libReady) return;
-    const svgs = document.querySelectorAll('.barcode-print-svg');
+    if (!entries.length) return;
     let rows = '';
-    entries.forEach((entry, i) => {
-      const svg = svgs[i];
+    entries.forEach(entry => {
+      const svg = document.getElementById(`barcode-svg-${entry.id}`);
       if (!svg) return;
       rows += `
-        <div style="page-break-inside:avoid; margin-bottom:24px; border:1px solid #e0e0e0; border-radius:8px; padding:16px;">
+        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
           <div style="font-size:16px;font-weight:700;color:#111;margin-bottom:2px;">${entry.nameEn}</div>
           ${entry.nameJa ? `<div style="font-size:13px;color:#555;margin-bottom:8px;">${entry.nameJa}</div>` : '<div style="margin-bottom:8px;"></div>'}
           ${new XMLSerializer().serializeToString(svg)}
@@ -1718,32 +1702,32 @@ function BarcodeGeneratorTab() {
 
   return (
     <div>
-      {/* Input card */}
-      <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
-          📊 Generate Exam Barcode
+      {libError && (
+        <div style={{ background:'#fff3f3', borderRadius:12, padding:'12px 16px', marginBottom:12, color:'#c0392b', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+          <AlertTriangle size={14}/> Failed to load barcode library. Check internet connection.
         </div>
+      )}
 
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#8e8e93', display: 'block', marginBottom: 6 }}>Exam Name (English) *</label>
+      {/* Input card */}
+      <div style={{ background:'#fff', borderRadius:16, padding:20, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:16 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e', marginBottom:16 }}>📊 Generate Exam Barcode</div>
+
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 }}>Exam Name (English) *</label>
           <input
-            type="text"
-            value={nameEn}
-            onChange={e => setNameEn(e.target.value)}
+            type="text" value={nameEn} onChange={e => setNameEn(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addEntry()}
             placeholder="e.g. Chapter 3 Quiz"
             style={{ display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' }}
           />
         </div>
 
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#8e8e93', display: 'block', marginBottom: 6 }}>
-            <Flag size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />試験名（日本語）— optional
+        <div style={{ marginBottom:16 }}>
+          <label style={{ fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 }}>
+            <Flag size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>試験名（日本語）— optional
           </label>
           <input
-            type="text"
-            value={nameJa}
-            onChange={e => setNameJa(e.target.value)}
+            type="text" value={nameJa} onChange={e => setNameJa(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addEntry()}
             placeholder="例：第3章テスト"
             style={{ display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' }}
@@ -1751,46 +1735,31 @@ function BarcodeGeneratorTab() {
         </div>
 
         <button
-          onClick={addEntry}
-          disabled={!nameEn.trim()}
-          style={{ width:'100%', background: nameEn.trim() ? '#8B0000' : '#e5e5ea', color: nameEn.trim() ? '#fff' : '#aaa', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: nameEn.trim() ? 'pointer' : 'default', transition:'background 0.2s' }}
+          onClick={addEntry} disabled={!nameEn.trim() || !libReady}
+          style={{ width:'100%', background: nameEn.trim() && libReady ? '#8B0000' : '#e5e5ea', color: nameEn.trim() && libReady ? '#fff' : '#aaa', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: nameEn.trim() && libReady ? 'pointer' : 'default' }}
         >
-          + Generate Barcode
+          {libReady ? '+ Generate Barcode' : 'Loading library…'}
         </button>
       </div>
 
-      {/* Print All button */}
       {entries.length > 1 && (
-        <button
-          onClick={printAll}
-          style={{ width:'100%', background:'#1c1c1e', color:'#fff', border:'none', borderRadius:12, padding:'13px', fontSize:15, fontWeight:600, cursor:'pointer', marginBottom:16, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
-        >🖨️ Print All ({entries.length})</button>
+        <button onClick={printAll}
+          style={{ width:'100%', background:'#1c1c1e', color:'#fff', border:'none', borderRadius:12, padding:'13px', fontSize:15, fontWeight:600, cursor:'pointer', marginBottom:16, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          🖨️ Print All ({entries.length})
+        </button>
       )}
 
-      {/* Generated barcodes list */}
       {entries.length === 0 && (
         <div style={{ textAlign:'center', padding:'40px 20px', color:'#8e8e93' }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>📊</div>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No barcodes yet</div>
-          <div style={{ fontSize: 13 }}>Type an exam name above and tap Generate</div>
+          <div style={{ fontSize:36, marginBottom:8 }}>📊</div>
+          <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>No barcodes yet</div>
+          <div style={{ fontSize:13 }}>Type an exam name above and tap Generate</div>
         </div>
       )}
 
       {entries.map(entry => (
-        <BarcodeItem key={entry.id} entry={entry} onDelete={deleteEntry} />
+        <BarcodeItem key={entry.id} entry={entry} onDelete={deleteEntry} libReady={libReady} />
       ))}
-
-      {/* Hidden SVGs for Print All */}
-      <div style={{ display:'none' }}>
-        {libReady && entries.map(entry => {
-          const setRef = (el) => {
-            if (!el) return;
-            const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
-            try { window.JsBarcode(el, value, { format:'CODE128', lineColor:'#111', width:2, height:64, displayValue:false, margin:10 }); } catch {}
-          };
-          return <svg key={entry.id} className="barcode-print-svg" ref={setRef} />;
-        })}
-      </div>
     </div>
   );
 }
