@@ -12,7 +12,8 @@ import {
   BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check
 } from 'lucide-react';
 import jsQR from 'jsqr';
-import { BrowserMultiFormatReader, NotFoundException } from '@zxing/browser';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { NotFoundException } from '@zxing/library';
 
 // Returns correct name based on role — JA for kumiai, EN for admin/PHGIC
 function displayName(item) {
