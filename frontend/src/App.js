@@ -3313,7 +3313,7 @@ function App() {
 
   useEffect(() => {
     if (!pendingDeepLink || batches.length === 0) return;
-    const { batchId, studentId } = pendingDeepLink;
+    const { batchId, studentId, openQuickAdd } = pendingDeepLink;
     const batch = batches.find(b => b._id === batchId);
     if (!batch) return;
     const student = batch.students.find(s => s._id === studentId);
@@ -3322,6 +3322,8 @@ function App() {
     setSelectedStudent(student);
     setView('categories');
     setPendingDeepLink(null);
+    // If triggered from QR scan, open Quick Add Exam modal
+    if (openQuickAdd) setTimeout(() => setShowQuickAddExam(true), 150);
   }, [pendingDeepLink, batches]);
 
   const updateBatchInState = (updatedBatch) => {
@@ -3837,7 +3839,6 @@ function App() {
       const studentId = u.searchParams.get('student');
       const isPhgic   = u.searchParams.get('phgic') === '1';
       if (batchId && studentId && isPhgic) {
-        // Navigate to the student directly
         const batch = batches.find(b => b._id === batchId);
         if (batch) {
           const student = batch.students.find(s => s._id === studentId);
@@ -3845,11 +3846,13 @@ function App() {
             setSelectedBatch(batch);
             setSelectedStudent(student);
             setView('categories');
+            // Open Quick Add Exam modal after navigation
+            setTimeout(() => setShowQuickAddExam(true), 150);
             return;
           }
         }
-        // Batch not loaded yet — use deeplink flow
-        setPendingDeepLink({ batchId, studentId });
+        // Batch not loaded yet — deeplink flow, modal opens after load
+        setPendingDeepLink({ batchId, studentId, openQuickAdd: true });
         fetchBatches(isViewer ? null : (safeLocalGet(TEACHER_KEY) ? JSON.parse(safeLocalGet(TEACHER_KEY))._id : null));
       }
     } catch { alert('Invalid QR code.'); }
