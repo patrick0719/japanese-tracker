@@ -1187,52 +1187,89 @@ function QRScanner({ onResult, onClose }) {
 // Uses @zxing/browser (npm) — supports Code128, QR, EAN, and more.
 function InlineBarcodeScanner({ onResult, onCancel }) {
   const videoRef  = useRef(null);
-  const readerRef = useRef(null);
+  const streamRef = useRef(null);
+  const animRef   = useRef(null);
   const doneRef   = useRef(false);
   const [status, setStatus] = useState('Starting camera...');
 
   useEffect(() => {
     let cancelled = false;
+    let mfReader = null;
 
     const start = async () => {
       try {
-        const { BarcodeFormat, DecodeHintType } = await import('@zxing/library');
+        // Import MultiFormatReader + helpers from @zxing/library
+        const {
+          MultiFormatReader,
+          BarcodeFormat,
+          DecodeHintType,
+          BinaryBitmap,
+          HybridBinarizer,
+          HTMLCanvasElementLuminanceSource,
+          RGBLuminanceSource,
+          NotFoundException: NF,
+        } = await import('@zxing/library');
 
         const hints = new Map();
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128]);
         hints.set(DecodeHintType.TRY_HARDER, true);
 
-        const reader = new BrowserMultiFormatReader(hints);
-        readerRef.current = reader;
+        mfReader = new MultiFormatReader();
+        mfReader.setHints(hints);
 
-        const videoEl = videoRef.current;
-        if (!videoEl || cancelled) return;
-
-        // Get camera stream first, assign to video element
+        // Start camera
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
         });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
-        videoEl.srcObject = stream;
-        videoEl.setAttribute('playsinline', true);
-        await videoEl.play();
-        setStatus('Point at barcode — hold steady');
+        streamRef.current = stream;
 
-        // Decode from the already-playing video element
-        reader.decodeFromVideoElement(videoEl, (result, err) => {
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+        await video.play();
+        setStatus('Point camera at barcode');
+
+        // Canvas for frame capture
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        const scan = () => {
           if (doneRef.current || cancelled) return;
-          if (result) {
+          if (video.readyState < 2 || !video.videoWidth) {
+            animRef.current = requestAnimationFrame(scan);
+            return;
+          }
+          canvas.width  = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          try {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const src = new RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
+            const bmp = new BinaryBitmap(new HybridBinarizer(src));
+            const result = mfReader.decode(bmp);
             const text = result.getText();
-            if (text.startsWith('http://') || text.startsWith('https://')) return;
+            // Ignore QR/URL results
+            if (text.startsWith('http://') || text.startsWith('https://')) {
+              animRef.current = requestAnimationFrame(scan);
+              return;
+            }
             doneRef.current = true;
-            // Stop stream before calling onResult
             stream.getTracks().forEach(t => t.stop());
             onResult(text);
+            return;
+          } catch (e) {
+            // NotFoundException is normal — no barcode in frame yet
           }
-        });
+          animRef.current = requestAnimationFrame(scan);
+        };
+
+        animRef.current = requestAnimationFrame(scan);
       } catch (e) {
-        console.error('[BarcodeScanner]', e);
-        if (!cancelled) setStatus('Camera access denied — ' + e.message);
+        console.error('[InlineBarcodeScanner]', e);
+        if (!cancelled) setStatus('Camera error: ' + e.message);
       }
     };
 
@@ -1240,15 +1277,8 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
     return () => {
       cancelled = true;
       doneRef.current = true;
-      try { readerRef.current?.reset(); } catch {}
-      // Stop any lingering camera stream on the video element
-      try {
-        const video = videoRef.current;
-        if (video && video.srcObject) {
-          video.srcObject.getTracks().forEach(t => t.stop());
-          video.srcObject = null;
-        }
-      } catch {}
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
   }, []); // eslint-disable-line
 
