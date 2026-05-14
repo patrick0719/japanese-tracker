@@ -1289,7 +1289,7 @@ function QuickAddExamModal({ student, onSave, onClose }) {
   const [examNameEn,  setExamNameEn]  = useState('');
   const [examNameJa,  setExamNameJa]  = useState('');
   const [score,       setScore]       = useState('');
-  const [totalScore,  setTotalScore]  = useState('100');
+  const [totalScore,  setTotalScore]  = useState('');
   const [examDate,    setExamDate]    = useState(new Date().toISOString().split('T')[0]);
   const [showScanner, setShowScanner] = useState(false);
   const [saving,      setSaving]      = useState(false);
@@ -4060,6 +4060,11 @@ function App() {
         ...b, students: b.students.map(s => s._id === selectedStudent._id ? updatedStudent : s)
       } : b));
       setShowQuickAddExam(false);
+      // Navigate directly to the new exam — ready to scan
+      setSelectedCategory(updatedCat);
+      setSelectedExam(newItem);
+      resolveExamImages(newItem);
+      setView('examDetail');
     } catch { alert('Error saving exam.'); }
   };
 
