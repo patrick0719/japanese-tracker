@@ -1197,8 +1197,9 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
 
     const start = async () => {
       try {
+        // Lower resolution = faster decode
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } }
         });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
@@ -1213,33 +1214,38 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
         const reader = new BrowserMultiFormatReader();
         readerRef.current = reader;
 
-        // Canvas loop — decode every frame
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        const scan = () => {
-          if (doneRef.current || cancelled) return;
-          if (video.readyState < 2 || !video.videoWidth) {
-            requestAnimationFrame(scan); return;
-          }
-          canvas.width  = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Scan interval — 80ms (~12fps) is fast enough for barcodes
+        const intervalId = setInterval(() => {
+          if (doneRef.current || cancelled) { clearInterval(intervalId); return; }
+          if (video.readyState < 2 || !video.videoWidth) return;
+
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+
+          // Only decode the center horizontal strip (barcode guide area)
+          // This is ~3x faster than decoding the full frame
+          const stripH = Math.floor(vh * 0.4);
+          const stripY = Math.floor(vh * 0.3);
+          canvas.width  = vw;
+          canvas.height = stripH;
+          ctx.drawImage(video, 0, stripY, vw, stripH, 0, 0, vw, stripH);
+
           try {
             const result = reader.decodeFromCanvas(canvas);
             const text = result.getText();
-            // Skip if it's a URL (student QR code accidentally scanned)
-            if (text.startsWith('http')) { requestAnimationFrame(scan); return; }
+            if (text.startsWith('http')) return;
+            clearInterval(intervalId);
             doneRef.current = true;
             stream.getTracks().forEach(t => t.stop());
             onResult(text);
           } catch {
-            // No barcode detected in this frame — try next
-            requestAnimationFrame(scan);
+            // No barcode in this frame — continue
           }
-        };
+        }, 80);
 
-        requestAnimationFrame(scan);
       } catch (e) {
         if (!cancelled) setStatus('Camera error: ' + e.message);
       }
@@ -1257,12 +1263,23 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
   return (
     <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', aspectRatio: '16/9' }}>
       <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} playsInline muted />
-      {/* Scan guide */}
+      {/* Scan guide — narrow horizontal strip matching the scan zone */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div style={{ width: '85%', height: 56, border: '2.5px solid #00FF88', borderRadius: 6, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
-          <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1.4s ease-in-out infinite' }} />
+        <div style={{ width: '90%', height: 70, border: '2.5px solid #00FF88', borderRadius: 6, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }}>
+          {/* Animated scan line */}
+          <div style={{ position: 'absolute', left: 4, right: 4, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1s ease-in-out infinite' }} />
+          {/* Corner accents */}
+          {[['0%','0%'],['0%','100%'],['100%','0%'],['100%','100%']].map(([t,l],i) => (
+            <div key={i} style={{ position:'absolute', top:t, left:l, width:14, height:14,
+              borderTop: (t==='0%') ? '3px solid #00FF88' : 'none',
+              borderBottom: (t==='100%') ? '3px solid #00FF88' : 'none',
+              borderLeft: (l==='0%') ? '3px solid #00FF88' : 'none',
+              borderRight: (l==='100%') ? '3px solid #00FF88' : 'none',
+              transform: 'translate(-50%,-50%)'
+            }}/>
+          ))}
         </div>
-        <div style={{ color: '#fff', fontSize: 12, marginTop: 10, fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>{status}</div>
+        <div style={{ color: '#fff', fontSize: 12, marginTop: 10, fontWeight: 600, background: 'rgba(0,0,0,0.5)', padding: '4px 12px', borderRadius: 20 }}>{status}</div>
       </div>
       {/* Cancel button */}
       <button
