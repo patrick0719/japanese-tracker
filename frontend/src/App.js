@@ -1197,9 +1197,8 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
 
     const start = async () => {
       try {
-        // Lower resolution = faster decode
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } }
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
         });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
@@ -1217,35 +1216,27 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        // Scan interval — 80ms (~12fps) is fast enough for barcodes
-        const intervalId = setInterval(() => {
-          if (doneRef.current || cancelled) { clearInterval(intervalId); return; }
-          if (video.readyState < 2 || !video.videoWidth) return;
-
-          const vw = video.videoWidth;
-          const vh = video.videoHeight;
-
-          // Only decode the center horizontal strip (barcode guide area)
-          // This is ~3x faster than decoding the full frame
-          const stripH = Math.floor(vh * 0.4);
-          const stripY = Math.floor(vh * 0.3);
-          canvas.width  = vw;
-          canvas.height = stripH;
-          ctx.drawImage(video, 0, stripY, vw, stripH, 0, 0, vw, stripH);
-
+        const scan = () => {
+          if (doneRef.current || cancelled) return;
+          if (video.readyState < 2 || !video.videoWidth) {
+            requestAnimationFrame(scan); return;
+          }
+          canvas.width  = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           try {
             const result = reader.decodeFromCanvas(canvas);
             const text = result.getText();
-            if (text.startsWith('http')) return;
-            clearInterval(intervalId);
+            if (text.startsWith('http')) { requestAnimationFrame(scan); return; }
             doneRef.current = true;
             stream.getTracks().forEach(t => t.stop());
             onResult(text);
           } catch {
-            // No barcode in this frame — continue
+            requestAnimationFrame(scan);
           }
-        }, 80);
+        };
 
+        requestAnimationFrame(scan);
       } catch (e) {
         if (!cancelled) setStatus('Camera error: ' + e.message);
       }
