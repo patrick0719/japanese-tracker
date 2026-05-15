@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
+import Quagga from '@ericblade/quagga2';
 import { NotFoundException } from '@zxing/library';
 import bwipjs from 'bwip-js';
 
@@ -1186,133 +1187,80 @@ function QRScanner({ onResult, onClose }) {
 // ── INLINE BARCODE SCANNER ───────────────────────────────────────────────────
 // Uses @zxing/browser (npm) — supports Code128, QR, EAN, and more.
 function InlineBarcodeScanner({ onResult, onCancel }) {
-  const videoRef  = useRef(null);
-  const streamRef = useRef(null);
-  const doneRef   = useRef(false);
-  const [status, setStatus] = useState('Starting camera...');
+  const containerRef = useRef(null);
+  const doneRef      = useRef(false);
+  const [status, setStatus] = useState('カメラ起動中...');
 
   useEffect(() => {
-    let cancelled = false;
-    let intervalId = null;
+    let running = false;
 
-    const start = async () => {
-      try {
-        // Import only what we need from @zxing/library
-        const {
-          MultiFormatReader,
-          BarcodeFormat,
-          DecodeHintType,
-          BinaryBitmap,
-          HybridBinarizer,
-          RGBLuminanceSource,
-        } = await import('@zxing/library');
-
-        // Code128 only — skip all other format decoders for speed
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128]);
-        hints.set(DecodeHintType.TRY_HARDER, false); // false = faster, less thorough
-
-        const reader = new MultiFormatReader();
-        reader.setHints(hints);
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width:  { ideal: 1280 },
-            height: { ideal: 720 },
-          }
-        });
-        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
-        streamRef.current = stream;
-
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        video.setAttribute('playsinline', 'true');
-        await video.play();
+    const startQuagga = () => {
+      if (!containerRef.current) return;
+      Quagga.init({
+        inputStream: {
+          type: 'LiveStream',
+          target: containerRef.current,
+          constraints: {
+            facingMode: 'environment',
+            width:  { min: 640, ideal: 1280 },
+            height: { min: 480, ideal: 720 },
+          },
+          area: { top: '25%', right: '5%', bottom: '25%', left: '5%' },
+        },
+        decoder: {
+          readers: ['code_128_reader'], // Code128 only — fastest
+          multiple: false,
+        },
+        locate: true,
+        numOfWorkers: 2,
+        frequency: 15, // scans per second
+      }, (err) => {
+        if (err) { setStatus('Camera error'); console.error(err); return; }
+        running = true;
+        Quagga.start();
         setStatus('バーコードをスキャン');
+      });
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-        // Scan every 120ms — fast enough, light on CPU
-        intervalId = setInterval(() => {
-          if (doneRef.current || cancelled) { clearInterval(intervalId); return; }
-          if (video.readyState < 2 || !video.videoWidth) return;
-
-          const vw = video.videoWidth;
-          const vh = video.videoHeight;
-
-          // Only decode center 50% strip — barcode lives here, 2x faster decode
-          const sh = Math.floor(vh * 0.5);
-          const sy = Math.floor(vh * 0.25);
-          canvas.width  = vw;
-          canvas.height = sh;
-          ctx.drawImage(video, 0, sy, vw, sh, 0, 0, vw, sh);
-
-          try {
-            const imgData = ctx.getImageData(0, 0, vw, sh);
-            const lum = new RGBLuminanceSource(imgData.data, vw, sh);
-            const bmp = new BinaryBitmap(new HybridBinarizer(lum));
-            const result = reader.decode(bmp);
-            const text = result.getText();
-            if (text.startsWith('http')) return; // ignore student QR codes
-            clearInterval(intervalId);
-            doneRef.current = true;
-            stream.getTracks().forEach(t => t.stop());
-            onResult(text);
-          } catch {
-            // NotFoundException — no barcode in frame, continue
-          }
-        }, 120);
-
-      } catch (e) {
-        if (!cancelled) setStatus('Camera error: ' + e.message);
-      }
+      Quagga.onDetected((data) => {
+        if (doneRef.current) return;
+        const text = data.codeResult?.code;
+        if (!text || text.startsWith('http')) return;
+        doneRef.current = true;
+        Quagga.stop();
+        onResult(text);
+      });
     };
 
-    start();
+    startQuagga();
+
     return () => {
-      cancelled = true;
       doneRef.current = true;
-      if (intervalId) clearInterval(intervalId);
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+      try { if (running) Quagga.stop(); } catch {}
     };
   }, []); // eslint-disable-line
 
   return (
     <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', aspectRatio: '16/9' }}>
-      <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} playsInline muted />
-      {/* Scan guide — narrow horizontal strip matching the scan zone */}
+      {/* Quagga2 renders video into this container */}
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {/* Scan guide overlay */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div style={{ width: '90%', height: 70, border: '2.5px solid #00FF88', borderRadius: 6, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }}>
-          {/* Animated scan line */}
+        <div style={{ width: '90%', height: 70, border: '2.5px solid #00FF88', borderRadius: 6, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
           <div style={{ position: 'absolute', left: 4, right: 4, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1s ease-in-out infinite' }} />
-          {/* Corner accents */}
-          {[['0%','0%'],['0%','100%'],['100%','0%'],['100%','100%']].map(([t,l],i) => (
-            <div key={i} style={{ position:'absolute', top:t, left:l, width:14, height:14,
-              borderTop: (t==='0%') ? '3px solid #00FF88' : 'none',
-              borderBottom: (t==='100%') ? '3px solid #00FF88' : 'none',
-              borderLeft: (l==='0%') ? '3px solid #00FF88' : 'none',
-              borderRight: (l==='100%') ? '3px solid #00FF88' : 'none',
-              transform: 'translate(-50%,-50%)'
-            }}/>
-          ))}
         </div>
         <div style={{ color: '#fff', fontSize: 12, marginTop: 10, fontWeight: 600, background: 'rgba(0,0,0,0.5)', padding: '4px 12px', borderRadius: 20 }}>{status}</div>
       </div>
-      {/* Cancel button */}
-      <button
-        onClick={onCancel}
-        style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      ><X size={14} /></button>
+      <button onClick={onCancel}
+        style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <X size={14} />
+      </button>
     </div>
   );
 }
 
 // ── QUICK ADD EXAM MODAL ─────────────────────────────────────────────────────
-function QuickAddExamModal({ student, onSave, onClose }) {
-  const categories = student.categories || [];
+function QuickAddExamModal({ student, categories, onSave, onClose }) {
+  // categories passed as live prop from App state — always fresh
 
   const [categoryId,  setCategoryId]  = useState(categories.length === 1 ? categories[0]._id : '');
   const [examNameEn,  setExamNameEn]  = useState('');
@@ -6156,6 +6104,7 @@ function App() {
       {showQuickAddExam && selectedStudent && (
         <QuickAddExamModal
           student={selectedStudent}
+          categories={selectedStudent?.categories || []}
           onSave={handleQuickAddExamSave}
           onClose={() => setShowQuickAddExam(false)}
         />
