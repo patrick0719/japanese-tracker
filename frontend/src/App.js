@@ -1185,7 +1185,7 @@ function QRScanner({ onResult, onClose }) {
 
 // ── INLINE BARCODE SCANNER ───────────────────────────────────────────────────
 // Uses @zxing/browser (npm) — supports Code128, QR, EAN, and more.
-function InlineBarcodeScanner({ onResult, onCancel }) {
+function InlineQRScanner({ onResult, onCancel }) {
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -1325,17 +1325,17 @@ function QuickAddExamModal({ student, categories, onSave, onClose }) {
 
         {/* Barcode Scanner */}
         <div className="form-group">
-          <label>Scan Barcode <span style={{ fontWeight:400, color:'var(--text-tertiary)', fontSize:12 }}>— auto-fills exam names</span></label>
+          <label>Scan QR Code <span style={{ fontWeight:400, color:'var(--text-tertiary)', fontSize:12 }}>— auto-fills exam names</span></label>
           <button
             onClick={() => setShowScanner(v => !v)}
             className={showScanner ? 'btn-secondary' : 'btn-secondary'}
             style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, borderColor: showScanner ? 'var(--red)' : 'var(--border-med)', color: showScanner ? 'var(--red)' : 'var(--text-secondary)' }}
           >
-            {showScanner ? <><X size={14}/> Close Scanner</> : <><Camera size={14}/> Open Scanner</>}
+            {showScanner ? <><X size={14}/> Close</> : <><Camera size={14}/> Scan QR</>}
           </button>
           {showScanner && (
             <div style={{ marginTop:10 }}>
-              <InlineBarcodeScanner onResult={handleBarcodeResult} onCancel={() => setShowScanner(false)} />
+              <InlineQRScanner onResult={handleBarcodeResult} onCancel={() => setShowScanner(false)} />
             </div>
           )}
           {scanFlash && (
