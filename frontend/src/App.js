@@ -1188,17 +1188,39 @@ function QRScanner({ onResult, onClose }) {
 function InlineBarcodeScanner({ onResult, onCancel }) {
   const videoRef  = useRef(null);
   const streamRef = useRef(null);
-  const readerRef = useRef(null);
   const doneRef   = useRef(false);
   const [status, setStatus] = useState('Starting camera...');
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId = null;
 
     const start = async () => {
       try {
+        // Import only what we need from @zxing/library
+        const {
+          MultiFormatReader,
+          BarcodeFormat,
+          DecodeHintType,
+          BinaryBitmap,
+          HybridBinarizer,
+          RGBLuminanceSource,
+        } = await import('@zxing/library');
+
+        // Code128 only — skip all other format decoders for speed
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128]);
+        hints.set(DecodeHintType.TRY_HARDER, false); // false = faster, less thorough
+
+        const reader = new MultiFormatReader();
+        reader.setHints(hints);
+
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          video: {
+            facingMode: { ideal: 'environment' },
+            width:  { ideal: 1280 },
+            height: { ideal: 720 },
+          }
         });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
@@ -1208,35 +1230,42 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
         video.srcObject = stream;
         video.setAttribute('playsinline', 'true');
         await video.play();
-        setStatus('Point camera at barcode');
-
-        const reader = new BrowserMultiFormatReader();
-        readerRef.current = reader;
+        setStatus('バーコードをスキャン');
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        const scan = () => {
-          if (doneRef.current || cancelled) return;
-          if (video.readyState < 2 || !video.videoWidth) {
-            requestAnimationFrame(scan); return;
-          }
-          canvas.width  = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Scan every 120ms — fast enough, light on CPU
+        intervalId = setInterval(() => {
+          if (doneRef.current || cancelled) { clearInterval(intervalId); return; }
+          if (video.readyState < 2 || !video.videoWidth) return;
+
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+
+          // Only decode center 50% strip — barcode lives here, 2x faster decode
+          const sh = Math.floor(vh * 0.5);
+          const sy = Math.floor(vh * 0.25);
+          canvas.width  = vw;
+          canvas.height = sh;
+          ctx.drawImage(video, 0, sy, vw, sh, 0, 0, vw, sh);
+
           try {
-            const result = reader.decodeFromCanvas(canvas);
+            const imgData = ctx.getImageData(0, 0, vw, sh);
+            const lum = new RGBLuminanceSource(imgData.data, vw, sh);
+            const bmp = new BinaryBitmap(new HybridBinarizer(lum));
+            const result = reader.decode(bmp);
             const text = result.getText();
-            if (text.startsWith('http')) { requestAnimationFrame(scan); return; }
+            if (text.startsWith('http')) return; // ignore student QR codes
+            clearInterval(intervalId);
             doneRef.current = true;
             stream.getTracks().forEach(t => t.stop());
             onResult(text);
           } catch {
-            requestAnimationFrame(scan);
+            // NotFoundException — no barcode in frame, continue
           }
-        };
+        }, 120);
 
-        requestAnimationFrame(scan);
       } catch (e) {
         if (!cancelled) setStatus('Camera error: ' + e.message);
       }
@@ -1246,7 +1275,7 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
     return () => {
       cancelled = true;
       doneRef.current = true;
-      try { readerRef.current?.reset(); } catch {}
+      if (intervalId) clearInterval(intervalId);
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
   }, []); // eslint-disable-line
