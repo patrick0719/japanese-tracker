@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import Quagga from '@ericblade/quagga2';
 import { NotFoundException } from '@zxing/library';
 import bwipjs from 'bwip-js';
 
@@ -1187,66 +1186,89 @@ function QRScanner({ onResult, onClose }) {
 // ── INLINE BARCODE SCANNER ───────────────────────────────────────────────────
 // Uses @zxing/browser (npm) — supports Code128, QR, EAN, and more.
 function InlineBarcodeScanner({ onResult, onCancel }) {
-  const containerRef = useRef(null);
-  const doneRef      = useRef(false);
+  const videoRef  = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const animRef   = useRef(null);
+  const readerRef = useRef(null);
+  const doneRef   = useRef(false);
   const [status, setStatus] = useState('カメラ起動中...');
 
   useEffect(() => {
-    let running = false;
+    const start = async () => {
+      try {
+        // Import everything once before the loop — same as how jsQR is pre-imported
+        const {
+          MultiFormatReader, BarcodeFormat, DecodeHintType,
+          BinaryBitmap, HybridBinarizer, RGBLuminanceSource,
+        } = await import('@zxing/library');
 
-    const startQuagga = () => {
-      if (!containerRef.current) return;
-      Quagga.init({
-        inputStream: {
-          type: 'LiveStream',
-          target: containerRef.current,
-          constraints: {
-            facingMode: 'environment',
-            width:  { min: 640, ideal: 1280 },
-            height: { min: 480, ideal: 720 },
-          },
-          area: { top: '25%', right: '5%', bottom: '25%', left: '5%' },
-        },
-        decoder: {
-          readers: ['code_128_reader'], // Code128 only — fastest
-          multiple: false,
-        },
-        locate: true,
-        numOfWorkers: 2,
-        frequency: 15, // scans per second
-      }, (err) => {
-        if (err) { setStatus('Camera error'); console.error(err); return; }
-        running = true;
-        Quagga.start();
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128]);
+        const reader = new MultiFormatReader();
+        reader.setHints(hints);
+        readerRef.current = reader;
+
+        // Exact same camera setup as QR scanner
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        streamRef.current = stream;
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        await video.play();
         setStatus('バーコードをスキャン');
-      });
 
-      Quagga.onDetected((data) => {
-        if (doneRef.current) return;
-        const text = data.codeResult?.code;
-        if (!text || text.startsWith('http')) return;
-        doneRef.current = true;
-        Quagga.stop();
-        onResult(text);
-      });
+        // Exact same rAF canvas loop as QR scanner
+        const scan = () => {
+          if (doneRef.current) return;
+          const canvas = canvasRef.current;
+          if (!video || !canvas || video.readyState < 2) {
+            animRef.current = requestAnimationFrame(scan); return;
+          }
+          canvas.width  = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          try {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const lum = new RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
+            const bmp = new BinaryBitmap(new HybridBinarizer(lum));
+            const result = reader.decode(bmp);
+            const text = result.getText();
+            if (!text.startsWith('http')) {
+              doneRef.current = true;
+              stream.getTracks().forEach(t => t.stop());
+              onResult(text);
+              return;
+            }
+          } catch {
+            // No barcode this frame — continue
+          }
+          animRef.current = requestAnimationFrame(scan);
+        };
+
+        animRef.current = requestAnimationFrame(scan);
+      } catch (e) {
+        setStatus('カメラエラー: ' + e.message);
+      }
     };
 
-    startQuagga();
-
+    start();
     return () => {
       doneRef.current = true;
-      try { if (running) Quagga.stop(); } catch {}
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     };
   }, []); // eslint-disable-line
 
   return (
     <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', aspectRatio: '16/9' }}>
-      {/* Quagga2 renders video into this container */}
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-      {/* Scan guide overlay */}
+      <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} playsInline muted />
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div style={{ width: '90%', height: 70, border: '2.5px solid #00FF88', borderRadius: 6, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
-          <div style={{ position: 'absolute', left: 4, right: 4, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1s ease-in-out infinite' }} />
+        <div style={{ width: '85%', height: 72, border: '2.5px solid #00FF88', borderRadius: 6, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
+          <div style={{ position: 'absolute', left: 4, right: 4, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1.2s ease-in-out infinite' }} />
         </div>
         <div style={{ color: '#fff', fontSize: 12, marginTop: 10, fontWeight: 600, background: 'rgba(0,0,0,0.5)', padding: '4px 12px', borderRadius: 20 }}>{status}</div>
       </div>
