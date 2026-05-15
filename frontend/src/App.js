@@ -1250,7 +1250,16 @@ function InlineQRScanner({ onResult, onCancel }) {
       <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} playsInline muted />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div style={{ width: '75%', height: 75, border: '2.5px solid #00FF88', borderRadius: 8, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
+        <div style={{ width: 160, height: 160, border: '2.5px solid #00FF88', borderRadius: 12, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
+          {/* Corner accents */}
+          {[{top:0,left:0},{top:0,right:0},{bottom:0,left:0},{bottom:0,right:0}].map((pos,i) => (
+            <div key={i} style={{ position:'absolute', width:18, height:18,
+              borderTop: (pos.top===0) ? '3px solid #00FF88' : 'none',
+              borderBottom: (pos.bottom===0 && pos.bottom!==undefined) ? '3px solid #00FF88' : 'none',
+              borderLeft: (pos.left===0) ? '3px solid #00FF88' : 'none',
+              borderRight: (pos.right===0 && pos.right!==undefined) ? '3px solid #00FF88' : 'none',
+              ...pos }} />
+          ))}
           <div style={{ position: 'absolute', left: 4, right: 4, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1.2s ease-in-out infinite' }} />
         </div>
         <div style={{ color: '#fff', fontSize: 12, marginTop: 8, fontWeight: 600, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: 20 }}>{status}</div>
