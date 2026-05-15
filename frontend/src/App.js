@@ -2817,6 +2817,7 @@ function LoginScreen({ onLogin }) {
     } else if (username === KAZUMI_USER && password === KAZUMI_PASS) {
       safeLocalSet(AUTH_KEY, 'true');
       safeLocalSet(ROLE_KEY, 'kazumi');
+      safeLocalSet('sage_lang', 'ja');
       onLogin('kazumi');
     } else {
       setError('Invalid username or password.');
@@ -4268,16 +4269,17 @@ function App() {
       setIsLoggedIn(true);
       setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role));
       setIsKazumi(role === 'kazumi');
-      // kazumi gets admin-side view (teacher select) — fetch like admin
+      // kazumi sees teacher select then fetches that teacher's batches
       if (['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role)) fetchBatches(null);
-      else {
+      else if (role !== 'kazumi') {
         const teacher = safeLocalGet(TEACHER_KEY);
         if (teacher) fetchBatches(JSON.parse(teacher)._id);
       }
+      // kazumi: wait for TeacherSelect, batches fetched after teacher picked
     }} />
   );
 
-  if (!isViewer && !isKazumi && !selectedTeacher) return (
+  if ((!isViewer || isKazumi) && !selectedTeacher) return (
     <TeacherSelect onSelect={(t, pendingStudent, pendingBatch) => {
       safeLocalSet(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
@@ -4453,17 +4455,19 @@ function App() {
       <div className="header-banner">
         <div className="top-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {!isViewer && !isKazumi && selectedTeacher?.photo && (
+            {((!isViewer && !isKazumi) || isKazumi) && selectedTeacher?.photo && (
               <img src={selectedTeacher.photo} alt={selectedTeacher.name}
                 style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
             )}
-            {!isViewer && !isKazumi && !selectedTeacher?.photo && (
-              <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji}</span>
+            {((!isViewer && !isKazumi) || isKazumi) && !selectedTeacher?.photo && (
+              <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
             )}
             <div>
-              <p className="logged-in-label">{t('loggedInAs')}</p>
+              <p className="logged-in-label">ログイン中</p>
               <h1 className={`title${isViewer && safeLocalGet(ROLE_KEY) !== 'viewer' ? ' kumiai-title' : ''}`}>
-                {isViewer
+                {isKazumi
+                  ? (selectedTeacher?.name || 'Ogawa Sensei')
+                  : isViewer
                   ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI TECH COOPERATIVE ASSOCIATION'
                     : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WORLD BUSINESS COOPERATIVE'
                     : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMU SUISHIN COOPERATIVE ASSOCIATION'
@@ -4477,13 +4481,13 @@ function App() {
           <div className="top-row-actions">
             {isViewer && <span className="badge-view-only">{t('viewOnly')}</span>}
             {isKazumi && <span className="badge-view-only">View Only</span>}
-            {!isViewer && !isKazumi && (
-              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">{t('switch')}</button>
-            )}
+            {(!isViewer && !isKazumi) || isKazumi ? (
+              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">切替</button>
+            ) : null}
             <button onClick={() => setDarkMode(d => !d)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Toggle Dark Mode">
                 {darkMode ? <Sun size={16} /> : <Moon size={16} />}
               </button>
-            {safeLocalGet(ROLE_KEY) === 'admin' && (
+            {(safeLocalGet(ROLE_KEY) === 'admin' || isKazumi) && (
               <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
                 <Settings size={16} />
               </button>
