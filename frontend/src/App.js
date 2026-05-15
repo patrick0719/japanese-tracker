@@ -1197,19 +1197,6 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
   useEffect(() => {
     const start = async () => {
       try {
-        // Import everything once before the loop — same as how jsQR is pre-imported
-        const {
-          MultiFormatReader, BarcodeFormat, DecodeHintType,
-          BinaryBitmap, HybridBinarizer, RGBLuminanceSource,
-        } = await import('@zxing/library');
-
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128]);
-        const reader = new MultiFormatReader();
-        reader.setHints(hints);
-        readerRef.current = reader;
-
-        // Exact same camera setup as QR scanner
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
         });
@@ -1218,9 +1205,9 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
         if (!video) return;
         video.srcObject = stream;
         await video.play();
-        setStatus('バーコードをスキャン');
+        setStatus('QRコードをスキャン');
 
-        // Exact same rAF canvas loop as QR scanner
+        // Exact same loop as QRScanner — using jsQR
         const scan = () => {
           if (doneRef.current) return;
           const canvas = canvasRef.current;
@@ -1229,22 +1216,17 @@ function InlineBarcodeScanner({ onResult, onCancel }) {
           }
           canvas.width  = video.videoWidth;
           canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          const ctx = canvas.getContext('2d');
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          try {
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const lum = new RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
-            const bmp = new BinaryBitmap(new HybridBinarizer(lum));
-            const result = reader.decode(bmp);
-            const text = result.getText();
-            if (!text.startsWith('http')) {
-              doneRef.current = true;
-              stream.getTracks().forEach(t => t.stop());
-              onResult(text);
-              return;
-            }
-          } catch {
-            // No barcode this frame — continue
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imgData.data, imgData.width, imgData.height, {
+            inversionAttempts: 'dontInvert',
+          });
+          if (code && code.data && !code.data.startsWith('http')) {
+            doneRef.current = true;
+            stream.getTracks().forEach(t => t.stop());
+            onResult(code.data);
+            return;
           }
           animRef.current = requestAnimationFrame(scan);
         };
@@ -1299,10 +1281,7 @@ function QuickAddExamModal({ student, categories, onSave, onClose }) {
     setScanFlash(true);
     setTimeout(() => setScanFlash(false), 2000);
     if (text.includes('|')) {
-      const [en, jaEncoded] = text.split('|');
-      // Decode base64-encoded Japanese back to UTF-8
-      let ja = '';
-      try { ja = decodeURIComponent(escape(atob(jaEncoded))); } catch { ja = jaEncoded; }
+      const [en, ja] = text.split('|');
       setExamNameEn(en.trim());
       setExamNameJa(ja.trim());
     } else {
@@ -1605,31 +1584,20 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
 }
 
 // ── SETTINGS PAGE ────────────────────────────────────────────────────────────
-// ── BARCODE GENERATOR TAB ────────────────────────────────────────────────────
+// ── QR CODE GENERATOR TAB ────────────────────────────────────────────────────
 
-function BarcodeItem({ entry, onDelete }) {
+function QRItem({ entry, onDelete }) {
   const canvasRef = useRef(null);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    // Encode Japanese as base64 so Code128 (ASCII-only) can carry it safely
-    const jaEncoded = entry.nameJa ? btoa(unescape(encodeURIComponent(entry.nameJa))) : '';
-    const value = jaEncoded ? `${entry.nameEn}|${jaEncoded}` : entry.nameEn;
-    try {
-      bwipjs.toCanvas(canvas, {
-        bcid:        'code128',
-        text:        value,
-        scale:       3,
-        height:      14,
-        includetext: false,
-        backgroundcolor: 'ffffff',
-      });
-      setError(null);
-    } catch (e) {
-      setError(e.message);
-    }
+    const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
+    QRCode.toCanvas(canvas, value, {
+      width: 200,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
+    }).catch(e => console.error('QR error', e));
   }, [entry.nameEn, entry.nameJa]);
 
   const handleDownload = () => {
@@ -1637,7 +1605,7 @@ function BarcodeItem({ entry, onDelete }) {
     if (!canvas) return;
     const a = document.createElement('a');
     a.href = canvas.toDataURL('image/png');
-    a.download = `${entry.nameEn.replace(/\s+/g, '-')}-barcode.png`;
+    a.download = `${entry.nameEn.replace(/\s+/g, '-')}-qr.png`;
     a.click();
   };
 
@@ -1649,14 +1617,14 @@ function BarcodeItem({ entry, onDelete }) {
     win.document.write(`
       <html><head><title>${entry.nameEn}</title>
       <style>
-        body { margin: 24px; font-family: -apple-system, sans-serif; }
-        img { display: block; max-width: 100%; }
+        body { margin: 24px; font-family: -apple-system, sans-serif; text-align: center; }
+        img { display: block; margin: 0 auto; }
         @media print { button { display: none; } }
       </style></head>
       <body>
         <div style="font-size:18px;font-weight:700;margin-bottom:2px;">${entry.nameEn}</div>
-        ${entry.nameJa ? `<div style="font-size:14px;color:#555;margin-bottom:10px;">${entry.nameJa}</div>` : '<div style="margin-bottom:10px;"></div>'}
-        <img src="${imgData}" />
+        ${entry.nameJa ? `<div style="font-size:14px;color:#555;margin-bottom:12px;">${entry.nameJa}</div>` : '<div style="margin-bottom:12px;"></div>'}
+        <img src="${imgData}" width="200" height="200" />
         <script>window.onload=()=>{ window.print(); }<\/script>
       </body></html>`);
     win.document.close();
@@ -1664,7 +1632,7 @@ function BarcodeItem({ entry, onDelete }) {
 
   return (
     <div style={{ background:'#fff', borderRadius:16, padding:16, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:12 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
         <div>
           <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e' }}>{entry.nameEn}</div>
           {entry.nameJa && <div style={{ fontSize:13, color:'#8e8e93', marginTop:2 }}>{entry.nameJa}</div>}
@@ -1673,14 +1641,9 @@ function BarcodeItem({ entry, onDelete }) {
           <Trash2 size={16}/>
         </button>
       </div>
-
-      <div style={{ background:'#fafafa', borderRadius:10, padding:'12px', textAlign:'center', marginBottom:10 }}>
-        {error
-          ? <div style={{ color:'#ff3b30', fontSize:13 }}>⚠️ {error}</div>
-          : <canvas ref={canvasRef} style={{ maxWidth:'100%', display:'block', margin:'0 auto' }} />
-        }
+      <div style={{ display:'flex', justifyContent:'center', background:'#fafafa', borderRadius:10, padding:12, marginBottom:10 }}>
+        <canvas ref={canvasRef} />
       </div>
-
       <div style={{ display:'flex', gap:8 }}>
         <button onClick={handlePrint}
           style={{ flex:1, background:'#8B0000', color:'#fff', border:'none', borderRadius:10, padding:'10px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
@@ -1710,21 +1673,20 @@ function BarcodeGeneratorTab() {
   const deleteEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id));
 
   const printAll = () => {
-    // Collect all canvas images then print
-    const canvases = document.querySelectorAll('.barcode-canvas-item');
+    const canvases = document.querySelectorAll('.qr-canvas-print');
     let rows = '';
     entries.forEach((entry, i) => {
-      const canvas = canvases[i];
-      if (!canvas) return;
+      const c = canvases[i];
+      if (!c) return;
       rows += `
-        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
-          <div style="font-size:16px;font-weight:700;color:#111;margin-bottom:2px;">${entry.nameEn}</div>
+        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #e0e0e0;border-radius:8px;padding:16px;text-align:center;">
+          <div style="font-size:16px;font-weight:700;margin-bottom:2px;">${entry.nameEn}</div>
           ${entry.nameJa ? `<div style="font-size:13px;color:#555;margin-bottom:8px;">${entry.nameJa}</div>` : '<div style="margin-bottom:8px;"></div>'}
-          <img src="${canvas.toDataURL('image/png')}" style="max-width:100%;" />
+          <img src="${c.toDataURL('image/png')}" width="180" />
         </div>`;
     });
     const win = window.open('', '_blank');
-    win.document.write(`<html><head><title>Exam Barcodes</title>
+    win.document.write(`<html><head><title>Exam QR Codes</title>
       <style>body{margin:20px;font-family:-apple-system,sans-serif;}@media print{button{display:none;}}</style>
       </head><body>${rows}<script>window.onload=()=>{window.print();}<\/script></body></html>`);
     win.document.close();
@@ -1732,14 +1694,13 @@ function BarcodeGeneratorTab() {
 
   return (
     <div>
-      {/* Input card */}
       <div style={{ background:'#fff', borderRadius:16, padding:20, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:16 }}>
-        <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e', marginBottom:16 }}>📊 Generate Exam Barcode</div>
+        <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e', marginBottom:4 }}>📱 Exam QR Code Generator</div>
+        <div style={{ fontSize:12, color:'#8e8e93', marginBottom:16 }}>Scan with the Add Exam modal to auto-fill exam names</div>
 
         <div style={{ marginBottom:12 }}>
           <label style={{ fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 }}>Exam Name (English) *</label>
-          <input
-            type="text" value={nameEn} onChange={e => setNameEn(e.target.value)}
+          <input type="text" value={nameEn} onChange={e => setNameEn(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addEntry()}
             placeholder="e.g. Chapter 3 Quiz"
             style={{ display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' }}
@@ -1750,18 +1711,17 @@ function BarcodeGeneratorTab() {
           <label style={{ fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 }}>
             <Flag size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>試験名（日本語）— optional
           </label>
-          <input
-            type="text" value={nameJa} onChange={e => setNameJa(e.target.value)}
+          <input type="text" value={nameJa} onChange={e => setNameJa(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addEntry()}
             placeholder="例：第3章テスト"
             style={{ display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' }}
           />
         </div>
 
-        <button
-          onClick={addEntry} disabled={!nameEn.trim()}
-          style={{ width:'100%', background: nameEn.trim() ? '#8B0000' : '#e5e5ea', color: nameEn.trim() ? '#fff' : '#aaa', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: nameEn.trim() ? 'pointer' : 'default' }}
-        >+ Generate Barcode</button>
+        <button onClick={addEntry} disabled={!nameEn.trim()}
+          style={{ width:'100%', background: nameEn.trim() ? '#8B0000' : '#e5e5ea', color: nameEn.trim() ? '#fff' : '#aaa', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: nameEn.trim() ? 'pointer' : 'default' }}>
+          + Generate QR Code
+        </button>
       </div>
 
       {entries.length > 1 && (
@@ -1773,15 +1733,25 @@ function BarcodeGeneratorTab() {
 
       {entries.length === 0 && (
         <div style={{ textAlign:'center', padding:'40px 20px', color:'#8e8e93' }}>
-          <div style={{ fontSize:36, marginBottom:8 }}>📊</div>
-          <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>No barcodes yet</div>
+          <div style={{ fontSize:36, marginBottom:8 }}>📱</div>
+          <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>No QR codes yet</div>
           <div style={{ fontSize:13 }}>Type an exam name above and tap Generate</div>
         </div>
       )}
 
-      {entries.map(entry => (
-        <BarcodeItem key={entry.id} entry={entry} onDelete={deleteEntry} />
-      ))}
+      {entries.map(entry => <QRItem key={entry.id} entry={entry} onDelete={deleteEntry} />)}
+
+      {/* Hidden canvases for Print All */}
+      <div style={{ display:'none' }}>
+        {entries.map(entry => {
+          const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
+          const ref = (el) => {
+            if (!el) return;
+            QRCode.toCanvas(el, value, { width: 200, margin: 2 }).catch(() => {});
+          };
+          return <canvas key={entry.id} className="qr-canvas-print" ref={ref} />;
+        })}
+      </div>
     </div>
   );
 }
@@ -1862,7 +1832,7 @@ useEffect(() => {
     { id: 'stats', label: t('appInfoTab') },
     { id: 'server', label: t('serverTab') },
     { id: 'manage', label: t('manageTab') },
-    { id: 'barcodes', label: 'Barcodes' },
+    { id: 'barcodes', label: 'QR Codes' },
   ];
 
   return (
