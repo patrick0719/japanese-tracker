@@ -2521,6 +2521,8 @@ const GREENSERVICES_USER = 'GREEN SERVICES';
 const GREENSERVICES_PASS = 'greenservices';
 const SULOP_USER = 'SULOP';
 const SULOP_PASS = 'sulop';
+const KAZUMI_USER = 'KAZUMI';
+const KAZUMI_PASS = 'kazumi';
 const AUTH_KEY = 'sage_auth';
 const ROLE_KEY = 'sage_role'; // 'admin' or 'viewer'
 
@@ -2812,6 +2814,10 @@ function LoginScreen({ onLogin }) {
       safeLocalSet(AUTH_KEY, 'true');
       safeLocalSet(ROLE_KEY, 'sulop');
       onLogin('sulop');
+    } else if (username === KAZUMI_USER && password === KAZUMI_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'kazumi');
+      onLogin('kazumi');
     } else {
       setError('Invalid username or password.');
     }
@@ -3360,6 +3366,7 @@ function App() {
   const [parentViewData, setParentViewData] = useState(null); // { student, batch, expiresAt }
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
+  const [isKazumi, setIsKazumi] = useState(() => safeLocalGet(ROLE_KEY) === 'kazumi');
   const [isStudentView, setIsStudentView] = useState(false);
   const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
   const [qrPassInput, setQrPassInput] = useState('');
@@ -3406,6 +3413,7 @@ function App() {
           const asViewer = viewerRoles.includes(role);
           setIsLoggedIn(true);
           setIsViewer(asViewer);
+          setIsKazumi(role === 'kazumi');
           setPendingDeepLink({ batchId, studentId });
           if (asViewer) fetchBatches(null);
           else {
@@ -4259,6 +4267,8 @@ function App() {
     <LoginScreen onLogin={(role) => {
       setIsLoggedIn(true);
       setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role));
+      setIsKazumi(role === 'kazumi');
+      // kazumi gets admin-side view (teacher select) — fetch like admin
       if (['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role)) fetchBatches(null);
       else {
         const teacher = safeLocalGet(TEACHER_KEY);
@@ -4267,7 +4277,7 @@ function App() {
     }} />
   );
 
-  if (!isViewer && !selectedTeacher) return (
+  if (!isViewer && !isKazumi && !selectedTeacher) return (
     <TeacherSelect onSelect={(t, pendingStudent, pendingBatch) => {
       safeLocalSet(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
@@ -4443,11 +4453,11 @@ function App() {
       <div className="header-banner">
         <div className="top-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {!isViewer && selectedTeacher?.photo && (
+            {!isViewer && !isKazumi && selectedTeacher?.photo && (
               <img src={selectedTeacher.photo} alt={selectedTeacher.name}
                 style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
             )}
-            {!isViewer && !selectedTeacher?.photo && (
+            {!isViewer && !isKazumi && !selectedTeacher?.photo && (
               <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji}</span>
             )}
             <div>
@@ -4466,7 +4476,8 @@ function App() {
           </div>
           <div className="top-row-actions">
             {isViewer && <span className="badge-view-only">{t('viewOnly')}</span>}
-            {!isViewer && (
+            {isKazumi && <span className="badge-view-only">View Only</span>}
+            {!isViewer && !isKazumi && (
               <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">{t('switch')}</button>
             )}
             <button onClick={() => setDarkMode(d => !d)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Toggle Dark Mode">
@@ -4524,7 +4535,7 @@ function App() {
       </div>{/* end sticky-header */}
 
       {/* ── Smart Reminders (teacher/admin only) ── */}
-      {!isViewer && (
+      {!isViewer && !isKazumi && (
         <SmartReminders
           batches={batches}
           onNavigate={(batch, student) => {
@@ -4631,11 +4642,11 @@ function App() {
                       : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
                   </p>
                 </div>
-                {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>}
+                {!isViewer && !isKazumi && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>}
               </div>
             </div>
           ))}
-          {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
+          {!isViewer && !isKazumi && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
           <button
             onClick={() => setShowQRScanner(true)}
             style={{
@@ -4687,7 +4698,7 @@ function App() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
                   <span
-                    onClick={!isViewer ? (e) => toggleStudentStatus(student, e) : undefined}
+                    onClick={!isViewer && !isKazumi ? (e) => toggleStudentStatus(student, e) : undefined}
                     style={{
                       background: student.status === 'Selected' ? '#007AFF' : '#e5e5ea',
                       color: student.status === 'Selected' ? '#fff' : '#6e6e73',
@@ -4716,7 +4727,7 @@ function App() {
                 <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
               </div>
             </div>
-            {!isViewer && (
+            {!isViewer && !isKazumi && (
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }} onClick={(e) => openEditStudent(student, e)}><MoreHorizontal size={13} /></button>
                 <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}><X size={14} /></button>
@@ -4725,8 +4736,8 @@ function App() {
           </div>
         </div>
       ))}
-      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>{t('addStudent')}</button>}
-      {selectedBatch.students.length > 0 && !isViewer && (
+      {!isViewer && !isKazumi && <button className="add-button" onClick={() => openModal('student')}>{t('addStudent')}</button>}
+      {selectedBatch.students.length > 0 && !isViewer && !isKazumi && (
         <button className="print-qr-button" onClick={generateBatchQRs}>{t('printQrCodes')}</button>
       )}
     </>
@@ -4746,7 +4757,7 @@ function App() {
     : <span className="student-profile-icon"><User size={22} /></span>
   }
   <h1 className="student-profile-name">{selectedStudent.name}</h1>
-  {!isViewer && (
+  {!isViewer && !isKazumi && (
     <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
       <button
         onClick={async () => {
@@ -4836,7 +4847,7 @@ function App() {
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('examCategoriesTitle')}</h2>
-          {!isViewer && (
+          {!isViewer && !isKazumi && (
             <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
@@ -4850,7 +4861,7 @@ function App() {
                   <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="exam-right">
-                  {!isViewer && (
+                  {!isViewer && !isKazumi && (
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
                         onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
@@ -4868,7 +4879,7 @@ function App() {
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('evaluationsTitle')}</h2>
-          {!isViewer && (
+          {!isViewer && !isKazumi && (
             <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
@@ -4903,12 +4914,12 @@ function App() {
                 <h3 className="card-title"><FileText size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{ev.ordinal} Evaluation — {ev.title}</h3>
                 <p className="card-subtitle">📅 {ev.date}</p>
               </div>
-              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteEvaluation(ev._id, e)}><X size={14} /></button>}
+              {!isViewer && !isKazumi && <button className="delete-btn-icon" onClick={(e) => deleteEvaluation(ev._id, e)}><X size={14} /></button>}
             </div>
           </div>
         ))
       }
-      {!isViewer && (
+      {!isViewer && !isKazumi && (
         <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>{t('addEvaluation')}</button>
       )}
     </>
@@ -4951,7 +4962,7 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1 }}>
             {[...Array(11)].map((_, i) => (
-              <button key={i} onClick={() => !isViewer && setEvalFields(f => ({ ...f, [key]: i }))}
+              <button key={i} onClick={() => !isViewer && !isKazumi && setEvalFields(f => ({ ...f, [key]: i }))}
                 style={{
                   width: 36, height: 36, borderRadius: 8, border: 'none', cursor: isViewer ? 'default' : 'pointer',
                   fontWeight: 700, fontSize: 13,
@@ -5053,7 +5064,7 @@ function App() {
             <input
               type="text"
               value={value}
-              onChange={(e) => !isViewer && setEvalFields(f => ({ ...f, [key]: e.target.value }))}
+              onChange={(e) => !isViewer && !isKazumi && setEvalFields(f => ({ ...f, [key]: e.target.value }))}
               readOnly={isViewer}
               placeholder={placeholder}
               lang="ja"
@@ -5160,7 +5171,7 @@ function App() {
           );
         })()}
 
-        {!isViewer && (
+        {!isViewer && !isKazumi && (
           <button onClick={saveEvaluationFields} disabled={evalSaving} className="btn-primary" style={{ marginBottom: 24, opacity: evalSaving ? 0.7 : 1, cursor: evalSaving ? 'not-allowed' : 'pointer' }}>
             {evalSaving ? t('saving') : t('saveEvaluation')}
           </button>
@@ -5313,7 +5324,7 @@ function App() {
                   touchAction: reorderMode ? 'none' : undefined,
                 }}
                 // Long press on normal mode to enter reorder
-                onTouchStartCapture={!isViewer && !reorderMode ? (() => {
+                onTouchStartCapture={!isViewer && !isKazumi && !reorderMode ? (() => {
                   const handler = () => {
                     clearTimeout(longPressTimer.current);
                     longPressTimer.current = setTimeout(() => {
@@ -5323,8 +5334,8 @@ function App() {
                   };
                   return handler;
                 })() : undefined}
-                onTouchEndCapture={!isViewer && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
-                onTouchMoveCapture={!isViewer && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
+                onTouchEndCapture={!isViewer && !isKazumi && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
+                onTouchMoveCapture={!isViewer && !isKazumi && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
               >
                 {/* Drag handle — visible only in reorder mode */}
                 {reorderMode && (
@@ -5351,7 +5362,7 @@ function App() {
                 {!reorderMode && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
                     <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
-                    {!isViewer && (
+                    {!isViewer && !isKazumi && (
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
                           onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
@@ -5369,7 +5380,7 @@ function App() {
           })}
         </div>
       )}
-      {!isViewer && !reorderMode && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
+      {!isViewer && !isKazumi && !reorderMode && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
     </>
     );
   };
@@ -5418,7 +5429,7 @@ function App() {
         </div>
 
         {/* Action buttons */}
-        {!isViewer && (
+        {!isViewer && !isKazumi && (
           <div className="exam-action-row">
             <button className="exam-action-btn scan" onClick={() => openScanner(selectedExam._id)}>
               <Camera size={16} style={{ marginRight: 6 }} />{t('scanPage')}
@@ -5450,7 +5461,7 @@ function App() {
                   <div className="exam-page-num-pill">Page {idx + 1}</div>
 
                   {/* Delete button */}
-                  {!isViewer && (
+                  {!isViewer && !isKazumi && (
                     <button
                       className="exam-page-delete"
                       onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
@@ -5484,7 +5495,7 @@ function App() {
 
         <div style={{ height: 16 }} />
 
-        {!isViewer && (
+        {!isViewer && !isKazumi && (
           <button className="btn-danger" style={{ width: '100%', marginTop: 8 }}
             onClick={(e) => deleteExam(selectedExam._id, e)}>
             {t('deleteExam')}
