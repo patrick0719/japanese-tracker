@@ -1246,13 +1246,14 @@ function InlineQRScanner({ onResult, onCancel }) {
   }, []); // eslint-disable-line
 
   return (
-    <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', aspectRatio: '16/9' }}>
+    <div style={{ position: 'relative', width: '100%', height: 220, borderRadius: 12, overflow: 'hidden', background: '#000' }}>
       <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} playsInline muted />
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div style={{ width: '85%', height: 72, border: '2.5px solid #00FF88', borderRadius: 6, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
+        <div style={{ width: '75%', height: 75, border: '2.5px solid #00FF88', borderRadius: 8, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
           <div style={{ position: 'absolute', left: 4, right: 4, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1.2s ease-in-out infinite' }} />
         </div>
-        <div style={{ color: '#fff', fontSize: 12, marginTop: 10, fontWeight: 600, background: 'rgba(0,0,0,0.5)', padding: '4px 12px', borderRadius: 20 }}>{status}</div>
+        <div style={{ color: '#fff', fontSize: 12, marginTop: 8, fontWeight: 600, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: 20 }}>{status}</div>
       </div>
       <button onClick={onCancel}
         style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
