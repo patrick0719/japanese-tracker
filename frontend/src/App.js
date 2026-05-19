@@ -4811,10 +4811,11 @@ function App() {
                 try {
                   const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
                   const data = await res.json();
-                  if (data.success) { alert(`🗑️ ${selectedStudent.name} permanently deleted.`); goBack(); }
+                  if (data.success) { alert(`${selectedStudent.name} permanently deleted.`); goBack(); }
                   else alert('Error: ' + (data.error || 'Unknown'));
                 } catch (e) { alert('Failed: ' + e.message); }
               }}>
+                <Trash2 size={15} />
                 {t('deleteStudent')}
               </button>
             </div>
