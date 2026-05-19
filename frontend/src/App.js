@@ -4815,7 +4815,7 @@ function App() {
                   else alert('Error: ' + (data.error || 'Unknown'));
                 } catch (e) { alert('Failed: ' + e.message); }
               }}>
-                <Trash2 size={15} />
+               
                 {t('deleteStudent')}
               </button>
             </div>
