@@ -2020,7 +2020,7 @@ useEffect(() => {
             <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>🗑️ Permanent Delete</div>
               <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-                To permanently delete a student and all their images from Cloudinary and the database, use the <strong>🗑️ Delete</strong> button on the student's Categories screen. This <strong>cannot be undone</strong>.
+                To permanently delete a student and all their images from Cloudinary and the database, use the <strong>Delete</strong> button on the student's Categories screen. This <strong>cannot be undone</strong>.
               </p>
               <div style={{ background: '#fff3f3', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#c0392b', fontWeight: 500 }}>
                 <p style={{ margin: '8px 0 0', fontSize: 12, color: '#856404', display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={12} /> Permanent delete removes all data from Cloudinary and MongoDB.</p>
@@ -4811,11 +4811,10 @@ function App() {
                 try {
                   const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
                   const data = await res.json();
-                  if (data.success) { alert(` ${selectedStudent.name} permanently deleted.`); goBack(); }
+                  if (data.success) { alert(`🗑️ ${selectedStudent.name} permanently deleted.`); goBack(); }
                   else alert('Error: ' + (data.error || 'Unknown'));
                 } catch (e) { alert('Failed: ' + e.message); }
               }}>
-                <Trash2 size={15} />
                 {t('deleteStudent')}
               </button>
             </div>
