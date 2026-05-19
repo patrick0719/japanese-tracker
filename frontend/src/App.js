@@ -4803,7 +4803,6 @@ function App() {
             <p className="profile-action-label" style={{ marginTop: 10 }}>Student Status</p>
             <div className="profile-danger-row">
               <button className="profile-danger-btn" onClick={() => toggleArchiveStudent(selectedStudent)}>
-                {selectedStudent.isArchived ? <Eye size={15} /> : <EyeOff size={15} />}
                 {selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}
               </button>
               <button className="profile-danger-btn profile-danger-btn--red" onClick={async () => {
@@ -4812,7 +4811,7 @@ function App() {
                 try {
                   const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
                   const data = await res.json();
-                  if (data.success) { alert(`🗑️ ${selectedStudent.name} permanently deleted.`); goBack(); }
+                  if (data.success) { alert(` ${selectedStudent.name} permanently deleted.`); goBack(); }
                   else alert('Error: ' + (data.error || 'Unknown'));
                 } catch (e) { alert('Failed: ' + e.message); }
               }}>
