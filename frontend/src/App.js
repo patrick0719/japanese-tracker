@@ -4727,104 +4727,138 @@ function App() {
     );
   };
 
-  const renderCategories = () => (
+  const renderCategories = () => {
+    /* ── compute progress stats for the mini card ── */
+    const allExamsFlat = (selectedStudent.categories || []).flatMap(cat =>
+      (cat.items || []).filter(it => it.score != null && it.totalScore).map(it => ({
+        pct: Math.round((it.score / it.totalScore) * 100),
+        date: it.date ? new Date(it.date) : null,
+      }))
+    ).sort((a, b) => (a.date || 0) - (b.date || 0));
+    const n = allExamsFlat.length;
+    const avg = n > 0 ? Math.round(allExamsFlat.reduce((s, e) => s + e.pct, 0) / n) : null;
+    const win = Math.min(3, Math.floor(n / 2));
+    const recentTrend = n >= 2
+      ? Math.round(allExamsFlat.slice(-win).reduce((s, e) => s + e.pct, 0) / win) -
+        Math.round(allExamsFlat.slice(-(win * 2), -win).reduce((s, e) => s + e.pct, 0) / win)
+      : null;
+    let streak = 0;
+    for (let i = n - 1; i > 0; i--) { if (allExamsFlat[i].pct > allExamsFlat[i-1].pct) streak++; else break; }
+
+    return (
     <>
       <div className="sticky-header sticky-header--back">
         <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
       </div>
+
+      {/* ── Student Profile Card ── */}
       <div className="student-profile-header">
-  {selectedStudent.photo
-    ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
-        onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
-        style={{ cursor: 'pointer' }} />
-    : <span className="student-profile-icon"><User size={22} /></span>
-  }
-  <h1 className="student-profile-name">{selectedStudent.name}</h1>
-  {!isViewer && !isKazumi && (
-    <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
-      <button
-        onClick={async () => {
-          if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
-          try {
-            const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-            const data = await res.json();
-            if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
-            else alert('Error: ' + (data.error || 'Unknown'));
-          } catch (e) { alert('Failed: ' + e.message); }
-        }}
-        style={{ background: 'transparent', color: '#8B2020', border: '1.5px solid #8B2020', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >{t('archiveImages')}</button>
+        {selectedStudent.photo
+          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
+              onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
+              style={{ cursor: 'pointer' }} />
+          : <span className="student-profile-icon"><User size={22} /></span>
+        }
+        <h1 className="student-profile-name">{selectedStudent.name}</h1>
 
-      {/* ── Generate Parent QR ── */}
-      <button
-        onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}
-        style={{ background: '#5856D6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      ><KeyRound size={14} style={{ marginRight: 5, verticalAlign: "middle" }} />Parent QR</button>
+        {/* ── Admin Quick Actions ── */}
+        {!isViewer && !isKazumi && (
+          <>
+            <p className="profile-action-label">Quick Actions</p>
+            <div className="profile-icon-grid">
+              <button className="profile-icon-btn" onClick={() => setShowQuickAddExam(true)}>
+                <Plus size={20} color="#34C759" />
+                <span>Quick Add</span>
+              </button>
+              <button className="profile-icon-btn" onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}>
+                <KeyRound size={20} color="#5856D6" />
+                <span>Parent QR</span>
+              </button>
+              <button className="profile-icon-btn" onClick={async () => {
+                if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
+                try {
+                  const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+                  const data = await res.json();
+                  if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
+                  else alert('Error: ' + (data.error || 'Unknown'));
+                } catch (e) { alert('Failed: ' + e.message); }
+              }}>
+                <Layers size={20} color="#8e8e93" />
+                <span>Archive Imgs</span>
+              </button>
+              <button className="profile-icon-btn" onClick={async () => {
+                if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
+                try {
+                  const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+                  const data = await res.json();
+                  if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
+                  else alert('Error: ' + (data.error || 'Unknown'));
+                } catch (e) { alert('Failed: ' + e.message); }
+              }}>
+                <RefreshCw size={20} color="#007AFF" />
+                <span>Restore Imgs</span>
+              </button>
+            </div>
 
-      {/* ── Quick Add Exam shortcut ── */}
-      <button
-        onClick={() => setShowQuickAddExam(true)}
-        style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-      ><Plus size={14} />Quick Add Exam</button>
+            <p className="profile-action-label" style={{ marginTop: 10 }}>Student Status</p>
+            <div className="profile-danger-row">
+              <button className="profile-danger-btn" onClick={() => toggleArchiveStudent(selectedStudent)}>
+                {selectedStudent.isArchived ? <Eye size={15} /> : <EyeOff size={15} />}
+                {selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}
+              </button>
+              <button className="profile-danger-btn profile-danger-btn--red" onClick={async () => {
+                if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
+                if (!window.confirm(`Are you sure? This is irreversible.`)) return;
+                try {
+                  const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
+                  const data = await res.json();
+                  if (data.success) { alert(`🗑️ ${selectedStudent.name} permanently deleted.`); goBack(); }
+                  else alert('Error: ' + (data.error || 'Unknown'));
+                } catch (e) { alert('Failed: ' + e.message); }
+              }}>
+                <Trash2 size={15} />
+                {t('deleteStudent')}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
-      <button
-        onClick={async () => {
-          if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
-          try {
-            const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-            const data = await res.json();
-            if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
-            else alert('Error: ' + (data.error || 'Unknown'));
-          } catch (e) { alert('Failed: ' + e.message); }
-        }}
-        style={{ background: 'transparent', color: '#007AFF', border: '1.5px solid #007AFF', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >{t('restoreImages')}</button>
-
-      <button
-        onClick={() => toggleArchiveStudent(selectedStudent)}
-        style={{
-          background: selectedStudent.isArchived ? 'transparent' : '#555',
-          color: selectedStudent.isArchived ? '#555' : '#fff',
-          border: '1.5px solid #555',
-          borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer'
-        }}
-      >{selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}</button>
-
-      <button
-        onClick={async () => {
-          if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
-          if (!window.confirm(`Are you sure? This is irreversible.`)) return;
-          try {
-            const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
-            const data = await res.json();
-            if (data.success) {
-              alert(`🗑️ ${selectedStudent.name} permanently deleted.`);
-              goBack();
-            } else alert('Error: ' + (data.error || 'Unknown'));
-          } catch (e) { alert('Failed: ' + e.message); }
-        }}
-        style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
-      >{t('deleteStudent')}</button>
-    </div>
-  )}
-</div>
-{/* Progress Chart Button - Kumiai/Viewer only */}
-{isViewer && (
-  <button
-    onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}
-    style={{
-      width: '100%', background: 'linear-gradient(135deg, #8B0000, #c0392b)',
-      color: '#fff', border: 'none', borderRadius: 12,
-      padding: '14px 20px', fontSize: 15, fontWeight: 700,
-      cursor: 'pointer', marginBottom: 16,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-      boxShadow: '0 2px 8px rgba(139,0,0,0.25)'
-    }}
-  >
-    <TrendingUp size={18} style={{ flexShrink: 0 }} />
-    {t('viewProgressChart')}
-  </button>
-)}
+      {/* ── Progress Chart Card (visible to ALL roles) ── */}
+      <div className="progress-summary-card" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}>
+        <div className="progress-summary-top">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <TrendingUp size={16} color="#8B0000" />
+            <span className="progress-summary-title">{t('progressChart')}</span>
+          </div>
+          <span className="progress-summary-link">View full →</span>
+        </div>
+        {n === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>No exam data yet</p>
+        ) : (
+          <>
+            <div className="progress-summary-stats">
+              <div>
+                <p className="progress-stat-label">Avg score</p>
+                <p className="progress-stat-value">{avg}%</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                {recentTrend !== null && (
+                  <span className={`progress-trend-pill ${recentTrend >= 0 ? 'progress-trend-pill--up' : 'progress-trend-pill--down'}`}>
+                    {recentTrend >= 0 ? '↑' : '↓'} {Math.abs(recentTrend)}% trend
+                  </span>
+                )}
+                <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                  {n} exam{n !== 1 ? 's' : ''}{streak > 1 ? ` · 🔥 ${streak}-streak` : ''}
+                </p>
+              </div>
+            </div>
+            <div className="progress-bar-track">
+              <div className="progress-bar-fill" style={{ width: `${Math.min(avg, 100)}%` }} />
+            </div>
+          </>
+        )}
+      </div>
 
       {/* ── Exam Categories Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -4871,7 +4905,8 @@ function App() {
         </button>
       </div>
     </>
-  );
+    );
+  };
 
   const renderEvaluations = () => (
     <>
