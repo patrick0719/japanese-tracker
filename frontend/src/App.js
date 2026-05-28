@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
@@ -1705,37 +1705,24 @@ function QRItem({ entry, onDelete }) {
   );
 }
 
-function BarcodeGeneratorTab() {
+function BarcodeGeneratorTab({ batches = [] }) {
   const [nameEn,     setNameEn]     = useState('');
   const [nameJa,     setNameJa]     = useState('');
   const [category,   setCategory]   = useState('');
   const [customCat,  setCustomCat]  = useState('');
   const [totalScore, setTotalScore] = useState('');
   const [entries,    setEntries]    = useState([]);
-  // Exam categories fetched from all batches (unique list)
-  const [examCats,   setExamCats]   = useState([]);
-  const [catsLoading, setCatsLoading] = useState(true);
 
-  // Fetch all unique category names from batches
-  useEffect(() => {
-    const fetchCats = async () => {
-      setCatsLoading(true);
-      try {
-        const res  = await fetch(`${API}/batches`);
-        const data = await res.json();
-        const batches = Array.isArray(data) ? data : (data.batches || []);
-        const names = new Set();
-        batches.forEach(b =>
-          (b.students || []).forEach(s =>
-            (s.categories || []).forEach(c => { if (c.name) names.add(c.name); })
-          )
-        );
-        setExamCats(Array.from(names).sort());
-      } catch { /* silently fail — user can still type manually */ }
-      finally { setCatsLoading(false); }
-    };
-    fetchCats();
-  }, []);
+  // Derive unique category names from the current teacher's batches (already filtered)
+  const examCats = useMemo(() => {
+    const names = new Set();
+    batches.forEach(b =>
+      (b.students || []).forEach(s =>
+        (s.categories || []).forEach(c => { if (c.name) names.add(c.name); })
+      )
+    );
+    return Array.from(names).sort();
+  }, [batches]);
 
   // Resolved category: if "custom" selected use customCat input, else use dropdown value
   const resolvedCategory = category === '__custom__' ? customCat.trim() : category;
@@ -1826,8 +1813,8 @@ function BarcodeGeneratorTab() {
             style={{ ...inputStyle, color: category ? '#1c1c1e' : '#8e8e93', appearance:'auto' }}
           >
             <option value="">None / manual</option>
-            {catsLoading
-              ? <option disabled>Loading categories…</option>
+            {examCats.length === 0
+              ? <option disabled>No categories found</option>
               : examCats.map(c => <option key={c} value={c}>{c}</option>)
             }
             <option value="__custom__">+ Type a custom category…</option>
@@ -2386,7 +2373,7 @@ useEffect(() => {
         )}
 
         {/* ── BARCODE GENERATOR TAB ── */}
-        {activeSection === 'barcodes' && <BarcodeGeneratorTab />}
+        {activeSection === 'barcodes' && <BarcodeGeneratorTab batches={batches} />}
 
       </div>
       <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
