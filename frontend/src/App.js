@@ -1291,9 +1291,21 @@ function QuickAddExamModal({ student, categories, onSave, onClose }) {
     setScanFlash(true);
     setTimeout(() => setScanFlash(false), 2000);
     if (text.includes('|')) {
-      const [en, ja] = text.split('|');
-      setExamNameEn(en.trim());
-      setExamNameJa(ja.trim());
+      // Format: nameEn|nameJa|category|totalScore
+      const parts = text.split('|');
+      const en    = (parts[0] || '').trim();
+      const ja    = (parts[1] || '').trim();
+      const cat   = (parts[2] || '').trim();
+      const total = (parts[3] || '').trim();
+      setExamNameEn(en);
+      setExamNameJa(ja);
+      // Auto-select category if it matches one of the student's categories
+      if (cat) {
+        const matched = categories.find(c => c.name.toLowerCase() === cat.toLowerCase());
+        if (matched) setCategoryId(matched._id);
+      }
+      // Auto-fill total score
+      if (total && !isNaN(parseInt(total))) setTotalScore(total);
     } else {
       setExamNameEn(text.trim());
     }
@@ -1599,16 +1611,25 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
 function QRItem({ entry, onDelete }) {
   const canvasRef = useRef(null);
 
+  // QR value format: nameEn|nameJa|category|totalScore
+  // Fields after nameEn are optional; empty string preserved for positional parsing
+  const buildQRValue = (e) => {
+    const parts = [e.nameEn, e.nameJa || '', e.category || '', e.totalScore ? String(e.totalScore) : ''];
+    // Trim trailing empty parts only if ALL optional fields are empty
+    if (!e.nameJa && !e.category && !e.totalScore) return e.nameEn;
+    return parts.join('|');
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
+    const value = buildQRValue(entry);
     QRCode.toCanvas(canvas, value, {
       width: 200,
       margin: 2,
       color: { dark: '#000000', light: '#ffffff' },
     }).catch(e => console.error('QR error', e));
-  }, [entry.nameEn, entry.nameJa]);
+  }, [entry.nameEn, entry.nameJa, entry.category, entry.totalScore]);
 
   const handleDownload = () => {
     const canvas = canvasRef.current;
@@ -1629,11 +1650,15 @@ function QRItem({ entry, onDelete }) {
       <style>
         body { margin: 24px; font-family: -apple-system, sans-serif; text-align: center; }
         img { display: block; margin: 0 auto; }
+        .meta { font-size:12px; color:#888; margin-top:4px; }
         @media print { button { display: none; } }
       </style></head>
       <body>
         <div style="font-size:18px;font-weight:700;margin-bottom:2px;">${entry.nameEn}</div>
-        ${entry.nameJa ? `<div style="font-size:14px;color:#555;margin-bottom:12px;">${entry.nameJa}</div>` : '<div style="margin-bottom:12px;"></div>'}
+        ${entry.nameJa ? `<div style="font-size:14px;color:#555;margin-bottom:4px;">${entry.nameJa}</div>` : ''}
+        ${entry.category ? `<div class="meta">📁 ${entry.category}</div>` : ''}
+        ${entry.totalScore ? `<div class="meta">Total Score: ${entry.totalScore}</div>` : ''}
+        <div style="margin-bottom:12px;"></div>
         <img src="${imgData}" width="200" height="200" />
         <script>window.onload=()=>{ window.print(); }<\/script>
       </body></html>`);
@@ -1643,11 +1668,23 @@ function QRItem({ entry, onDelete }) {
   return (
     <div style={{ background:'#fff', borderRadius:16, padding:16, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:12 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
-        <div>
+        <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e' }}>{entry.nameEn}</div>
           {entry.nameJa && <div style={{ fontSize:13, color:'#8e8e93', marginTop:2 }}>{entry.nameJa}</div>}
+          <div style={{ display:'flex', gap:8, marginTop:4, flexWrap:'wrap' }}>
+            {entry.category && (
+              <span style={{ fontSize:12, color:'#8B0000', background:'rgba(139,0,0,0.08)', borderRadius:6, padding:'2px 8px', fontWeight:600 }}>
+                📁 {entry.category}
+              </span>
+            )}
+            {entry.totalScore && (
+              <span style={{ fontSize:12, color:'#007AFF', background:'rgba(0,122,255,0.08)', borderRadius:6, padding:'2px 8px', fontWeight:600 }}>
+                Total: {entry.totalScore}
+              </span>
+            )}
+          </div>
         </div>
-        <button onClick={() => onDelete(entry.id)} style={{ background:'none', border:'none', color:'#ff3b30', cursor:'pointer', padding:4 }}>
+        <button onClick={() => onDelete(entry.id)} style={{ background:'none', border:'none', color:'#ff3b30', cursor:'pointer', padding:4, flexShrink:0 }}>
           <Trash2 size={16}/>
         </button>
       </div>
@@ -1669,18 +1706,61 @@ function QRItem({ entry, onDelete }) {
 }
 
 function BarcodeGeneratorTab() {
-  const [nameEn,  setNameEn]  = useState('');
-  const [nameJa,  setNameJa]  = useState('');
-  const [entries, setEntries] = useState([]);
+  const [nameEn,     setNameEn]     = useState('');
+  const [nameJa,     setNameJa]     = useState('');
+  const [category,   setCategory]   = useState('');
+  const [customCat,  setCustomCat]  = useState('');
+  const [totalScore, setTotalScore] = useState('');
+  const [entries,    setEntries]    = useState([]);
+  // Exam categories fetched from all batches (unique list)
+  const [examCats,   setExamCats]   = useState([]);
+  const [catsLoading, setCatsLoading] = useState(true);
+
+  // Fetch all unique category names from batches
+  useEffect(() => {
+    const fetchCats = async () => {
+      setCatsLoading(true);
+      try {
+        const res  = await fetch(`${API}/batches`);
+        const data = await res.json();
+        const batches = Array.isArray(data) ? data : (data.batches || []);
+        const names = new Set();
+        batches.forEach(b =>
+          (b.students || []).forEach(s =>
+            (s.categories || []).forEach(c => { if (c.name) names.add(c.name); })
+          )
+        );
+        setExamCats(Array.from(names).sort());
+      } catch { /* silently fail — user can still type manually */ }
+      finally { setCatsLoading(false); }
+    };
+    fetchCats();
+  }, []);
+
+  // Resolved category: if "custom" selected use customCat input, else use dropdown value
+  const resolvedCategory = category === '__custom__' ? customCat.trim() : category;
 
   const addEntry = () => {
     if (!nameEn.trim()) return;
-    setEntries(prev => [...prev, { id: Date.now(), nameEn: nameEn.trim(), nameJa: nameJa.trim() }]);
+    setEntries(prev => [...prev, {
+      id: Date.now(),
+      nameEn: nameEn.trim(),
+      nameJa: nameJa.trim(),
+      category: resolvedCategory,
+      totalScore: totalScore ? parseInt(totalScore) : null,
+    }]);
     setNameEn('');
     setNameJa('');
+    // keep category & totalScore so user can batch-generate same exam type
   };
 
   const deleteEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id));
+
+  // Build QR value: nameEn|nameJa|category|totalScore
+  const buildQRValue = (entry) => {
+    if (!entry.nameJa && !entry.category && !entry.totalScore) return entry.nameEn;
+    return [entry.nameEn, entry.nameJa || '', entry.category || '', entry.totalScore ? String(entry.totalScore) : ''].join('|');
+  };
 
   const printAll = () => {
     const canvases = document.querySelectorAll('.qr-canvas-print');
@@ -1691,7 +1771,9 @@ function BarcodeGeneratorTab() {
       rows += `
         <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #e0e0e0;border-radius:8px;padding:16px;text-align:center;">
           <div style="font-size:16px;font-weight:700;margin-bottom:2px;">${entry.nameEn}</div>
-          ${entry.nameJa ? `<div style="font-size:13px;color:#555;margin-bottom:8px;">${entry.nameJa}</div>` : '<div style="margin-bottom:8px;"></div>'}
+          ${entry.nameJa ? `<div style="font-size:13px;color:#555;margin-bottom:4px;">${entry.nameJa}</div>` : ''}
+          ${entry.category ? `<div style="font-size:12px;color:#8B0000;margin-bottom:2px;">📁 ${entry.category}</div>` : ''}
+          ${entry.totalScore ? `<div style="font-size:12px;color:#555;margin-bottom:8px;">Total Score: ${entry.totalScore}</div>` : '<div style="margin-bottom:8px;"></div>'}
           <img src="${c.toDataURL('image/png')}" width="180" />
         </div>`;
     });
@@ -1702,30 +1784,85 @@ function BarcodeGeneratorTab() {
     win.document.close();
   };
 
+  const inputStyle = { display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' };
+  const labelStyle = { fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 };
+
   return (
     <div>
       <div style={{ background:'#fff', borderRadius:16, padding:20, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:16 }}>
         <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e', marginBottom:4 }}>📱 Exam QR Code Generator</div>
-        <div style={{ fontSize:12, color:'#8e8e93', marginBottom:16 }}>Scan with the Add Exam modal to auto-fill exam names</div>
+        <div style={{ fontSize:12, color:'#8e8e93', marginBottom:16 }}>Scan with the Add Exam modal to auto-fill exam names, category, and total score</div>
 
+        {/* Exam Name EN */}
         <div style={{ marginBottom:12 }}>
-          <label style={{ fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 }}>Exam Name (English) *</label>
+          <label style={labelStyle}>Exam Name (English) *</label>
           <input type="text" value={nameEn} onChange={e => setNameEn(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addEntry()}
             placeholder="e.g. Chapter 3 Quiz"
-            style={{ display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' }}
+            style={inputStyle}
           />
         </div>
 
-        <div style={{ marginBottom:16 }}>
-          <label style={{ fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 }}>
+        {/* Exam Name JA */}
+        <div style={{ marginBottom:12 }}>
+          <label style={labelStyle}>
             <Flag size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>試験名（日本語）— optional
           </label>
           <input type="text" value={nameJa} onChange={e => setNameJa(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addEntry()}
             placeholder="例：第3章テスト"
-            style={{ display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' }}
+            style={inputStyle}
           />
+        </div>
+
+        {/* Exam Category dropdown */}
+        <div style={{ marginBottom:12 }}>
+          <label style={labelStyle}>
+            <Folder size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>Exam Category — optional
+          </label>
+          <select
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            style={{ ...inputStyle, color: category ? '#1c1c1e' : '#8e8e93', appearance:'auto' }}
+          >
+            <option value="">None / manual</option>
+            {catsLoading
+              ? <option disabled>Loading categories…</option>
+              : examCats.map(c => <option key={c} value={c}>{c}</option>)
+            }
+            <option value="__custom__">+ Type a custom category…</option>
+          </select>
+          {category === '__custom__' && (
+            <input
+              type="text"
+              value={customCat}
+              onChange={e => setCustomCat(e.target.value)}
+              placeholder="Category name"
+              style={{ ...inputStyle, marginTop:8 }}
+            />
+          )}
+          <div style={{ fontSize:11, color:'#8e8e93', marginTop:4 }}>
+            When scanned, the modal will auto-select this category if it exists on the student.
+          </div>
+        </div>
+
+        {/* Total Score */}
+        <div style={{ marginBottom:16 }}>
+          <label style={labelStyle}>
+            <Target size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>Total Score — optional
+          </label>
+          <input
+            type="number"
+            min="1"
+            value={totalScore}
+            onChange={e => setTotalScore(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addEntry()}
+            placeholder="e.g. 100"
+            style={inputStyle}
+          />
+          <div style={{ fontSize:11, color:'#8e8e93', marginTop:4 }}>
+            Auto-fills the Total field in the modal so you only need to enter the score.
+          </div>
         </div>
 
         <button onClick={addEntry} disabled={!nameEn.trim()}
@@ -1745,7 +1882,7 @@ function BarcodeGeneratorTab() {
         <div style={{ textAlign:'center', padding:'40px 20px', color:'#8e8e93' }}>
           <div style={{ fontSize:36, marginBottom:8 }}>📱</div>
           <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>No QR codes yet</div>
-          <div style={{ fontSize:13 }}>Type an exam name above and tap Generate</div>
+          <div style={{ fontSize:13 }}>Fill in the exam details above and tap Generate</div>
         </div>
       )}
 
@@ -1754,7 +1891,7 @@ function BarcodeGeneratorTab() {
       {/* Hidden canvases for Print All */}
       <div style={{ display:'none' }}>
         {entries.map(entry => {
-          const value = entry.nameJa ? `${entry.nameEn}|${entry.nameJa}` : entry.nameEn;
+          const value = buildQRValue(entry);
           const ref = (el) => {
             if (!el) return;
             QRCode.toCanvas(el, value, { width: 200, margin: 2 }).catch(() => {});
