@@ -1706,26 +1706,30 @@ function QRItem({ entry, onDelete }) {
 }
 
 function BarcodeGeneratorTab({ batches = [] }) {
-  const [nameEn,     setNameEn]     = useState('');
-  const [nameJa,     setNameJa]     = useState('');
-  const [category,   setCategory]   = useState('');
-  const [customCat,  setCustomCat]  = useState('');
-  const [totalScore, setTotalScore] = useState('');
-  const [entries,    setEntries]    = useState([]);
+  const [nameEn,      setNameEn]     = useState('');
+  const [nameJa,      setNameJa]     = useState('');
+  const [selectedBatchId, setSelectedBatchId] = useState('');
+  const [category,    setCategory]   = useState('');
+  const [totalScore,  setTotalScore] = useState('');
+  const [entries,     setEntries]    = useState([]);
 
-  // Derive unique category names from the current teacher's batches (already filtered)
-  const examCats = useMemo(() => {
+  // Categories unique to the selected batch only
+  const batchCats = useMemo(() => {
+    if (!selectedBatchId) return [];
+    const batch = batches.find(b => b._id === selectedBatchId);
+    if (!batch) return [];
     const names = new Set();
-    batches.forEach(b =>
-      (b.students || []).forEach(s =>
-        (s.categories || []).forEach(c => { if (c.name) names.add(c.name); })
-      )
+    (batch.students || []).forEach(s =>
+      (s.categories || []).forEach(c => { if (c.name) names.add(c.name); })
     );
     return Array.from(names).sort();
-  }, [batches]);
+  }, [batches, selectedBatchId]);
 
-  // Resolved category: if "custom" selected use customCat input, else use dropdown value
-  const resolvedCategory = category === '__custom__' ? customCat.trim() : category;
+  // Reset category when batch changes
+  const handleBatchChange = (batchId) => {
+    setSelectedBatchId(batchId);
+    setCategory('');
+  };
 
   const addEntry = () => {
     if (!nameEn.trim()) return;
@@ -1733,17 +1737,17 @@ function BarcodeGeneratorTab({ batches = [] }) {
       id: Date.now(),
       nameEn: nameEn.trim(),
       nameJa: nameJa.trim(),
-      category: resolvedCategory,
+      category: category,
       totalScore: totalScore ? parseInt(totalScore) : null,
     }]);
     setNameEn('');
     setNameJa('');
-    // keep category & totalScore so user can batch-generate same exam type
+    // keep batch, category & totalScore for easy batch-generating same exam type
   };
 
   const deleteEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id));
 
-  // Build QR value: nameEn|nameJa|category|totalScore
+  // QR value format: nameEn|nameJa|category|totalScore
   const buildQRValue = (entry) => {
     if (!entry.nameJa && !entry.category && !entry.totalScore) return entry.nameEn;
     return [entry.nameEn, entry.nameJa || '', entry.category || '', entry.totalScore ? String(entry.totalScore) : ''].join('|');
@@ -1772,13 +1776,55 @@ function BarcodeGeneratorTab({ batches = [] }) {
   };
 
   const inputStyle = { display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' };
-  const labelStyle = { fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 };
+  const selectStyle = { ...inputStyle, appearance:'auto', color:'#1c1c1e' };
+  const labelStyle  = { fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 };
 
   return (
     <div>
       <div style={{ background:'#fff', borderRadius:16, padding:20, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:16 }}>
         <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e', marginBottom:4 }}>📱 Exam QR Code Generator</div>
-        <div style={{ fontSize:12, color:'#8e8e93', marginBottom:16 }}>Scan with the Add Exam modal to auto-fill exam names, category, and total score</div>
+        <div style={{ fontSize:12, color:'#8e8e93', marginBottom:16 }}>Scan with the Add Exam modal to auto-fill exam name, category, and total score</div>
+
+        {/* Step 1 — Select Batch */}
+        <div style={{ marginBottom:12 }}>
+          <label style={labelStyle}>
+            <Layers size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>Batch *
+          </label>
+          <select
+            value={selectedBatchId}
+            onChange={e => handleBatchChange(e.target.value)}
+            style={{ ...selectStyle, color: selectedBatchId ? '#1c1c1e' : '#8e8e93' }}
+          >
+            <option value="">Select batch…</option>
+            {batches.map(b => (
+              <option key={b._id} value={b._id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Step 2 — Exam Category (updates when batch is selected) */}
+        <div style={{ marginBottom:12 }}>
+          <label style={labelStyle}>
+            <Folder size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>Exam Category — optional
+          </label>
+          <select
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            disabled={!selectedBatchId}
+            style={{ ...selectStyle, color: category ? '#1c1c1e' : '#8e8e93', opacity: selectedBatchId ? 1 : 0.45 }}
+          >
+            <option value="">{selectedBatchId ? 'Select category…' : 'Select a batch first'}</option>
+            {batchCats.length === 0 && selectedBatchId
+              ? <option disabled>No categories in this batch</option>
+              : batchCats.map(c => <option key={c} value={c}>{c}</option>)
+            }
+          </select>
+          {selectedBatchId && (
+            <div style={{ fontSize:11, color:'#8e8e93', marginTop:4 }}>
+              Showing categories from selected batch only. When scanned, auto-selects matching category.
+            </div>
+          )}
+        </div>
 
         {/* Exam Name EN */}
         <div style={{ marginBottom:12 }}>
@@ -1802,37 +1848,6 @@ function BarcodeGeneratorTab({ batches = [] }) {
           />
         </div>
 
-        {/* Exam Category dropdown */}
-        <div style={{ marginBottom:12 }}>
-          <label style={labelStyle}>
-            <Folder size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>Exam Category — optional
-          </label>
-          <select
-            value={category}
-            onChange={e => setCategory(e.target.value)}
-            style={{ ...inputStyle, color: category ? '#1c1c1e' : '#8e8e93', appearance:'auto' }}
-          >
-            <option value="">None / manual</option>
-            {examCats.length === 0
-              ? <option disabled>No categories found</option>
-              : examCats.map(c => <option key={c} value={c}>{c}</option>)
-            }
-            <option value="__custom__">+ Type a custom category…</option>
-          </select>
-          {category === '__custom__' && (
-            <input
-              type="text"
-              value={customCat}
-              onChange={e => setCustomCat(e.target.value)}
-              placeholder="Category name"
-              style={{ ...inputStyle, marginTop:8 }}
-            />
-          )}
-          <div style={{ fontSize:11, color:'#8e8e93', marginTop:4 }}>
-            When scanned, the modal will auto-select this category if it exists on the student.
-          </div>
-        </div>
-
         {/* Total Score */}
         <div style={{ marginBottom:16 }}>
           <label style={labelStyle}>
@@ -1848,7 +1863,7 @@ function BarcodeGeneratorTab({ batches = [] }) {
             style={inputStyle}
           />
           <div style={{ fontSize:11, color:'#8e8e93', marginTop:4 }}>
-            Auto-fills the Total field in the modal so you only need to enter the score.
+            Auto-fills the Total field in the modal — you only need to type the score.
           </div>
         </div>
 
@@ -1869,7 +1884,7 @@ function BarcodeGeneratorTab({ batches = [] }) {
         <div style={{ textAlign:'center', padding:'40px 20px', color:'#8e8e93' }}>
           <div style={{ fontSize:36, marginBottom:8 }}>📱</div>
           <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>No QR codes yet</div>
-          <div style={{ fontSize:13 }}>Fill in the exam details above and tap Generate</div>
+          <div style={{ fontSize:13 }}>Select a batch and fill in the exam details above</div>
         </div>
       )}
 
