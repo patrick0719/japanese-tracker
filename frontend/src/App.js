@@ -1718,11 +1718,16 @@ function BarcodeGeneratorTab({ batches = [] }) {
     if (!selectedBatchId) return [];
     const batch = batches.find(b => b._id === selectedBatchId);
     if (!batch) return [];
-    const names = new Set();
+    // Use normalized key (trimmed + lowercase) to deduplicate, keep first-seen casing
+    const seen = new Map();
     (batch.students || []).forEach(s =>
-      (s.categories || []).forEach(c => { if (c.name) names.add(c.name); })
+      (s.categories || []).forEach(c => {
+        if (!c.name) return;
+        const key = c.name.trim().toLowerCase();
+        if (!seen.has(key)) seen.set(key, c.name.trim());
+      })
     );
-    return Array.from(names).sort();
+    return Array.from(seen.values()).sort();
   }, [batches, selectedBatchId]);
 
   // Reset category when batch changes
