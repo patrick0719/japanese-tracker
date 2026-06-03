@@ -2666,16 +2666,20 @@ function TeacherSelect({ onSelect }) {
   const [allBatches, setAllBatches] = useState([]);
   const EMOJIS = ['\u{1F469}\u200d\u{1F3EB}','\u{1F468}\u200d\u{1F3EB}','\u{1F469}','\u{1F468}','\u{1F9D1}\u200d\u{1F3EB}'];
 
+  const refreshAllBatches = () => {
+    fetch(`${API}/batches`)
+      .then(r => r.json())
+      .then(data => setAllBatches(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  };
+
   useEffect(() => {
     fetch(`${API}/teachers`)
       .then(r => r.json())
       .then(data => { setTeachers(data); setLoadingT(false); })
       .catch(() => setLoadingT(false));
     // Fetch ALL batches for global search (no teacher filter)
-    fetch(`${API}/batches`)
-      .then(r => r.json())
-      .then(data => setAllBatches(Array.isArray(data) ? data : []))
-      .catch(() => {});
+    refreshAllBatches();
   }, []);
 
   // Global search across ALL teachers and batches
@@ -2744,29 +2748,44 @@ function TeacherSelect({ onSelect }) {
       <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16 }}>{t('tapNameToContinue')}</p>
 
       {/* ── Global Search Bar ── */}
-      <div style={{ width: '100%', maxWidth: 400, position: 'relative', marginBottom: 20 }}>
-        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }}><Search size={16} /></span>
-        <input
-          type="text"
-          value={globalQuery}
-          onChange={e => setGlobalQuery(e.target.value)}
-          placeholder="Search any student across all teachers..."
+      <div style={{ width: '100%', maxWidth: 400, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }}><Search size={16} /></span>
+          <input
+            type="text"
+            value={globalQuery}
+            onChange={e => setGlobalQuery(e.target.value)}
+            placeholder="Search any student across all teachers..."
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              padding: '11px 36px 11px 38px',
+              borderRadius: 12, border: '1.5px solid var(--border-color, #e5e5ea)',
+              background: 'var(--bg-card, #fff)', color: 'var(--text-primary)',
+              fontSize: 15, outline: 'none',
+            }}
+          />
+          {globalQuery && (
+            <button onClick={() => setGlobalQuery('')} style={{
+              position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+              background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: '50%',
+              width: 22, height: 22, cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}><X size={14} /></button>
+          )}
+        </div>
+        <button
+          onClick={refreshAllBatches}
+          title="Refresh search data"
           style={{
-            width: '100%', boxSizing: 'border-box',
-            padding: '11px 36px 11px 38px',
-            borderRadius: 12, border: '1.5px solid var(--border-color, #e5e5ea)',
-            background: 'var(--bg-card, #fff)', color: 'var(--text-primary)',
-            fontSize: 15, outline: 'none',
-          }}
-        />
-        {globalQuery && (
-          <button onClick={() => setGlobalQuery('')} style={{
-            position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-            background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: '50%',
-            width: 22, height: 22, cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)',
+            flexShrink: 0, width: 40, height: 40, borderRadius: 10,
+            border: '1.5px solid var(--border-color, #e5e5ea)',
+            background: 'var(--bg-card, #fff)', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}><X size={14} /></button>
-        )}
+            color: 'var(--text-tertiary)',
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
       </div>
 
       {/* ── Search Results ── */}
@@ -2786,18 +2805,23 @@ function TeacherSelect({ onSelect }) {
               {searchResults.map(({ student, batch }) => {
                 // Find which teacher owns this batch
                 const teacher = teachers.find(tc => tc._id === batch.teacherId);
+                const isOrphaned = !teacher;
                 return (
                   <button
                     key={student._id}
                     onClick={() => {
-                      if (teacher) onSelect(teacher, student, batch);
+                      if (!isOrphaned) onSelect(teacher, student, batch);
                     }}
+                    disabled={isOrphaned}
+                    title={isOrphaned ? 'Hindi na ma-access ang student na ito — maaaring na-delete na ang teacher o batch' : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12,
                       padding: '10px 14px', borderRadius: 12,
-                      border: '1.5px solid var(--border-color, #e5e5ea)',
-                      background: 'var(--bg-card, #fff)', cursor: 'pointer',
+                      border: `1.5px solid ${isOrphaned ? '#ffcccc' : 'var(--border-color, #e5e5ea)'}`,
+                      background: isOrphaned ? 'rgba(255,0,0,0.04)' : 'var(--bg-card, #fff)',
+                      cursor: isOrphaned ? 'not-allowed' : 'pointer',
                       textAlign: 'left', width: '100%',
+                      opacity: isOrphaned ? 0.5 : 1,
                     }}
                   >
                     <div style={{
@@ -2813,12 +2837,13 @@ function TeacherSelect({ onSelect }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {student.name}
+                        {isOrphaned && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, background: '#ffcccc', color: '#c0392b', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>Unavailable</span>}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                        <BookOpen size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : ''}
+                        <BookOpen size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : isOrphaned ? ' · Teacher/batch no longer exists' : ''}
                       </div>
                     </div>
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: 18 }}>›</span>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 18 }}>{isOrphaned ? '⚠️' : '›'}</span>
                   </button>
                 );
               })}
@@ -4955,7 +4980,24 @@ function App() {
                 try {
                   const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
                   const data = await res.json();
-                  if (data.success) { alert(`${selectedStudent.name} permanently deleted.`); goBack(); }
+                  if (data.success) {
+                    alert(`${selectedStudent.name} permanently deleted.`);
+                    // ✅ Remove student from local batches state immediately (fixes SmartReminders + search)
+                    const deletedStudentId = selectedStudent._id;
+                    const deletedBatchId = selectedBatch._id;
+                    setBatches(prev => prev.map(b =>
+                      b._id === deletedBatchId
+                        ? { ...b, students: b.students.filter(s => s._id !== deletedStudentId) }
+                        : b
+                    ));
+                    // ✅ Clear this student's dismissed reminders from localStorage
+                    try {
+                      const dismissed = JSON.parse(localStorage.getItem('sage_dismissed_reminders') || '[]');
+                      const cleaned = dismissed.filter(id => !id.includes(deletedStudentId));
+                      localStorage.setItem('sage_dismissed_reminders', JSON.stringify(cleaned));
+                    } catch {}
+                    goBack();
+                  }
                   else alert('Error: ' + (data.error || 'Unknown'));
                 } catch (e) { alert('Failed: ' + e.message); }
               }}>
