@@ -2753,56 +2753,47 @@ function TeacherSelect({ onSelect }) {
       <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16 }}>{t('tapNameToContinue')}</p>
 
       {/* ── Global Search Bar ── */}
-      <div style={{ width: '100%', maxWidth: 400, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }}><Search size={16} /></span>
-          <input
-            type="text"
-            value={globalQuery}
-            onChange={e => setGlobalQuery(e.target.value)}
-            onFocus={refreshAllBatches}
-            placeholder="Search any student across all teachers..."
+      <div style={{ width: '100%', maxWidth: 400, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }}><Search size={16} /></span>
+            <input
+              type="text"
+              value={globalQuery}
+              onChange={e => setGlobalQuery(e.target.value)}
+              onFocus={refreshAllBatches}
+              placeholder="Search any student across all teachers..."
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '11px 36px 11px 38px',
+                borderRadius: 12, border: '1.5px solid var(--border-color, #e5e5ea)',
+                background: 'var(--bg-card, #fff)', color: 'var(--text-primary)',
+                fontSize: 15, outline: 'none',
+              }}
+            />
+            {globalQuery && (
+              <button onClick={() => setGlobalQuery('')} style={{
+                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: '50%',
+                width: 22, height: 22, cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}><X size={14} /></button>
+            )}
+          </div>
+          <button
+            onClick={() => { console.log('refresh clicked'); refreshAllBatches(); }}
             style={{
-              width: '100%', boxSizing: 'border-box',
-              padding: '11px 36px 11px 38px',
-              borderRadius: 12, border: '1.5px solid var(--border-color, #e5e5ea)',
-              background: 'var(--bg-card, #fff)', color: 'var(--text-primary)',
-              fontSize: 15, outline: 'none',
+              flexShrink: 0, height: 40, borderRadius: 10, padding: '0 12px',
+              border: '1.5px solid var(--border-color, #e5e5ea)',
+              background: refreshing ? '#f0f0ff' : '#fff',
+              cursor: 'pointer', fontSize: 12, fontWeight: 600,
+              color: refreshing ? '#5856d6' : '#888',
+              whiteSpace: 'nowrap',
             }}
-          />
-          {globalQuery && (
-            <button onClick={() => setGlobalQuery('')} style={{
-              position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-              background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: '50%',
-              width: 22, height: 22, cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}><X size={14} /></button>
-          )}
-        </div>
-        <button
-          onClick={refreshAllBatches}
-          disabled={refreshing}
-          title="Refresh search data"
-          style={{
-            flexShrink: 0, width: 40, height: 40, borderRadius: 10,
-            border: '1.5px solid var(--border-color, #e5e5ea)',
-            background: refreshing ? 'var(--accent-light, #f0f0ff)' : 'var(--bg-card, #fff)',
-            cursor: refreshing ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: refreshing ? 'var(--accent, #5856d6)' : 'var(--text-tertiary)',
-            transition: 'background 0.2s',
-          }}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-            fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            style={{ animation: refreshing ? 'spin 0.7s linear infinite' : 'none' }}
           >
-            <polyline points="23 4 23 10 17 10"/>
-            <polyline points="1 20 1 14 7 14"/>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-          </svg>
-        </button>
+            {refreshing ? 'Refreshing...' : '↻ Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* ── Search Results ── */}
