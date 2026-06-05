@@ -2701,7 +2701,7 @@ function TeacherSelect({ onSelect }) {
             s.kumiai?.toLowerCase().includes(q) ||
             batch.name?.toLowerCase().includes(q)
           ) {
-            results.push({ student: s, batch });
+            results.push({ student: s, batch, isHiddenBatch: !!batch.isHiddenFromViewer });
           }
         });
     });
@@ -2819,7 +2819,7 @@ function TeacherSelect({ onSelect }) {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {searchResults.map(({ student, batch }) => {
+              {searchResults.map(({ student, batch, isHiddenBatch }) => {
                 // Find which teacher owns this batch
                 const teacher = teachers.find(tc => tc._id === batch.teacherId);
                 const isOrphaned = !teacher;
@@ -2855,6 +2855,7 @@ function TeacherSelect({ onSelect }) {
                       <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {student.name}
                         {isOrphaned && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, background: '#ffcccc', color: '#c0392b', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>Unavailable</span>}
+                        {!isOrphaned && isHiddenBatch && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, background: 'rgba(255,149,0,0.15)', color: '#e67e00', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>Hidden from PHGIC</span>}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
                         <BookOpen size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : isOrphaned ? ' · Teacher/batch no longer exists' : ''}
@@ -4797,9 +4798,9 @@ function App() {
           {/* ── Normal batch list ── */}
           <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
           {(isViewer
-            ? batches.filter(b => safeLocalGet(ROLE_KEY) === 'sulop'
+            ? batches.filter(b => !b.isHiddenFromViewer && (safeLocalGet(ROLE_KEY) === 'sulop'
                 ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
-                : b.students.some(s => s.status === 'Selected'))
+                : b.students.some(s => s.status === 'Selected')))
             : batches).map(batch => (
             <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
               <div className="card-content">
@@ -4811,7 +4812,38 @@ function App() {
                       : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
                   </p>
                 </div>
-                {!isViewer && !isKazumi && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>}
+                {!isViewer && !isKazumi && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+                    <button
+                      title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
+                        const data = await res.json();
+                        if (data.success) {
+                          setBatches(prev => prev.map(b =>
+                            b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
+                          ));
+                        }
+                      }}
+                      style={{
+                        background: batch.isHiddenFromViewer ? 'rgba(255,149,0,0.12)' : 'rgba(0,0,0,0.05)',
+                        border: 'none', borderRadius: 8,
+                        padding: '5px 9px', cursor: 'pointer',
+                        fontSize: 11, fontWeight: 700,
+                        color: batch.isHiddenFromViewer ? '#e67e00' : 'var(--text-tertiary)',
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {batch.isHiddenFromViewer
+                        ? <><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg> Hidden</>
+                        : <><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Visible</>
+                      }
+                    </button>
+                    <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
