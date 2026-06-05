@@ -13,7 +13,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .filter(Boolean);
 // Always allow the production frontend + localhost for dev
 const DEFAULT_ORIGINS = [
-  'https://japanese-tracker.vercel.app',
+  'https://sagebulacan.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
 ];
@@ -159,6 +159,7 @@ const batchSchema = new mongoose.Schema({
   name: String,
   name_ja: { type: String, default: '' },
   teacherId: { type: String, default: null },
+  isHiddenFromViewer: { type: Boolean, default: false },
   students: [{
     name: String,
     photo: String,
@@ -917,6 +918,17 @@ app.post('/api/archive/restore/:batchId/:studentId', requireAdmin, async (req, r
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── TOGGLE HIDE BATCH FROM VIEWER ─────────────────────────────────────────────
+app.patch('/api/batches/:batchId/toggle-hide', requireAdmin, async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    batch.isHiddenFromViewer = !batch.isHiddenFromViewer;
+    await batch.save();
+    res.json({ success: true, isHiddenFromViewer: batch.isHiddenFromViewer });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── PERMANENT DELETE STUDENT: delete all images + student record ──────────────
