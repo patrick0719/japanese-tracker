@@ -921,7 +921,7 @@ app.post('/api/archive/restore/:batchId/:studentId', requireAdmin, async (req, r
 });
 
 // ── TOGGLE HIDE BATCH FROM VIEWER ─────────────────────────────────────────────
-app.patch('/api/batches/:batchId/toggle-hide', requireAdmin, async (req, res) => {
+app.patch('/api/batches/:batchId/toggle-hide', async (req, res) => {
   try {
     const batch = await Batch.findById(req.params.batchId);
     if (!batch) return res.status(404).json({ error: 'Batch not found' });
