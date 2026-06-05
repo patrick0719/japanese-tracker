@@ -4818,12 +4818,19 @@ function App() {
                       title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
                       onClick={async (e) => {
                         e.stopPropagation();
-                        const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
-                        const data = await res.json();
-                        if (data.success) {
-                          setBatches(prev => prev.map(b =>
-                            b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
-                          ));
+                        try {
+                          const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
+                          const data = await res.json();
+                          console.log('toggle-hide response:', res.status, data);
+                          if (data.success) {
+                            setBatches(prev => prev.map(b =>
+                              b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
+                            ));
+                          } else {
+                            alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
+                          }
+                        } catch(err) {
+                          alert('Toggle error: ' + err.message);
                         }
                       }}
                       style={{
