@@ -2646,6 +2646,8 @@ const SULOP_USER = 'SULOP';
 const SULOP_PASS = 'sulop';
 const KAZUMI_USER = 'KAZUMI';
 const KAZUMI_PASS = 'kazumi';
+const UEMATSUSACHOU_USER = 'UEMATSUSACHOU';
+const UEMATSUSACHOU_PASS = 'uematsusachou';
 const AUTH_KEY = 'sage_auth';
 const ROLE_KEY = 'sage_role'; // 'admin' or 'viewer'
 
@@ -2972,6 +2974,11 @@ function LoginScreen({ onLogin }) {
       safeLocalSet(ROLE_KEY, 'sulop');
       onLogin('sulop');
     } else if (username === KAZUMI_USER && password === KAZUMI_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'kazumi');
+      safeLocalSet('sage_lang', 'ja');
+      onLogin('kazumi');
+    } else if (username === UEMATSUSACHOU_USER && password === UEMATSUSACHOU_PASS) {
       safeLocalSet(AUTH_KEY, 'true');
       safeLocalSet(ROLE_KEY, 'kazumi');
       safeLocalSet('sage_lang', 'ja');
