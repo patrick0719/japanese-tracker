@@ -5377,6 +5377,66 @@ function App() {
           {ratingField('speaking',  'SPEAKING',  '話すこと')}
         </div>
 
+        {/* Comparison vs Previous Evaluation */}
+        {(() => {
+          const currentIdx = evaluations.findIndex(ev => ev._id === selectedEvaluation?._id);
+          if (currentIdx <= 0) return null; // no previous eval to compare
+          const prevEval = evaluations[currentIdx - 1];
+          const prevFields = prevEval?.fields || {};
+          const skills = [
+            { key: 'reading',   label: 'READING',   jp: '読むこと' },
+            { key: 'listening', label: 'LISTENING', jp: '聞くこと' },
+            { key: 'speaking',  label: 'SPEAKING',  jp: '話すこと' },
+          ];
+          const hasPrevData = skills.some(s => prevFields[s.key] != null);
+          if (!hasPrevData) return null;
+          return (
+            <div className="section-box">
+              <div className="section-box-header">
+                <span className="section-box-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <TrendingUp size={14} /> vs Previous Evaluation
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                  {prevEval.ordinal} Eval
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {skills.map(({ key, label, jp }) => {
+                  const curr = evalFields[key];
+                  const prev = prevFields[key];
+                  const diff = (curr != null && prev != null) ? curr - prev : null;
+                  const diffColor = diff > 0 ? '#34C759' : diff < 0 ? '#FF3B30' : '#8e8e93';
+                  const DiffIcon = diff > 0 ? TrendingUp : diff < 0 ? TrendingDown : Minus;
+                  return (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{label}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 5 }}>{jp}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 120, justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+                          {prev ?? '—'} → {curr ?? '—'}
+                        </span>
+                        {diff !== null && (
+                          <span style={{
+                            display: 'flex', alignItems: 'center', gap: 3,
+                            background: diff > 0 ? '#e8f9ed' : diff < 0 ? '#fff0ef' : '#f2f2f7',
+                            color: diffColor, borderRadius: 8,
+                            padding: '3px 9px', fontSize: 12, fontWeight: 700,
+                          }}>
+                            <DiffIcon size={12} />
+                            {diff > 0 ? `+${diff}` : diff === 0 ? '±0' : diff}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Lesson Details */}
         <div className="section-box">
           <div className="section-box-header">
@@ -5400,6 +5460,45 @@ function App() {
             <span className="section-box-title">💬 Remarks</span>
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>備考</span>
           </div>
+          {!isViewer && !isKazumi && (
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                Quick Templates
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {[
+                  { en: 'Excellent progress', jp: '非常に上手です' },
+                  { en: 'Good effort', jp: 'よく頑張りました' },
+                  { en: 'Needs more practice', jp: 'もっと練習が必要です' },
+                  { en: 'Great attitude', jp: '積極的な姿勢が良いです' },
+                  { en: 'Improving steadily', jp: '着実に上達しています' },
+                  { en: 'Needs to review vocabulary', jp: '語彙の復習が必要です' },
+                ].map(({ en, jp }) => (
+                  <button
+                    key={en}
+                    onClick={() => {
+                      const current = evalFields.remarks || '';
+                      const append = current ? `${current}\n${jp}` : jp;
+                      setEvalFields(f => ({ ...f, remarks: append }));
+                      translateRemarks(append);
+                    }}
+                    style={{
+                      background: 'var(--bg-card2, #f2f2f7)',
+                      border: '1px solid var(--border-color, #e5e5ea)',
+                      borderRadius: 20, padding: '5px 12px',
+                      fontSize: 12, fontWeight: 500,
+                      color: 'var(--text-primary, #3a3a3c)',
+                      cursor: 'pointer', lineHeight: 1.4,
+                      transition: 'background 0.15s',
+                    }}
+                    title={jp}
+                  >
+                    {en}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {textField('remarks', null, null, 'コメントを入力してください...')}
         </div>
 
