@@ -13,7 +13,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .filter(Boolean);
 // Always allow the production frontend + localhost for dev
 const DEFAULT_ORIGINS = [
-  'https://japanese-tracker.vercel.app',
+  'https://sagebulacan.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
 ];
@@ -152,13 +152,14 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
+  .then(() => { console.log('MongoDB connected'); seedCredentials(); })
   .catch(err => console.log('MongoDB error:', err));
 
 const batchSchema = new mongoose.Schema({
   name: String,
   name_ja: { type: String, default: '' },
   teacherId: { type: String, default: null },
+  isHiddenFromViewer: { type: Boolean, default: false },
   students: [{
     name: String,
     photo: String,
@@ -255,6 +256,261 @@ const teacherSchema = new mongoose.Schema({
   signature: { type: String, default: null },
 });
 const Teacher = mongoose.model('Teacher', teacherSchema);
+
+// ── AUTH: SERVER-SIDE CREDENTIALS, PASSWORD HASHING & TOKENS ──────────────────
+// Credentials live in the DB (hashed), NOT in the frontend. Each credential has a
+// per-account `tokenSecret`; rotating it (on password change) invalidates every
+// token previously issued for that account → everyone using it is logged out.
+const credentialSchema = new mongoose.Schema({
+  role:         { type: String, required: true },            // 'admin','viewer','setouchi',...
+  username:     { type: String, required: true, unique: true },
+  passwordHash: { type: String, required: true },
+  salt:         { type: String, required: true },
+  tokenSecret:  { type: String, required: true },            // rotate → logs everyone out
+  lang:         { type: String, default: '' },               // optional forced UI language
+  updatedAt:    { type: Date, default: Date.now },
+});
+const Credential = mongoose.model('Credential', credentialSchema);
+
+// Global signing secret (combined with each account's tokenSecret)
+const AUTH_TOKEN_SECRET = (process.env.AUTH_SECRET || process.env.ADMIN_SECRET || 'dev-insecure-auth-secret-change-me').trim();
+const MAX_TOKEN_AGE_MS = 1000 * 60 * 60 * 24 * 30; // 30-day max session
+
+const makeSalt   = () => crypto.randomBytes(16).toString('hex');
+const makeSecret = () => crypto.randomBytes(32).toString('hex');
+const hashPassword = (password, salt) => crypto.scryptSync(String(password), salt, 64).toString('hex');
+const safeEqualHex = (a, b) => {
+  try {
+    const ba = Buffer.from(a, 'hex'), bb = Buffer.from(b, 'hex');
+    return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+  } catch { return false; }
+};
+
+const signToken = (cred) => {
+  const payload = { cid: cred._id.toString(), role: cred.role, iat: Date.now() };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', AUTH_TOKEN_SECRET + cred.tokenSecret).update(body).digest('hex');
+  return `${body}.${sig}`;
+};
+
+const verifyToken = async (token) => {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  const [body, sig] = token.split('.');
+  let payload;
+  try { payload = JSON.parse(Buffer.from(body, 'base64url').toString()); } catch { return null; }
+  if (!payload || !payload.cid || !isValidObjectId(payload.cid)) return null;
+  if (payload.iat && Date.now() - payload.iat > MAX_TOKEN_AGE_MS) return null;
+  const cred = await Credential.findById(payload.cid);
+  if (!cred) return null;
+  const expected = crypto.createHmac('sha256', AUTH_TOKEN_SECRET + cred.tokenSecret).update(body).digest('hex');
+  return safeEqualHex(sig, expected) ? cred : null;
+};
+
+const getBearer = (req) =>
+  sanitizeStr(req.body && req.body.token, 4000) ||
+  (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
+
+// Seed credentials once (only creates accounts that don't exist yet, so password
+// changes persist across restarts). Initial values come from env vars when set,
+// otherwise fall back to the app's original defaults so nothing breaks on first deploy.
+const DEFAULT_CREDENTIALS = [
+  { role: 'admin',         username: process.env.ADMIN_USERNAME || 'sagebulacan97', password: process.env.ADMIN_PASSWORD || 'July14,2018' },
+  { role: 'viewer',        username: 'PHGIC',          password: 'phgic' },
+  { role: 'setouchi',      username: 'SETOUCHI',       password: 'setouchi' },
+  { role: 'wbc',           username: 'WBC',            password: 'wbc' },
+  { role: 'gyoumusuishin', username: 'GYOUMUSUISHIN',  password: 'gyoumusuishin' },
+  { role: 'greenservices', username: 'GREEN SERVICES', password: 'greenservices' },
+  { role: 'sulop',         username: 'SULOP',          password: 'sulop' },
+  { role: 'kazumi',        username: 'KAZUMI',         password: 'kazumi',        lang: 'ja' },
+  { role: 'kazumi',        username: 'UEMATSUSACHOU',  password: 'uematsusachou', lang: 'ja' },
+];
+async function seedCredentials() {
+  for (const c of DEFAULT_CREDENTIALS) {
+    try {
+      const exists = await Credential.findOne({ username: c.username });
+      if (exists) continue;
+      const salt = makeSalt();
+      await Credential.create({
+        role: c.role, username: c.username, salt,
+        passwordHash: hashPassword(c.password, salt),
+        tokenSecret: makeSecret(), lang: c.lang || '',
+      });
+      console.log(`[seed] credential created: ${c.username} (${c.role})`);
+    } catch (e) { console.error('[seed] failed for', c.username, e.message); }
+  }
+}
+
+// ── AUTH ROUTES ───────────────────────────────────────────────────────────────
+app.post('/api/auth/login', rateLimit({ windowMs: 60_000, max: 30 }), async (req, res) => {
+  try {
+    const username = sanitizeStr(req.body.username, 100);
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
+    const cred = await Credential.findOne({ username });
+    if (!cred || !safeEqualHex(hashPassword(password, cred.salt), cred.passwordHash)) {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+    res.json({ token: signToken(cred), role: cred.role, lang: cred.lang || '' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Frontend calls this on load; if the token is stale (e.g. password was changed) → 401 → forced logout
+app.post('/api/auth/verify', async (req, res) => {
+  try {
+    const cred = await verifyToken(getBearer(req));
+    if (!cred) return res.status(401).json({ valid: false });
+    res.json({ valid: true, role: cred.role, lang: cred.lang || '' });
+  } catch (err) { res.status(500).json({ valid: false }); }
+});
+
+// Verify a password without a username (used by the admin QR gate). Returns a token on success.
+app.post('/api/auth/check-password', rateLimit({ windowMs: 60_000, max: 30 }), async (req, res) => {
+  try {
+    const role = sanitizeStr(req.body.role, 50) || 'admin';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    const cred = await Credential.findOne({ role });
+    if (!cred || !safeEqualHex(hashPassword(password, cred.salt), cred.passwordHash)) {
+      return res.status(401).json({ ok: false });
+    }
+    res.json({ ok: true, token: signToken(cred), role: cred.role });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// List accounts (admin only) — feeds the change-password dropdown
+app.post('/api/auth/accounts', async (req, res) => {
+  try {
+    const admin = await verifyToken(getBearer(req));
+    if (!admin || admin.role !== 'admin') return res.status(401).json({ error: 'Admin login required.' });
+    const list = await Credential.find({}, 'role username updatedAt').sort({ role: 1, username: 1 });
+    res.json(list);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Change a password (admin only). Rotates tokenSecret → logs everyone on that account out.
+app.post('/api/auth/change-password', rateLimit({ windowMs: 60_000, max: 10 }), async (req, res) => {
+  try {
+    const admin = await verifyToken(getBearer(req));
+    if (!admin || admin.role !== 'admin') return res.status(401).json({ error: 'Admin login required.' });
+
+    const targetUsername = sanitizeStr(req.body.targetUsername, 100) || admin.username;
+    const newPassword = typeof req.body.newPassword === 'string' ? req.body.newPassword : '';
+    if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+
+    const target = await Credential.findOne({ username: targetUsername });
+    if (!target) return res.status(404).json({ error: 'Account not found.' });
+
+    const changingSelf = target._id.toString() === admin._id.toString();
+    // Require current password when an admin changes their OWN password
+    if (changingSelf) {
+      const currentPassword = typeof req.body.currentPassword === 'string' ? req.body.currentPassword : '';
+      if (!safeEqualHex(hashPassword(currentPassword, target.salt), target.passwordHash)) {
+        return res.status(401).json({ error: 'Current password is incorrect.' });
+      }
+    }
+
+    target.salt = makeSalt();
+    target.passwordHash = hashPassword(newPassword, target.salt);
+    target.tokenSecret = makeSecret(); // ← invalidates ALL existing tokens for this account
+    target.updatedAt = new Date();
+    await target.save();
+
+    // Keep the admin who made the change logged in (only if they changed their own password)
+    res.json({ success: true, rotated: target.username, token: changingSelf ? signToken(target) : null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+// ── PARENT TOKEN MODEL ────────────────────────────────────────────────────────
+const parentTokenSchema = new mongoose.Schema({
+  token:     { type: String, required: true, unique: true, index: true },
+  batchId:   { type: String, required: true },
+  studentId: { type: String, required: true },
+  expiresAt: { type: Date,   required: true },
+  createdAt: { type: Date,   default: Date.now },
+  createdBy: { type: String, default: '' }, // teacher name
+});
+// Auto-delete expired tokens from MongoDB after expiry
+parentTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+const ParentToken = mongoose.model('ParentToken', parentTokenSchema);
+
+// POST /api/parent-token/generate — create a new one-time parent view token
+app.post('/api/parent-token/generate', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const { batchId, studentId, expiresAt, createdBy } = req.body;
+    if (!batchId || !studentId || !expiresAt) {
+      return res.status(400).json({ error: 'batchId, studentId, expiresAt required' });
+    }
+    const expiry = new Date(expiresAt);
+    if (isNaN(expiry) || expiry <= new Date()) {
+      return res.status(400).json({ error: 'expiresAt must be a future date' });
+    }
+    // Generate a cryptographically random token
+    const token = crypto.randomBytes(24).toString('hex');
+    const doc = new ParentToken({
+      token,
+      batchId: sanitizeStr(batchId, 50),
+      studentId: sanitizeStr(studentId, 50),
+      expiresAt: expiry,
+      createdBy: sanitizeStr(createdBy || '', 100),
+    });
+    await doc.save();
+    res.json({ token, expiresAt: expiry });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/parent-token/:token — validate token + return student data
+app.get('/api/parent-token/:token', rateLimit({ windowMs: 60_000, max: 60 }), async (req, res) => {
+  try {
+    const doc = await ParentToken.findOne({ token: req.params.token });
+    if (!doc) return res.status(404).json({ error: 'expired' });
+    if (doc.expiresAt < new Date()) {
+      await ParentToken.deleteOne({ _id: doc._id });
+      return res.status(410).json({ error: 'expired' });
+    }
+    // Fetch student data
+    const batch = await Batch.findById(doc.batchId);
+    if (!batch) return res.status(404).json({ error: 'expired' });
+    const student = batch.students.id(doc.studentId);
+    if (!student) return res.status(404).json({ error: 'expired' });
+
+    // Return safe read-only student data (no evaluations fields that may be sensitive)
+    res.json({
+      valid: true,
+      expiresAt: doc.expiresAt,
+      student: {
+        _id: student._id,
+        name: student.name,
+        photo: student.photo || null,
+        companyName: student.companyName || '',
+        status: student.status,
+        categories: student.categories.map(cat => ({
+          _id: cat._id,
+          name: cat.name,
+          name_ja: cat.name_ja,
+          items: (cat.items || []).map(item => ({
+            _id: item._id,
+            name: item.name,
+            name_ja: item.name_ja,
+            date: item.date,
+            score: item.score,
+            totalScore: item.totalScore,
+            images: item.images || [],
+          })),
+        })),
+      },
+      batch: { _id: batch._id, name: batch.name, name_ja: batch.name_ja },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/parent-token/:token — revoke a token manually
+app.delete('/api/parent-token/:token', async (req, res) => {
+  try {
+    await ParentToken.deleteOne({ token: req.params.token });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 
 app.get('/api/teachers', async (req, res) => {
   try { res.json(await Teacher.find().select('-signature')); } catch (err) { res.status(500).json({ error: err.message }); }
@@ -356,7 +612,7 @@ app.patch('/api/batches/:batchId/students/:studentId', async (req, res) => {
     const batch = await Batch.findById(req.params.batchId);
     const student = batch.students.id(req.params.studentId);
     if (req.body.name !== undefined) student.name = req.body.name;
-    if (req.body.photo !== undefined) student.photo = req.body.photo;
+    // NOTE: photo is intentionally excluded here — use POST .../photo instead
     if (req.body.status !== undefined) student.status = req.body.status;
     if (req.body.companyName !== undefined) student.companyName = req.body.companyName;
     if (req.body.kumiai !== undefined) student.kumiai = req.body.kumiai;
@@ -365,6 +621,26 @@ app.patch('/api/batches/:batchId/students/:studentId', async (req, res) => {
     await batch.save();
     res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── STUDENT PHOTO UPLOAD (via Cloudinary — keeps MongoDB lean) ───────────────
+// Accepts base64, uploads to Cloudinary, stores only the URL in MongoDB.
+app.post('/api/batches/:batchId/students/:studentId/photo', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const { photo } = req.body; // base64 data URL
+    if (!photo) return res.status(400).json({ error: 'photo is required' });
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const { url } = await cloudinaryUpload(photo); // upload → get back HTTPS URL
+    student.photo = url; // store only the URL, not raw base64
+    await batch.save();
+    res.json(batch);
+  } catch (err) {
+    console.error('[student photo upload]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.patch('/api/batches/:batchId/students/:studentId/status', async (req, res) => {
@@ -392,6 +668,55 @@ app.delete('/api/batches/:batchId/students/:studentId', async (req, res) => {
     batch.students = batch.students.filter(s => s._id.toString() !== req.params.studentId);
     await batch.save(); res.json(batch);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── MOVE / TRANSFER A STUDENT TO ANOTHER BATCH ───────────────────────────────
+// Moves a student (with ALL records: photo, categories, exams, images, evaluations)
+// from the source batch into a target batch. Image URLs are stored as strings on
+// the student subdocument, so they travel with the record — no re-upload needed.
+app.post('/api/batches/:batchId/students/:studentId/move', async (req, res) => {
+  try {
+    const { batchId, studentId } = req.params;
+    const targetBatchId = sanitizeStr(req.body.targetBatchId, 50);
+
+    // Validate IDs
+    if (!isValidObjectId(batchId) || !isValidObjectId(studentId) || !isValidObjectId(targetBatchId)) {
+      return res.status(400).json({ error: 'Invalid batchId, studentId, or targetBatchId.' });
+    }
+    if (targetBatchId === batchId) {
+      return res.status(400).json({ error: 'Student is already in this batch.' });
+    }
+
+    // Load both batches
+    const sourceBatch = await Batch.findById(batchId);
+    if (!sourceBatch) return res.status(404).json({ error: 'Source batch not found.' });
+    const targetBatch = await Batch.findById(targetBatchId);
+    if (!targetBatch) return res.status(404).json({ error: 'Target batch not found.' });
+
+    // Find the student in the source batch
+    const student = sourceBatch.students.id(studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found in source batch.' });
+
+    // Deep-clone the full student record (keeps _id so existing references — parent
+    // tokens, dismissed reminders, etc. — keep matching after the move)
+    const studentData = student.toObject();
+
+    // Push the full record into the target batch, then save it FIRST.
+    // (Saving target before removing from source means a failure mid-way leaves the
+    //  student safely in the source rather than lost in neither.)
+    targetBatch.students.push(studentData);
+    await targetBatch.save();
+
+    // Now remove from the source batch
+    sourceBatch.students = sourceBatch.students.filter(s => s._id.toString() !== studentId);
+    sourceBatch.markModified('students');
+    await sourceBatch.save();
+
+    res.json({ success: true, sourceBatch, targetBatch });
+  } catch (err) {
+    console.error('[move student]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── CATEGORY ROUTES ──────────────────────────────────────────────────────────
@@ -492,6 +817,34 @@ app.delete('/api/batches/:batchId/students/:studentId/categories/:catId/items/:i
     const cat = student.categories.id(req.params.catId);
     cat.items = cat.items.filter(i => i._id.toString() !== req.params.itemId);
     await batch.save(); res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── REORDER EXAM ITEMS (drag-and-drop) ───────────────────────────────────────
+// PATCH /api/batches/:batchId/students/:studentId/categories/:catId/items/reorder
+// Body: { orderedIds: ["id1", "id2", "id3", ...] }
+app.patch('/api/batches/:batchId/students/:studentId/categories/:catId/items/reorder', async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'orderedIds must be an array' });
+
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const cat = student.categories.id(req.params.catId);
+    if (!cat) return res.status(404).json({ error: 'Category not found' });
+
+    // Re-arrange items based on provided orderedIds
+    const itemMap = new Map(cat.items.map(item => [item._id.toString(), item]));
+    const reordered = orderedIds.map(id => itemMap.get(id)).filter(Boolean);
+    // Preserve any items not included in orderedIds (safety net)
+    const includedIds = new Set(orderedIds);
+    const missing = cat.items.filter(item => !includedIds.has(item._id.toString()));
+    cat.items = [...reordered, ...missing];
+
+    await batch.save();
+    res.json({ success: true, items: cat.items });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -777,6 +1130,17 @@ app.post('/api/archive/restore/:batchId/:studentId', requireAdmin, async (req, r
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── TOGGLE HIDE BATCH FROM VIEWER ─────────────────────────────────────────────
+app.patch('/api/batches/:batchId/toggle-hide', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    batch.isHiddenFromViewer = !batch.isHiddenFromViewer;
+    await batch.save();
+    res.json({ success: true, isHiddenFromViewer: batch.isHiddenFromViewer });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── PERMANENT DELETE STUDENT: delete all images + student record ──────────────
@@ -1285,6 +1649,316 @@ app.get('/api/diagnostic/images', requireAdmin, async (req, res) => {
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ── PUSH NOTIFICATION (FCM) ───────────────────────────────────────────────────
+// Requires these Railway environment variables:
+//   FCM_PROJECT_ID     — from Firebase service account JSON
+//   FCM_CLIENT_EMAIL   — from Firebase service account JSON
+//   FCM_PRIVATE_KEY    — from Firebase service account JSON (keep newlines as \n)
+
+const pushTokenSchema = new mongoose.Schema({
+  token:       { type: String, required: true, unique: true },
+  role:        { type: String, default: 'admin' },   // 'admin' or teacher role
+  teacherId:   { type: String, default: null },
+  teacherName: { type: String, default: '' },
+  updatedAt:   { type: Date, default: Date.now },
+});
+const PushToken = mongoose.model('PushToken', pushTokenSchema);
+
+// POST /api/push/register — save or update FCM token from a logged-in device
+app.post('/api/push/register', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const { token, role, teacherId, teacherName } = req.body;
+    if (!token) return res.status(400).json({ error: 'token required' });
+
+    // Upsert — one record per token
+    await PushToken.findOneAndUpdate(
+      { token },
+      { role, teacherId, teacherName: sanitizeStr(teacherName, 100), updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── FCM HTTP v1 send helper ───────────────────────────────────────────────────
+let _fcmAccessToken = null;
+let _fcmTokenExpiry = 0;
+
+async function getFcmAccessToken() {
+  // Return cached token if still valid (expiry minus 60s buffer)
+  if (_fcmAccessToken && Date.now() < _fcmTokenExpiry - 60_000) return _fcmAccessToken;
+
+  const projectId   = process.env.FCM_PROJECT_ID;
+  const clientEmail = process.env.FCM_CLIENT_EMAIL;
+  const privateKey = (process.env.FCM_PRIVATE_KEY || '')
+  .replace(/\\n/g, '\n')
+  .replace(/^"|"$/g, '');
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error('FCM environment variables not configured (FCM_PROJECT_ID, FCM_CLIENT_EMAIL, FCM_PRIVATE_KEY)');
+  }
+
+  // Build JWT for Google OAuth2
+  const now = Math.floor(Date.now() / 1000);
+  const header  = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    iss:   clientEmail,
+    scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud:   'https://oauth2.googleapis.com/token',
+    iat:   now,
+    exp:   now + 3600,
+  })).toString('base64url');
+
+  const toSign = `${header}.${payload}`;
+  const sign   = crypto.createSign('RSA-SHA256');
+  sign.update(toSign);
+  const signature = sign.sign(privateKey, 'base64url');
+  const jwt = `${toSign}.${signature}`;
+
+  // Exchange JWT for access token
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion:  jwt,
+    }),
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) throw new Error('Failed to get FCM access token: ' + JSON.stringify(tokenData));
+
+  _fcmAccessToken = tokenData.access_token;
+  _fcmTokenExpiry = Date.now() + (tokenData.expires_in || 3600) * 1000;
+  return _fcmAccessToken;
+}
+
+async function sendFcmNotification(token, title, body) {
+  const projectId   = process.env.FCM_PROJECT_ID;
+  const accessToken = await getFcmAccessToken();
+
+  const res = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        message: {
+          token,
+          notification: { title, body },
+          webpush: {
+            notification: {
+              icon:    '/logo192.png',
+              badge:   '/logo192.png',
+              vibrate: [200, 100, 200],
+              tag:     'sage-reminder',
+              renotify: true,
+              actions: [
+                { action: 'open',    title: '📂 Buksan ang App' },
+                { action: 'dismiss', title: 'Dismiss' },
+              ],
+            },
+          },
+        },
+      }),
+    }
+  );
+  return res.json();
+}
+
+// ── SMART REMINDER CRON — runs every day at 8:00 AM Philippine Time (UTC+8) ──
+// Checks on 15th and 30th of the month which students have no exam in 30 days
+// and sends push notifications to all registered teachers/admins.
+// GET /api/push/test — manually trigger a test notification to all registered devices
+// Usage: open https://japanese-tracker-production.up.railway.app/api/push/test in browser
+app.get('/api/push/test', async (req, res) => {
+  try {
+    console.log('[SAGE Test] FCM_PROJECT_ID:', process.env.FCM_PROJECT_ID);
+    console.log('[SAGE Test] FCM_CLIENT_EMAIL:', process.env.FCM_CLIENT_EMAIL);
+    console.log('[SAGE Test] KEY starts:', (process.env.FCM_PRIVATE_KEY || '').substring(0, 40));
+
+    const tokens = await PushToken.find();
+    if (tokens.length === 0) {
+      return res.json({ success: false, message: 'Walang registered tokens.' });
+    }
+
+    const examTitle = '📝 Exam Upload Reminder — 2 students';
+    const examBody  = '• Juan dela Cruz (Batch A · Teacher Santos) — 35 days no exam\n• Maria Reyes (Batch B · Teacher Cruz) — no exam yet';
+    const evalTitle = '📊 Evaluation Reminder — 2 students to evaluate';
+    const evalBody  = '• Juan dela Cruz (Batch A · Teacher Santos) needs evaluation\n• Maria Reyes (Batch B · Teacher Cruz) needs evaluation';
+
+    let sent = 0, failed = 0;
+
+    for (const doc of tokens) {
+      try {
+        const r1 = await sendFcmNotification(doc.token, examTitle, examBody);
+        console.log('[SAGE Test] Exam notif:', JSON.stringify(r1));
+        if (!r1.error) sent++;
+
+        await new Promise(r => setTimeout(r, 3000));
+
+        const r2 = await sendFcmNotification(doc.token, evalTitle, evalBody);
+        console.log('[SAGE Test] Eval notif:', JSON.stringify(r2));
+        if (!r2.error) sent++;
+        else failed++;
+      } catch (err) {
+        console.log('[SAGE Test] Send error:', err.message);
+        failed++;
+      }
+    }
+
+    res.json({ success: true, sent, failed, totalTokens: tokens.length });
+  } catch (err) {
+    console.log('[SAGE Test] Top error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+function scheduleDailyReminder() {
+  const checkAndSend = async () => {
+    const now = new Date();
+    // Philippine time = UTC + 8
+    const phHour = (now.getUTCHours() + 8) % 24;
+    const phDay  = new Date(now.getTime() + 8 * 60 * 60 * 1000).getUTCDate();
+
+    // Only run at 8 AM Philippine time, on the 15th or 30th of the month
+    if (phHour !== 8) return;
+    if (phDay !== 15 && phDay !== 30) return;
+
+    console.log(`[SAGE Cron] Running smart reminder check — ${now.toISOString()}`);
+
+    try {
+      const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const batches = await Batch.find();
+
+      const flagged = []; // { studentName, batchName, teacherName, daysSince, needsEval }
+      batches.forEach(batch => {
+        batch.students
+          .filter(s => !s.isArchived)
+          .forEach(student => {
+            // ── Check latest exam date ────────────────────────────────────────
+            let latestExamDate = null;
+            (student.categories || []).forEach(cat => {
+              (cat.items || []).forEach(item => {
+                if (item.date) {
+                  const d = new Date(item.date);
+                  if (!latestExamDate || d > latestExamDate) latestExamDate = d;
+                }
+              });
+            });
+
+            // ── Check latest evaluation date ──────────────────────────────────
+            let latestEvalDate = null;
+            (student.evaluations || []).forEach(ev => {
+              if (ev.date) {
+                const d = new Date(ev.date);
+                if (!latestEvalDate || d > latestEvalDate) latestEvalDate = d;
+              }
+            });
+
+            const hasNoRecentExam = !latestExamDate || latestExamDate < cutoff;
+            const hasNoRecentEval = !latestEvalDate || latestEvalDate < cutoff;
+
+            if (hasNoRecentExam || hasNoRecentEval) {
+              const daysSinceExam = latestExamDate
+                ? Math.floor((now - latestExamDate) / (1000 * 60 * 60 * 24))
+                : null;
+              flagged.push({
+                studentName:  student.name,
+                batchName:    batch.name,
+                teacherName:  batch.teacherName || 'Unassigned',
+                daysSinceExam,
+                hasNoRecentExam,
+                hasNoRecentEval,
+              });
+            }
+          });
+      });
+
+      if (flagged.length === 0) {
+        console.log('[SAGE Cron] No students to flag — no notifications sent.');
+        return;
+      }
+
+      // ── Notification 1: Exam Upload Reminder ──────────────────────────────
+      const examFlagged = flagged.filter(f => f.hasNoRecentExam);
+      const examTitle = `📝 Exam Upload Reminder — ${examFlagged.length} student${examFlagged.length !== 1 ? 's' : ''}`;
+      const examPreview = examFlagged.slice(0, 3).map(f =>
+        `• ${f.studentName} (${f.batchName} · ${f.teacherName}) — ${f.daysSinceExam ? `${f.daysSinceExam} days no exam` : 'no exam yet'}`
+      ).join('\n');
+      const examBody = examPreview + (examFlagged.length > 3 ? `\n+${examFlagged.length - 3} more students` : '');
+
+      // ── Notification 2: Evaluation Reminder ───────────────────────────────
+      const evalFlagged = flagged.filter(f => f.hasNoRecentEval);
+      const evalTitle = `📊 Evaluation Reminder — ${evalFlagged.length} student${evalFlagged.length !== 1 ? 's' : ''} to evaluate`;
+      const evalPreview = evalFlagged.slice(0, 3).map(f =>
+        `• ${f.studentName} (${f.batchName} · ${f.teacherName}) needs evaluation`
+      ).join('\n');
+      const evalBody = evalPreview + (evalFlagged.length > 3 ? `\n+${evalFlagged.length - 3} more students` : '');
+
+      // Fetch all registered tokens (teachers + admins only — viewers never register)
+      const tokens = await PushToken.find();
+      console.log(`[SAGE Cron] Sending to ${tokens.length} device(s) — ${examFlagged.length} exam, ${evalFlagged.length} eval flagged`);
+
+      let sent = 0, failed = 0;
+      const staleTokens = [];
+
+      for (const doc of tokens) {
+        try {
+          // Send exam notification
+          if (examFlagged.length > 0) {
+            const r1 = await sendFcmNotification(doc.token, examTitle, examBody);
+            if (r1.error) {
+              if (r1.error.status === 'UNREGISTERED' || r1.error.status === 'INVALID_ARGUMENT') {
+                staleTokens.push(doc._id);
+              }
+              console.warn(`[SAGE Cron] Exam notif error for ${doc.teacherName}:`, r1.error);
+              failed++;
+            } else {
+              sent++;
+            }
+          }
+
+          // Send eval notification after 5 seconds
+          if (evalFlagged.length > 0) {
+            await new Promise(r => setTimeout(r, 5000));
+            const r2 = await sendFcmNotification(doc.token, evalTitle, evalBody);
+            if (r2.error) {
+              console.warn(`[SAGE Cron] Eval notif error for ${doc.teacherName}:`, r2.error);
+            } else {
+              sent++;
+            }
+          }
+        } catch (err) {
+          console.error(`[SAGE Cron] Send error for ${doc.teacherName}:`, err.message);
+          failed++;
+        }
+      }
+
+      // Clean up stale tokens
+      if (staleTokens.length > 0) {
+        await PushToken.deleteMany({ _id: { $in: staleTokens } });
+        console.log(`[SAGE Cron] Removed ${staleTokens.length} stale token(s)`);
+      }
+
+      console.log(`[SAGE Cron] Done — sent: ${sent}, failed: ${failed}`);
+    } catch (err) {
+      console.error('[SAGE Cron] Error:', err.message);
+    }
+  };
+
+  // Check every hour — the function itself guards day/time
+  setInterval(checkAndSend, 60 * 60 * 1000);
+
+  // Also run once on startup (harmless if not the right time)
+  checkAndSend();
+}
+
+scheduleDailyReminder();
 
 // ── SERVER START ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
