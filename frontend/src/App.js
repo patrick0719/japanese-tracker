@@ -1916,6 +1916,56 @@ function SettingsPage({ batches, onClose, API }) {
   const [storageError, setStorageError] = useState(null);
   const [clearLoading, setClearLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('storage');
+  const isAdminUser = (typeof safeLocalGet === 'function' ? safeLocalGet(ROLE_KEY) : null) === 'admin';
+
+  // ── Change Password state ──
+  const [pwAccounts, setPwAccounts] = useState([]);
+  const [pwTarget, setPwTarget] = useState('');        // target username
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwMsg, setPwMsg] = useState(null);            // { type:'ok'|'err', text }
+  const [pwBusy, setPwBusy] = useState(false);
+
+  useEffect(() => {
+    if (activeSection !== 'security' || !isAdminUser) return;
+    (async () => {
+      try {
+        const token = safeLocalGet(TOKEN_KEY);
+        const res = await fetch(`${API}/auth/accounts`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) setPwAccounts(data);
+      } catch {}
+    })();
+  }, [activeSection, isAdminUser, API]);
+
+  const submitChangePassword = async () => {
+    setPwMsg(null);
+    if (!pwTarget) { setPwMsg({ type: 'err', text: 'Please choose an account.' }); return; }
+    if (pwNew.length < 6) { setPwMsg({ type: 'err', text: 'New password must be at least 6 characters.' }); return; }
+    if (pwNew !== pwConfirm) { setPwMsg({ type: 'err', text: 'New password and confirmation do not match.' }); return; }
+    setPwBusy(true);
+    try {
+      const token = safeLocalGet(TOKEN_KEY);
+      const res = await fetch(`${API}/auth/change-password`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, targetUsername: pwTarget, currentPassword: pwCurrent, newPassword: pwNew }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) { setPwMsg({ type: 'err', text: data.error || 'Could not change password.' }); return; }
+      // If the admin changed their OWN password, the server returns a fresh token — keep this session alive
+      if (data.token) safeLocalSet(TOKEN_KEY, data.token);
+      setPwMsg({ type: 'ok', text: `Password updated for "${data.rotated}". Anyone currently logged into that account will be signed out.` });
+      setPwCurrent(''); setPwNew(''); setPwConfirm('');
+    } catch (e) {
+      setPwMsg({ type: 'err', text: 'Cannot reach the server. Please try again.' });
+    } finally {
+      setPwBusy(false);
+    }
+  };
 
   // Compute app stats from batches
   const totalStudents = batches.reduce((s, b) => s + b.students.length, 0);
@@ -1987,6 +2037,7 @@ useEffect(() => {
     { id: 'server', label: t('serverTab') },
     { id: 'manage', label: t('manageTab') },
     { id: 'barcodes', label: 'QR Codes' },
+    ...(isAdminUser ? [{ id: 'security', label: 'Security' }] : []),
   ];
 
   return (
@@ -2395,6 +2446,67 @@ useEffect(() => {
         {/* ── BARCODE GENERATOR TAB ── */}
         {activeSection === 'barcodes' && <BarcodeGeneratorTab batches={batches} />}
 
+        {activeSection === 'security' && isAdminUser && (
+          <div style={{ padding: '4px 2px' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1c1c1e', margin: '4px 0 4px' }}>Change Password</h3>
+            <p style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 16px', lineHeight: 1.5 }}>
+              Passwords are stored securely on the server. Changing a password immediately signs out everyone currently using that account on every device — they will need to log in again with the new password.
+            </p>
+
+            <div style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 1px 8px rgba(0,0,0,0.05)', maxWidth: 460 }}>
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 600 }}>Account</label>
+                <select
+                  value={pwTarget}
+                  onChange={e => { setPwTarget(e.target.value); setPwMsg(null); }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}
+                >
+                  <option value="">— Select an account —</option>
+                  {pwAccounts.map(a => (
+                    <option key={a.username} value={a.username}>{a.username} ({a.role})</option>
+                  ))}
+                </select>
+              </div>
+
+              {pwTarget && pwAccounts.find(a => a.username === pwTarget && a.role === 'admin') && (
+                <div className="form-group" style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600 }}>Current password (required for admin)</label>
+                  <input type="password" value={pwCurrent} onChange={e => { setPwCurrent(e.target.value); setPwMsg(null); }}
+                    placeholder="Enter current admin password"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box' }} />
+                </div>
+              )}
+
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 600 }}>New password</label>
+                <input type="password" value={pwNew} onChange={e => { setPwNew(e.target.value); setPwMsg(null); }}
+                  placeholder="At least 6 characters"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box' }} />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 4 }}>
+                <label style={{ fontSize: 13, fontWeight: 600 }}>Confirm new password</label>
+                <input type="password" value={pwConfirm} onChange={e => { setPwConfirm(e.target.value); setPwMsg(null); }}
+                  placeholder="Re-type new password"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box' }} />
+              </div>
+
+              {pwMsg && (
+                <p style={{ fontSize: 13, margin: '12px 0 0', color: pwMsg.type === 'ok' ? '#1a7f37' : '#ff3b30', lineHeight: 1.45 }}>
+                  {pwMsg.text}
+                </p>
+              )}
+
+              <button
+                onClick={submitChangePassword}
+                disabled={pwBusy}
+                style={{ width: '100%', marginTop: 16, background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 700, cursor: pwBusy ? 'default' : 'pointer', opacity: pwBusy ? 0.7 : 1 }}>
+                {pwBusy ? 'Updating…' : 'Update Password'}
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
       <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
     </div>
@@ -2630,26 +2742,11 @@ function SmartReminders({ batches, onNavigate }) {
 }
 
 // ── LOGIN SCREEN ─────────────────────────────────────────────────────────────
-const ADMIN_USER = 'sagebulacan97';
-const ADMIN_PASS = 'July142018';
-const PHGIC_USER = 'PHGIC';
-const PHGIC_PASS = 'phgic';
-const SETOUCHI_USER = 'SETOUCHI';
-const SETOUCHI_PASS = 'setouchi';
-const WBC_USER = 'WBC';
-const WBC_PASS = 'wbc';
-const GYOUMUSUISHIN_USER = 'GYOUMUSUISHIN';
-const GYOUMUSUISHIN_PASS = 'gyoumusuishin';
-const GREENSERVICES_USER = 'GREEN SERVICES';
-const GREENSERVICES_PASS = 'greenservices';
-const SULOP_USER = 'SULOP';
-const SULOP_PASS = 'sulop';
-const KAZUMI_USER = 'KAZUMI';
-const KAZUMI_PASS = 'kazumi';
-const UEMATSUSACHOU_USER = 'UEMATSUSACHOU';
-const UEMATSUSACHOU_PASS = 'uematsusachou';
+// NOTE: Credentials are no longer stored here. Authentication is handled by the
+// server (POST /api/auth/login). The frontend never sees any password.
 const AUTH_KEY = 'sage_auth';
 const ROLE_KEY = 'sage_role'; // 'admin' or 'viewer'
+const TOKEN_KEY = 'sage_token'; // server-issued session token
 
 const TEACHER_KEY = 'sage_teacher';
 
@@ -2922,7 +3019,7 @@ function TeacherSelect({ onSelect }) {
           </button>
         )}
       </div>
-      <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(TEACHER_KEY); window.location.reload(); }}
+      <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(TOKEN_KEY); safeLocalRemove(TEACHER_KEY); window.location.reload(); }}
         className="btn-logout" style={{ marginTop: 36 }}>
         {t('logout')}
       </button>
@@ -2942,49 +3039,32 @@ function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
   const passwordRef = useRef(null);
 
-  const handleLogin = () => {
-    if (username === ADMIN_USER && password === ADMIN_PASS) {
+  const handleLogin = async () => {
+    if (!username || !password) { setError('Please enter your username and password.'); return; }
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.token) {
+        setError(data.error || 'Invalid username or password.');
+        return;
+      }
       safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'admin');
-      onLogin('admin');
-    } else if (username === PHGIC_USER && password === PHGIC_PASS) {
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'viewer');
-      onLogin('viewer');
-    } else if (username === SETOUCHI_USER && password === SETOUCHI_PASS) {
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'setouchi');
-      onLogin('setouchi');
-    } else if (username === WBC_USER && password === WBC_PASS) {
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'wbc');
-      onLogin('wbc');
-    } else if (username === GYOUMUSUISHIN_USER && password === GYOUMUSUISHIN_PASS) {
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'gyoumusuishin');
-      onLogin('gyoumusuishin');
-    } else if (username === GREENSERVICES_USER && password === GREENSERVICES_PASS) {
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'greenservices');
-      onLogin('greenservices');
-    } else if (username === SULOP_USER && password === SULOP_PASS) {
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'sulop');
-      onLogin('sulop');
-    } else if (username === KAZUMI_USER && password === KAZUMI_PASS) {
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'kazumi');
-      safeLocalSet('sage_lang', 'ja');
-      onLogin('kazumi');
-    } else if (username === UEMATSUSACHOU_USER && password === UEMATSUSACHOU_PASS) {
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'kazumi');
-      safeLocalSet('sage_lang', 'ja');
-      onLogin('kazumi');
-    } else {
-      setError('Invalid username or password.');
+      safeLocalSet(ROLE_KEY, data.role);
+      safeLocalSet(TOKEN_KEY, data.token);
+      if (data.lang) safeLocalSet('sage_lang', data.lang);
+      onLogin(data.role);
+    } catch (e) {
+      setError('Cannot reach the server. Please check your connection and try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -3019,8 +3099,8 @@ function LoginScreen({ onLogin }) {
             </button>
           </div>
         </div>
-        {error && <p className="error-text">{t('invalidCredentials')}</p>}
-        <button onClick={handleLogin} className="btn-primary" style={{ marginTop: 8 }}>{t('login')}</button>
+        {error && <p className="error-text">{error}</p>}
+        <button onClick={handleLogin} disabled={loading} className="btn-primary" style={{ marginTop: 8, opacity: loading ? 0.7 : 1 }}>{loading ? '…' : t('login')}</button>
       </div>
     </div>
   );
@@ -3629,6 +3709,40 @@ function App() {
         }
       }
     }
+  }, []);
+
+  // ── SESSION VALIDATION ──────────────────────────────────────────────────────
+  // On load, confirm the stored token is still valid with the server. If the
+  // password was changed (token rotated) or the token is missing/expired, the
+  // session is cleared and the user is sent back to the login screen.
+  useEffect(() => {
+    const isAuth = safeLocalGet(AUTH_KEY) === 'true';
+    if (!isAuth) return;
+    const token = safeLocalGet(TOKEN_KEY);
+    const forceLogout = () => {
+      safeLocalRemove(AUTH_KEY);
+      safeLocalRemove(ROLE_KEY);
+      safeLocalRemove(TOKEN_KEY);
+      safeLocalRemove(TEACHER_KEY);
+      setIsLoggedIn(false);
+      setIsViewer(false);
+      setIsKazumi(false);
+      setBatches([]);
+    };
+    // Legacy session created before server auth existed → require fresh login
+    if (!token) { forceLogout(); return; }
+    fetch(`${API}/auth/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('invalid'))))
+      .then(d => {
+        if (!d.valid) { forceLogout(); return; }
+        if (d.role) safeLocalSet(ROLE_KEY, d.role); // keep role authoritative from server
+      })
+      .catch(() => forceLogout());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -4441,6 +4555,33 @@ function App() {
   );
 
   // QR scan password prompt — show before anything else if pending
+  // QR admin gate — verify the admin password against the server (no password in the client)
+  const submitQrPassword = async () => {
+    try {
+      const res = await fetch(`${API}/auth/check-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'admin', password: qrPassInput }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok || !data.token) {
+        setQrPassError('Incorrect password. Please try again.');
+        return;
+      }
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'admin');
+      safeLocalSet(TOKEN_KEY, data.token);
+      setIsLoggedIn(true);
+      setIsViewer(false);
+      setPendingDeepLink(qrPasswordPrompt);
+      setQrPasswordPrompt(null);
+      setQrPassInput('');
+      fetchBatches(null);
+    } catch (e) {
+      setQrPassError('Cannot reach the server. Please try again.');
+    }
+  };
+
   if (qrPasswordPrompt) return (
     <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', color: '#8B0000' }}><Lock size={56} strokeWidth={1.5} /></div>
@@ -4452,20 +4593,7 @@ function App() {
           value={qrPassInput}
           onChange={e => { setQrPassInput(e.target.value); setQrPassError(''); }}
           onKeyDown={e => {
-            if (e.key === 'Enter') {
-              if (qrPassInput === ADMIN_PASS) {
-                safeLocalSet(AUTH_KEY, 'true');
-                safeLocalSet(ROLE_KEY, 'admin');
-                setIsLoggedIn(true);
-                setIsViewer(false);
-                setPendingDeepLink(qrPasswordPrompt);
-                setQrPasswordPrompt(null);
-                setQrPassInput('');
-                fetchBatches(null);
-              } else {
-                setQrPassError('Incorrect password. Please try again.');
-              }
-            }
+            if (e.key === 'Enter') submitQrPassword();
           }}
           placeholder="Enter password"
           autoFocus
@@ -4473,20 +4601,7 @@ function App() {
         />
         {qrPassError && <p style={{ color: '#ff3b30', fontSize: 13, margin: '0 0 10px', textAlign: 'center' }}>{qrPassError}</p>}
         <button
-          onClick={() => {
-            if (qrPassInput === ADMIN_PASS) {
-              safeLocalSet(AUTH_KEY, 'true');
-              safeLocalSet(ROLE_KEY, 'admin');
-              setIsLoggedIn(true);
-              setIsViewer(false);
-              setPendingDeepLink(qrPasswordPrompt);
-              setQrPasswordPrompt(null);
-              setQrPassInput('');
-              fetchBatches(null);
-            } else {
-              setQrPassError('Incorrect password. Please try again.');
-            }
-          }}
+          onClick={submitQrPassword}
           style={{ width: '100%', background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
           View Record
         </button>
@@ -4616,7 +4731,7 @@ function App() {
             </div>
             <div className="top-row-actions">
               <span className="badge-view-only">{t('viewOnly')}</span>
-              <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
+              <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TOKEN_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
                 {t('logout')}
               </button>
             </div>
@@ -4723,7 +4838,7 @@ function App() {
                 <Settings size={16} />
               </button>
             )}
-            <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
+            <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TOKEN_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
               {t('logout')}
             </button>
           </div>
