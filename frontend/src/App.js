@@ -3468,6 +3468,9 @@ function App() {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [moveTargetBatchId, setMoveTargetBatchId] = useState('');
   const [moving, setMoving] = useState(false);
+  const [allBatchesForMove, setAllBatchesForMove] = useState([]); // ALL batches across every teacher (global)
+  const [moveTeacherMap, setMoveTeacherMap] = useState({});       // teacherId -> teacher name (for labelling)
+  const [loadingMoveBatches, setLoadingMoveBatches] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [newName, setNewName] = useState('');
   const [newExamName, setNewExamName] = useState('');
@@ -3954,6 +3957,32 @@ function App() {
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
     } catch { alert('Error deleting student.'); }
+  };
+
+  // Open the move modal and load EVERY batch (all teachers), not just the current teacher's
+  const openMoveModal = async () => {
+    setMoveTargetBatchId('');
+    setShowMoveModal(true);
+    setLoadingMoveBatches(true);
+    try {
+      const [bRes, tRes] = await Promise.all([
+        fetch(`${API}/batches`),   // no teacherId → global list of all batches
+        fetch(`${API}/teachers`),
+      ]);
+      const bData = await bRes.json();
+      setAllBatchesForMove(Array.isArray(bData) ? bData : []);
+      try {
+        const tData = await tRes.json();
+        const map = {};
+        (Array.isArray(tData) ? tData : []).forEach(tc => { map[tc._id] = tc.name; });
+        setMoveTeacherMap(map);
+      } catch {}
+    } catch {
+      // Fallback: at least show whatever is already loaded for this teacher
+      setAllBatchesForMove(batches);
+    } finally {
+      setLoadingMoveBatches(false);
+    }
   };
 
   const moveStudent = async () => {
@@ -5066,7 +5095,7 @@ function App() {
               <button
                 className="profile-danger-btn"
                 style={{ color: '#007AFF' }}
-                onClick={() => { setMoveTargetBatchId(''); setShowMoveModal(true); }}
+                onClick={openMoveModal}
               >
                 <ArrowRightLeft size={15} />
                 Move to Batch
@@ -6154,17 +6183,20 @@ function App() {
   // ── MOVE STUDENT TO ANOTHER BATCH — modal ──
   const renderMoveModal = () => {
     if (!showMoveModal || !selectedStudent || !selectedBatch) return null;
-    // All batches except the one the student is currently in
-    const destinations = batches.filter(b => b._id !== selectedBatch._id);
+    // GLOBAL: every batch across all teachers, minus the one the student is currently in
+    const sourceList = allBatchesForMove.length ? allBatchesForMove : batches;
+    const destinations = sourceList.filter(b => b._id !== selectedBatch._id);
     return (
       <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !moving) setShowMoveModal(false); }}>
         <div className="modal-sheet">
           <div className="modal-handle" />
           <h2 className="modal-title">Move Student to Another Batch</h2>
           <p style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 14px' }}>
-            <strong>{selectedStudent.name}</strong> will be moved out of <strong>{selectedBatch.name}</strong> together with all records — photo, categories, exams, scores, images, and evaluations.
+            <strong>{selectedStudent.name}</strong> will be moved out of <strong>{selectedBatch.name}</strong> together with all records — photo, categories, exams, scores, images, and evaluations. You can move to any batch, including other teachers' batches.
           </p>
-          {destinations.length === 0 ? (
+          {loadingMoveBatches ? (
+            <p style={{ fontSize: 14, color: '#8e8e93' }}>Loading batches…</p>
+          ) : destinations.length === 0 ? (
             <p style={{ fontSize: 14, color: '#8e8e93' }}>No other batch is available. Create another batch first.</p>
           ) : (
             <div className="form-group">
@@ -6175,11 +6207,14 @@ function App() {
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}
               >
                 <option value="">— Select a batch —</option>
-                {destinations.map(b => (
-                  <option key={b._id} value={b._id}>
-                    {b.name}{b.name_ja ? ` (${b.name_ja})` : ''} · {b.students?.length || 0} student(s)
-                  </option>
-                ))}
+                {destinations.map(b => {
+                  const teacherName = b.teacherId ? moveTeacherMap[b.teacherId] : null;
+                  return (
+                    <option key={b._id} value={b._id}>
+                      {b.name}{b.name_ja ? ` (${b.name_ja})` : ''}{teacherName ? ` — ${teacherName}` : ''} · {b.students?.length || 0} student(s)
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -6187,7 +6222,7 @@ function App() {
             <button className="btn-secondary" onClick={() => setShowMoveModal(false)} disabled={moving} style={{ flex: 1 }}>{t('cancel')}</button>
             <button
               className="btn-primary"
-              disabled={moving || !moveTargetBatchId || destinations.length === 0}
+              disabled={moving || loadingMoveBatches || !moveTargetBatchId || destinations.length === 0}
               style={{ flex: 2 }}
               onClick={moveStudent}
             >
