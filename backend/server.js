@@ -314,7 +314,7 @@ const getBearer = (req) =>
 // changes persist across restarts). Initial values come from env vars when set,
 // otherwise fall back to the app's original defaults so nothing breaks on first deploy.
 const DEFAULT_CREDENTIALS = [
-  { role: 'admin',         username: process.env.ADMIN_USERNAME || 'sagebulacan97', password: process.env.ADMIN_PASSWORD || 'July142018' },
+  { role: 'admin',         username: process.env.ADMIN_USERNAME || 'sagebulacan97', password: process.env.ADMIN_PASSWORD || 'July14,2018' },
   { role: 'viewer',        username: 'PHGIC',          password: 'phgic' },
   { role: 'setouchi',      username: 'SETOUCHI',       password: 'setouchi' },
   { role: 'wbc',           username: 'WBC',            password: 'wbc' },
