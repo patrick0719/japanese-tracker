@@ -9,7 +9,7 @@ import {
   Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
   Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
   Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
-  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus
+  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -3464,6 +3464,10 @@ function App() {
   const [selectedExam, setSelectedExam] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
+  // ── Move-student-to-another-batch feature ──
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [moveTargetBatchId, setMoveTargetBatchId] = useState('');
+  const [moving, setMoving] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [newName, setNewName] = useState('');
   const [newExamName, setNewExamName] = useState('');
@@ -3950,6 +3954,40 @@ function App() {
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
     } catch { alert('Error deleting student.'); }
+  };
+
+  const moveStudent = async () => {
+    if (!moveTargetBatchId) { alert('Please pick a destination batch first.'); return; }
+    if (moveTargetBatchId === selectedBatch._id) { alert('Student is already in this batch.'); return; }
+    const target = batches.find(b => b._id === moveTargetBatchId);
+    if (!window.confirm(`Move ${selectedStudent.name} (with all records, exams, and images) to "${target?.name || 'the selected batch'}"?`)) return;
+    setMoving(true);
+    try {
+      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetBatchId: moveTargetBatchId })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) { alert('Error: ' + (data.error || 'Could not move student.')); return; }
+      // Replace BOTH affected batches in local state
+      setBatches(prev => prev.map(b =>
+        b._id === data.sourceBatch._id ? data.sourceBatch
+          : b._id === data.targetBatch._id ? data.targetBatch
+            : b
+      ));
+      // Keep viewing the source batch's student list (student is gone from here now)
+      setSelectedBatch(data.sourceBatch);
+      setSelectedStudent(null);
+      setShowMoveModal(false);
+      setMoveTargetBatchId('');
+      setView('students');
+      alert(`✅ ${data.targetBatch.students.find(s => s._id === selectedStudent._id)?.name || 'Student'} moved to "${data.targetBatch.name}".`);
+    } catch (e) {
+      alert('Failed: ' + e.message);
+    } finally {
+      setMoving(false);
+    }
   };
 
   const toggleStudentStatus = async (student, e) => {
@@ -5025,6 +5063,14 @@ function App() {
 
             <p className="profile-action-label" style={{ marginTop: 10 }}>Student Status</p>
             <div className="profile-danger-row">
+              <button
+                className="profile-danger-btn"
+                style={{ color: '#007AFF' }}
+                onClick={() => { setMoveTargetBatchId(''); setShowMoveModal(true); }}
+              >
+                <ArrowRightLeft size={15} />
+                Move to Batch
+              </button>
               <button className="profile-danger-btn" onClick={() => toggleArchiveStudent(selectedStudent)}>
                 {selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}
               </button>
@@ -6105,6 +6151,54 @@ function App() {
     );
   };
 
+  // ── MOVE STUDENT TO ANOTHER BATCH — modal ──
+  const renderMoveModal = () => {
+    if (!showMoveModal || !selectedStudent || !selectedBatch) return null;
+    // All batches except the one the student is currently in
+    const destinations = batches.filter(b => b._id !== selectedBatch._id);
+    return (
+      <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !moving) setShowMoveModal(false); }}>
+        <div className="modal-sheet">
+          <div className="modal-handle" />
+          <h2 className="modal-title">Move Student to Another Batch</h2>
+          <p style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 14px' }}>
+            <strong>{selectedStudent.name}</strong> will be moved out of <strong>{selectedBatch.name}</strong> together with all records — photo, categories, exams, scores, images, and evaluations.
+          </p>
+          {destinations.length === 0 ? (
+            <p style={{ fontSize: 14, color: '#8e8e93' }}>No other batch is available. Create another batch first.</p>
+          ) : (
+            <div className="form-group">
+              <label>Destination batch</label>
+              <select
+                value={moveTargetBatchId}
+                onChange={(e) => setMoveTargetBatchId(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}
+              >
+                <option value="">— Select a batch —</option>
+                {destinations.map(b => (
+                  <option key={b._id} value={b._id}>
+                    {b.name}{b.name_ja ? ` (${b.name_ja})` : ''} · {b.students?.length || 0} student(s)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <button className="btn-secondary" onClick={() => setShowMoveModal(false)} disabled={moving} style={{ flex: 1 }}>{t('cancel')}</button>
+            <button
+              className="btn-primary"
+              disabled={moving || !moveTargetBatchId || destinations.length === 0}
+              style={{ flex: 2 }}
+              onClick={moveStudent}
+            >
+              {moving ? 'Moving…' : 'Move Student'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const handlePrint = (mode) => {
     // mode: 'portrait' = 6/page (2col x 3row), 'landscape' = 10/page (5col x 2row)
     const isLandscape = mode === 'landscape';
@@ -6475,6 +6569,7 @@ function App() {
       {view === 'examItems' && renderExamItems()}
       {view === 'examDetail' && renderExamDetail()}
       {renderModal()}
+      {renderMoveModal()}
       {renderPrintQRs()}
       {showQuickAddExam && selectedStudent && (
         <QuickAddExamModal

@@ -507,6 +507,55 @@ app.delete('/api/batches/:batchId/students/:studentId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── MOVE / TRANSFER A STUDENT TO ANOTHER BATCH ───────────────────────────────
+// Moves a student (with ALL records: photo, categories, exams, images, evaluations)
+// from the source batch into a target batch. Image URLs are stored as strings on
+// the student subdocument, so they travel with the record — no re-upload needed.
+app.post('/api/batches/:batchId/students/:studentId/move', async (req, res) => {
+  try {
+    const { batchId, studentId } = req.params;
+    const targetBatchId = sanitizeStr(req.body.targetBatchId, 50);
+
+    // Validate IDs
+    if (!isValidObjectId(batchId) || !isValidObjectId(studentId) || !isValidObjectId(targetBatchId)) {
+      return res.status(400).json({ error: 'Invalid batchId, studentId, or targetBatchId.' });
+    }
+    if (targetBatchId === batchId) {
+      return res.status(400).json({ error: 'Student is already in this batch.' });
+    }
+
+    // Load both batches
+    const sourceBatch = await Batch.findById(batchId);
+    if (!sourceBatch) return res.status(404).json({ error: 'Source batch not found.' });
+    const targetBatch = await Batch.findById(targetBatchId);
+    if (!targetBatch) return res.status(404).json({ error: 'Target batch not found.' });
+
+    // Find the student in the source batch
+    const student = sourceBatch.students.id(studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found in source batch.' });
+
+    // Deep-clone the full student record (keeps _id so existing references — parent
+    // tokens, dismissed reminders, etc. — keep matching after the move)
+    const studentData = student.toObject();
+
+    // Push the full record into the target batch, then save it FIRST.
+    // (Saving target before removing from source means a failure mid-way leaves the
+    //  student safely in the source rather than lost in neither.)
+    targetBatch.students.push(studentData);
+    await targetBatch.save();
+
+    // Now remove from the source batch
+    sourceBatch.students = sourceBatch.students.filter(s => s._id.toString() !== studentId);
+    sourceBatch.markModified('students');
+    await sourceBatch.save();
+
+    res.json({ success: true, sourceBatch, targetBatch });
+  } catch (err) {
+    console.error('[move student]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── CATEGORY ROUTES ──────────────────────────────────────────────────────────
 app.post('/api/batches/:batchId/students/:studentId/categories', async (req, res) => {
   try {
