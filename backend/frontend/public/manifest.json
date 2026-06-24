@@ -1,6 +1,6 @@
 {
-  "short_name": "SAGE",
-  "name": "SAGE Bulacan",
+  "short_name": "React App",
+  "name": "Create React App Sample",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,7 +20,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#8B0000",
-  "background_color": "#8B0000",
-  "orientation": "portrait"
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
 }

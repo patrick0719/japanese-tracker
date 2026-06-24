@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAGE Bulacan</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/manifest.json" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: #f2f2f7;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 24px;
+    }
+    .card {
+      background: #fff; border-radius: 20px;
+      padding: 36px 28px; max-width: 360px; width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10); text-align: center;
+    }
+    .logo {
+      width: 72px; height: 72px; background: #8B0000;
+      border-radius: 18px; margin: 0 auto 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+    }
+    h2 { font-size: 20px; font-weight: 700; color: #1c1c1e; margin-bottom: 8px; }
+    p  { font-size: 14px; color: #8e8e93; line-height: 1.55; margin-bottom: 24px; }
+    .input-wrap { position: relative; margin-bottom: 10px; }
+    input[type=password], input[type=text] {
+      width: 100%; padding: 13px 44px 13px 14px;
+      border-radius: 10px; border: 1.5px solid #e5e5ea;
+      font-size: 16px; outline: none; color: #1c1c1e;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: #8B0000; }
+    input.error { border-color: #ff3b30; }
+    .eye-btn {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; font-size: 18px; color: #8e8e93;
+    }
+    .error-msg { color: #ff3b30; font-size: 13px; margin-bottom: 10px; }
+    .btn {
+      display: block; width: 100%; padding: 14px;
+      border-radius: 12px; border: none; font-size: 16px;
+      font-weight: 700; cursor: pointer; margin-bottom: 12px;
+    }
+    .btn-primary { background: #8B0000; color: #fff; }
+    .btn-primary:active { background: #6a0000; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid #e5e5ea; border-top-color: #8B0000;
+      border-radius: 50%; animation: spin 0.75s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hidden { display: none !important; }
+    .success-icon { font-size: 52px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <!-- State: redirecting (already logged in / PWA) -->
+  <div id="state-loading">
+    <div class="spinner"></div>
+    <h2>Opening SAGE...</h2>
+    <p>Please wait...</p>
+  </div>
+
+  <!-- State: password prompt -->
+  <div id="state-password" class="hidden">
+    <div class="logo">🔒</div>
+    <h2>Access Required</h2>
+    <p>Enter the password to view this student's record.</p>
+    <div class="input-wrap">
+      <input id="pass-input" type="password" placeholder="Enter password"
+        oninput="clearError()" onkeydown="if(event.key==='Enter') submit()" autofocus />
+      <button class="eye-btn" onclick="toggleEye()" id="eye-btn">👁</button>
+    </div>
+    <p id="error-msg" class="error-msg hidden">Incorrect password. Please try again.</p>
+    <button class="btn btn-primary" onclick="submit()">View Record</button>
+  </div>
+
+  <!-- State: success -->
+  <div id="state-success" class="hidden">
+    <div class="success-icon">✅</div>
+    <h2>Access Granted</h2>
+    <p>Redirecting to student record...</p>
+    <div class="spinner"></div>
+  </div>
+
+</div>
+
+<script>
+  var ADMIN_PASS = 'July142018';
+  var AUTH_KEY   = 'sage_auth';
+  var ROLE_KEY   = 'sage_role';
+
+  var params  = new URLSearchParams(window.location.search);
+  var destUrl = window.location.origin + '/?' + params.toString();
+
+  function show(id) {
+    ['state-loading','state-password','state-success']
+      .forEach(function(s){ document.getElementById(s).classList.add('hidden'); });
+    document.getElementById(id).classList.remove('hidden');
+  }
+
+  function isPwa() {
+    if (window.navigator.standalone === true) return true;
+    if (window.matchMedia('(display-mode: standalone)').matches) return true;
+    if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
+    if (window.matchMedia('(display-mode: minimal-ui)').matches) return true;
+    return false;
+  }
+
+  function isLoggedIn() {
+    try { return localStorage.getItem(AUTH_KEY) === 'true'; } catch(e) { return false; }
+  }
+
+  function toggleEye() {
+    var inp = document.getElementById('pass-input');
+    var btn = document.getElementById('eye-btn');
+    if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+    else { inp.type = 'password'; btn.textContent = '👁'; }
+  }
+
+  function clearError() {
+    document.getElementById('error-msg').classList.add('hidden');
+    document.getElementById('pass-input').classList.remove('error');
+  }
+
+  function submit() {
+    var val = document.getElementById('pass-input').value;
+    if (val === ADMIN_PASS) {
+      try {
+        localStorage.setItem(AUTH_KEY, 'true');
+        localStorage.setItem(ROLE_KEY, 'admin');
+      } catch(e) {}
+      show('state-success');
+      setTimeout(function() { window.location.replace(destUrl); }, 800);
+    } else {
+      document.getElementById('error-msg').classList.remove('hidden');
+      document.getElementById('pass-input').classList.add('error');
+      document.getElementById('pass-input').focus();
+    }
+  }
+
+  // Main logic
+  if (isPwa()) {
+    // Inside PWA — redirect straight, app handles auth
+    window.location.replace(destUrl);
+  } else if (isLoggedIn()) {
+    // Already logged in via browser — redirect straight
+    window.location.replace(destUrl);
+  } else {
+    // Not logged in — show password prompt
+    show('state-password');
+  }
+</script>
+</body>
+</html>

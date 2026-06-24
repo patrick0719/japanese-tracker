@@ -63,9 +63,9 @@ const ROLE_LANGUAGE_MAP = {
     // ── Student Actions ───────────────────────────────────────────────────────────
     archiveImages:      { en: '📦 Archive',                       ja: '📦 アーカイブ' },
     restoreImages:      { en: '🔄 Restore',                       ja: '🔄 復元' },
-    hideFromKumiai:     { en: 'Hide from Kumiai',                  ja: '組合から非表示' },
-    unarchiveStudent:   { en: 'Unarchive Student',                 ja: 'アーカイブを解除' },
-    deleteStudent:      { en: 'Delete',                           ja: '削除' },
+    hideFromKumiai:     { en: '🚫 Hide from Kumiai',              ja: '🚫 組合から非表示' },
+    unarchiveStudent:   { en: '👁 Unarchive Student',             ja: '👁 アーカイブを解除' },
+    deleteStudent:      { en: '🗑️ Delete',                        ja: '🗑️ 削除' },
     viewProgressChart:  { en: 'View Progress Chart',              ja: '進捗グラフを表示' },
   
     // ── Categories ────────────────────────────────────────────────────────────────

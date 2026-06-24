@@ -1,20 +1,7 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
-import { usePushNotifications } from './usePushNotifications';
-import {
-  TrendingUp, TrendingDown, Minus, User, Building2, FileText, BarChart2,
-  Trophy, Target, Flame, Rocket, AlertTriangle, Zap, Star, MapPin,
-  Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
-  Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
-  Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
-  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft
-} from 'lucide-react';
-import jsQR from 'jsqr';
-import { BrowserMultiFormatReader } from '@zxing/browser';
-import { NotFoundException } from '@zxing/library';
-import bwipjs from 'bwip-js';
 
 // Returns correct name based on role — JA for kumiai, EN for admin/PHGIC
 function displayName(item) {
@@ -53,7 +40,7 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const img = document.createElement('img'); // avoid new Image() minification conflict
+      const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let width = img.width;
@@ -76,27 +63,12 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
 // ── IMAGE VIEWER COMPONENT ──────────────────────────────────────────────────
 function ImageViewer({ images, startIndex, onClose }) {
   const [current, setCurrent] = useState(startIndex || 0);
+  const touchStartX = useRef(null);
 
-  // ── Pinch-zoom-snap state ─────────────────────────────────────────────────
-  // scale: current live zoom level while fingers are down
-  // When fingers lift → animate back to scale=1 instantly (snap back)
-  const [scale, setScale] = useState(1);
-  const [origin, setOrigin] = useState({ x: 50, y: 50 }); // transform-origin in %
-  const isPinching = useRef(false);
-  const initialDist = useRef(null);
-  const initialMid = useRef({ x: 0, y: 0 });
-  const imgRef = useRef(null);
+  const prev = () => setCurrent(i => Math.max(0, i - 1));
+  const next = () => setCurrent(i => Math.min(images.length - 1, i + 1));
 
-  // Swipe state (only when NOT pinching)
-  const swipeStartX = useRef(null);
-
-  const prev = () => { if (scale === 1) setCurrent(i => Math.max(0, i - 1)); };
-  const next = () => { if (scale === 1) setCurrent(i => Math.min(images.length - 1, i + 1)); };
-
-  // Reset zoom when image changes
-  useEffect(() => { setScale(1); setOrigin({ x: 50, y: 50 }); }, [current]);
-
-  // Keyboard nav
+  // Keyboard navigation: Escape closes, Left/Right arrows navigate
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
@@ -105,61 +77,14 @@ function ImageViewer({ images, startIndex, onClose }) {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose, scale]);
+  }, [onClose]);
 
-  // ── Touch handlers ────────────────────────────────────────────────────────
-  const getDist = (t) => {
-    const dx = t[0].clientX - t[1].clientX;
-    const dy = t[0].clientY - t[1].clientY;
-    return Math.hypot(dx, dy);
-  };
-
-  const getMid = (t, rect) => ({
-    x: ((t[0].clientX + t[1].clientX) / 2 - rect.left) / rect.width * 100,
-    y: ((t[0].clientY + t[1].clientY) / 2 - rect.top) / rect.height * 100,
-  });
-
-  const onTouchStart = (e) => {
-    if (e.touches.length === 2) {
-      // Pinch start
-      isPinching.current = true;
-      swipeStartX.current = null;
-      initialDist.current = getDist(e.touches);
-      const rect = imgRef.current?.getBoundingClientRect() || { left: 0, top: 0, width: 1, height: 1 };
-      initialMid.current = getMid(e.touches, rect);
-    } else if (e.touches.length === 1 && !isPinching.current) {
-      swipeStartX.current = e.touches[0].clientX;
-    }
-  };
-
-  const onTouchMove = (e) => {
-    if (e.touches.length === 2 && initialDist.current) {
-      e.preventDefault();
-      const newDist = getDist(e.touches);
-      const raw = newDist / initialDist.current;
-      // Clamp scale: 1x minimum (no pinch-in below normal), 4x max
-      const clamped = Math.min(4, Math.max(1, raw));
-      setScale(clamped);
-      setOrigin(initialMid.current);
-    }
-  };
-
+  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
   const onTouchEnd = (e) => {
-    if (isPinching.current) {
-      // Snap back to normal on finger lift
-      setScale(1);
-      setOrigin({ x: 50, y: 50 });
-      isPinching.current = false;
-      initialDist.current = null;
-      swipeStartX.current = null;
-      return;
-    }
-    // Single-finger swipe for page navigation
-    if (swipeStartX.current !== null && e.changedTouches.length > 0) {
-      const diff = swipeStartX.current - e.changedTouches[0].clientX;
-      if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
-      swipeStartX.current = null;
-    }
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
+    touchStartX.current = null;
   };
 
   return (
@@ -169,71 +94,40 @@ function ImageViewer({ images, startIndex, onClose }) {
       aria-label={`Image viewer, ${images.length} pages`}
       style={{
         position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
-        display: 'flex', flexDirection: 'column',
-        // Block native browser pinch-zoom inside the viewer
-        touchAction: 'none',
+        display: 'flex', flexDirection: 'column'
       }}
     >
       {/* Top bar */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '12px 20px', background: 'rgba(0,0,0,0.8)', flexShrink: 0,
+        padding: '12px 20px', background: 'rgba(0,0,0,0.8)'
       }}>
         <button onClick={onClose} aria-label="Close image viewer" style={{
-          background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}><X size={24} strokeWidth={2.5} /></button>
+          background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1
+        }}>✕</button>
         <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
           Page {current + 1} / {images.length}
         </span>
         <div style={{ width: 32 }} />
       </div>
 
-      {/* Image area */}
+      {/* Image */}
       <div
-        style={{
-          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          overflow: 'hidden', position: 'relative',
-        }}
+        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
         onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
         <img
-          ref={imgRef}
           src={images[current]}
           alt={`Page ${current + 1} of ${images.length}`}
-          draggable={false}
-          style={{
-            maxWidth: '100%',
-            maxHeight: '100%',
-            objectFit: 'contain',
-            userSelect: 'none',
-            // Smooth snap-back when scale returns to 1, instant zoom while pinching
-            transform: `scale(${scale})`,
-            transformOrigin: `${origin.x}% ${origin.y}%`,
-            transition: scale === 1 ? 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)' : 'none',
-            willChange: 'transform',
-          }}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
         />
-
-        {/* Zoom hint — only when not zoomed */}
-        {scale === 1 && (
-          <div style={{
-            position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)',
-            background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.55)',
-            fontSize: 11, fontWeight: 500, padding: '4px 12px', borderRadius: 20,
-            pointerEvents: 'none', whiteSpace: 'nowrap',
-          }}>
-            Pinch to zoom · Release to snap back
-          </div>
-        )}
       </div>
 
       {/* Bottom nav */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '16px 24px', background: 'rgba(0,0,0,0.8)', flexShrink: 0,
+        padding: '16px 24px', background: 'rgba(0,0,0,0.8)'
       }}>
         <button
           onClick={prev}
@@ -242,9 +136,8 @@ function ImageViewer({ images, startIndex, onClose }) {
           style={{
             background: current === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
             color: '#fff', border: 'none', borderRadius: 10,
-            padding: '10px 20px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer',
-            display: 'flex', alignItems: 'center'
-          }}><ChevronLeft size={20} strokeWidth={2.5} /></button>
+            padding: '10px 24px', fontSize: 18, cursor: current === 0 ? 'default' : 'pointer'
+          }}>‹</button>
 
         {/* Dot indicators */}
         <div role="tablist" aria-label="Page navigation" style={{ display: 'flex', gap: 6 }}>
@@ -272,9 +165,8 @@ function ImageViewer({ images, startIndex, onClose }) {
           style={{
             background: current === images.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
             color: '#fff', border: 'none', borderRadius: 10,
-            padding: '10px 20px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer',
-            display: 'flex', alignItems: 'center'
-          }}><ChevronRight size={20} strokeWidth={2.5} /></button>
+            padding: '10px 24px', fontSize: 18, cursor: current === images.length - 1 ? 'default' : 'pointer'
+          }}>›</button>
       </div>
     </div>
   );
@@ -578,7 +470,7 @@ function ProgressChart({ student, batch, onClose }) {
           background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
           borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
         }}>{t('back')}</button>
-        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={18} /> {t('progressChart')}</span>
+        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3 }}>📈 {t('progressChart')}</span>
         <div style={{ width: 72 }} />
       </div>
 
@@ -591,7 +483,7 @@ function ProgressChart({ student, batch, onClose }) {
             width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid #8B0000'
           }} />
         ) : (
-          <span style={{ fontSize: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: '50%', background: 'var(--bg-card2, #f2f2f7)', color: '#8e8e93' }}><User size={28} /></span>
+          <span style={{ fontSize: 40 }}>👤</span>
         )}
         <div>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
@@ -601,7 +493,7 @@ function ProgressChart({ student, batch, onClose }) {
               display: 'inline-block', marginTop: 4,
               background: 'var(--green-soft, #e8f5e9)', color: 'var(--green, #2e7d32)',
               fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12
-            }}><Building2 size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{student.companyName}</span>
+            }}>🏢 {student.companyName}</span>
           )}
         </div>
       </div>
@@ -643,21 +535,21 @@ function ProgressChart({ student, batch, onClose }) {
         {!loading && chartData && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
-              { label: t('totalExams'), value: chartData.stats.totalExams, icon: <FileText size={22} color="#007AFF" />, color: '#007AFF', sub: null },
-              { label: t('averageScore'), value: chartData.stats.avgScore + '%', icon: <BarChart2 size={22} color="#34C759" />, color: '#34C759', sub: null },
-              { label: t('bestScore'), value: chartData.stats.bestScore + '%', icon: <Trophy size={22} color="#FF9500" />, color: '#FF9500', sub: null },
+              { label: t('totalExams'), value: chartData.stats.totalExams, icon: '📝', color: '#007AFF', sub: null },
+              { label: t('averageScore'), value: chartData.stats.avgScore + '%', icon: '📊', color: '#34C759', sub: null },
+              { label: t('bestScore'), value: chartData.stats.bestScore + '%', icon: '🏆', color: '#FF9500', sub: null },
               chartData.stats.recentTrend !== null
                 ? {
                     label: 'Improvement',
                     value: (chartData.stats.recentTrend > 0 ? '+' : '') + chartData.stats.recentTrend + '%',
-                    icon: chartData.stats.recentTrend > 0 ? <TrendingUp size={22} color="#34C759" /> : chartData.stats.recentTrend < 0 ? <TrendingDown size={22} color="#FF3B30" /> : <Minus size={22} color="#8e8e93" />,
+                    icon: chartData.stats.recentTrend > 0 ? '📈' : chartData.stats.recentTrend < 0 ? '📉' : '➡️',
                     color: chartData.stats.recentTrend > 0 ? '#34C759' : chartData.stats.recentTrend < 0 ? '#FF3B30' : '#8e8e93',
                     sub: chartData.stats.recentTrendLabel,
                   }
                 : {
                     label: t('latestScore'),
                     value: chartData.stats.latestScore + '%',
-                    icon: <Target size={22} color="#8B0000" />,
+                    icon: '🎯',
                     color: '#8B0000',
                     sub: null,
                   },
@@ -666,7 +558,7 @@ function ProgressChart({ student, batch, onClose }) {
                 background: 'var(--bg-card, #fff)', borderRadius: 14, padding: '16px 14px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.06)', textAlign: 'center'
               }}>
-                <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}>{stat.icon}</div>
+                <div style={{ fontSize: 24, marginBottom: 6 }}>{stat.icon}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary, #8e8e93)', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
                 {stat.sub && <div style={{ fontSize: 10, color: 'var(--text-tertiary, #c7c7cc)', marginTop: 2 }}>{stat.sub}</div>}
@@ -681,22 +573,22 @@ function ProgressChart({ student, batch, onClose }) {
           let icon, color, bg, message;
 
           if (streak >= 3) {
-            icon = <Flame size={20} color="#e65100" />; bg = '#fff8e1'; color = '#e65100';
+            icon = '🔥'; bg = '#fff8e1'; color = '#e65100';
             message = `On a ${streak}-exam winning streak! Keep it up.`;
           } else if (recentTrend !== null && recentTrend >= 5) {
-            icon = <Rocket size={20} color="#2e7d32" />; bg = '#e8f5e9'; color = '#2e7d32';
+            icon = '🚀'; bg = '#e8f5e9'; color = '#2e7d32';
             message = `Strong recent momentum — up ${recentTrend}% in the last exams.`;
           } else if (recentTrend !== null && recentTrend <= -5) {
-            icon = <AlertTriangle size={20} color="#e65100" />; bg = '#fff3e0'; color = '#e65100';
+            icon = '⚠️'; bg = '#fff3e0'; color = '#e65100';
             message = `Recent dip of ${Math.abs(recentTrend)}%. May need extra review.`;
           } else if (consistency >= 70) {
-            icon = <Zap size={20} color="#1565c0" />; bg = '#e3f2fd'; color = '#1565c0';
+            icon = '💪'; bg = '#e3f2fd'; color = '#1565c0';
             message = `Very consistent — ${consistency}% of exams at or above personal average.`;
           } else if (totalExams >= 5 && avgScore >= 80) {
-            icon = <Star size={20} color="#6a1b9a" />; bg = '#f3e5f5'; color = '#6a1b9a';
+            icon = '⭐'; bg = '#f3e5f5'; color = '#6a1b9a';
             message = `Excellent average of ${avgScore}% across ${totalExams} exams.`;
           } else {
-            icon = <MapPin size={20} color="#8e8e93" />; bg = '#f2f2f7'; color = '#8e8e93';
+            icon = '📌'; bg = '#f2f2f7'; color = '#8e8e93';
             message = `Consistency rate: ${consistency}% of exams at or above personal average.`;
           }
 
@@ -705,7 +597,7 @@ function ProgressChart({ student, batch, onClose }) {
               background: bg, borderRadius: 12, padding: '12px 14px',
               marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 10
             }}>
-              <span style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start' }}>{icon}</span>
+              <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
               <p style={{ margin: 0, fontSize: 13, color, fontWeight: 500, lineHeight: 1.4 }}>{message}</p>
             </div>
           );
@@ -715,7 +607,7 @@ function ProgressChart({ student, batch, onClose }) {
           background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
         }}>
-          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'flex', alignItems: 'center', gap: 6 }}><Clock size={13} /> Time Range</p>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)' }}>⏱️ Time Range</p>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
               { id: 'all', label: 'All Time' },
@@ -738,7 +630,7 @@ function ProgressChart({ student, batch, onClose }) {
             background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'flex', alignItems: 'center', gap: 6 }}><Folder size={13} /> Categories</p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)' }}>📁 Categories</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {chartData.categories.map(cat => {
                 const colors = {
@@ -773,7 +665,7 @@ function ProgressChart({ student, batch, onClose }) {
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)', display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={15} /> Score Trend</h3>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>📈 Score Trend</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--text-secondary, #3a3a3c)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 12, height: 3, background: '#007AFF', borderRadius: 2 }} />
@@ -799,7 +691,7 @@ function ProgressChart({ student, batch, onClose }) {
             </div>
           ) : chartData?.exams.length === 0 ? (
             <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary, #8e8e93)' }}>
-              <span style={{ marginBottom: 10, color: '#8e8e93', display: 'flex' }}><BarChart2 size={40} /></span>
+              <span style={{ fontSize: 40, marginBottom: 10 }}>📊</span>
               <p style={{ margin: 0, fontSize: 14 }}>No exam data available</p>
               <p style={{ margin: '4px 0 0', fontSize: 12 }}>Add exams with dates to see progress</p>
             </div>
@@ -815,7 +707,7 @@ function ProgressChart({ student, batch, onClose }) {
             background: 'var(--bg-card, #fff)', borderRadius: 16, padding: 16,
             boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
           }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)', display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={15} /> Recent Exams</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>📝 Recent Exams</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {chartData.exams.slice(-5).reverse().map((exam, i) => (
                 <div key={i} style={{
@@ -825,8 +717,8 @@ function ProgressChart({ student, batch, onClose }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{
                       width: 36, height: 36, borderRadius: '50%',
-                      background: exam.percentage >= 60 ? 'var(--green-soft, #e8f5e9)' : 'var(--red-soft, #ffebee)',
-                      color: exam.percentage >= 60 ? 'var(--green, #2e7d32)' : 'var(--red, #c62828)',
+                      background: exam.percentage >= 80 ? 'var(--green-soft, #e8f5e9)' : exam.percentage >= 60 ? 'var(--amber-soft, #fff8e1)' : 'var(--red-soft, #ffebee)',
+                      color: exam.percentage >= 80 ? 'var(--green, #2e7d32)' : exam.percentage >= 60 ? 'var(--amber, #f57c00)' : 'var(--red, #c62828)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 13, fontWeight: 700
                     }}>{exam.percentage}%</span>
@@ -854,577 +746,226 @@ function ProgressChart({ student, batch, onClose }) {
 }
 
 // ── CROP SCREEN COMPONENT ───────────────────────────────────────────────────
-function CropScreen({ dataUrl, onConfirm, onRetake }) {
-  const imgRef       = useRef(null);
+function CropScreen({ dataUrl, imgW, imgH, corners, setCorners, onConfirm, onRetake }) {
+  const canvasRef = useRef(null);
   const containerRef = useRef(null);
-  const dragging     = useRef(null);
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const [imgNatural, setImgNatural] = useState({ w: 1, h: 1 });
+  const draggingRef = useRef(null);
+  const loadedImgRef = useRef(null);
+  const cornersRef = useRef(corners);
 
-  // crop box as % of the CONTAINER (0–100)
-  const [box, setBox] = useState({ left: 8, top: 8, right: 92, bottom: 92 });
+  // Keep cornersRef in sync so canvas event handlers always see latest corners
+  useEffect(() => { cornersRef.current = corners; }, [corners]);
 
-  // ── Confirm: convert container-% → image pixels → canvas crop ───
-  const confirmCrop = () => {
-    const img = imgRef.current;
+  // Draw everything onto the canvas
+  const draw = useCallback((img, crns) => {
+    const canvas = canvasRef.current;
     const container = containerRef.current;
-    if (!img || !container) return;
+    if (!canvas || !container) return;
+    const cW = container.offsetWidth;
+    const cH = container.offsetHeight;
+    if (!cW || !cH || !imgW || !imgH) return;
 
-    const { w: iw, h: ih } = imgNatural;
-    const cw = container.offsetWidth;
-    const ch = container.offsetHeight;
-    const scale = Math.min(cw / iw, ch / ih);
-    const drawW = iw * scale, drawH = ih * scale;
-    const ox = (cw - drawW) / 2;
-    const oy = (ch - drawH) / 2;
+    canvas.width = cW;
+    canvas.height = cH;
+    const ctx = canvas.getContext('2d');
 
-    const x1 = Math.max(0,  Math.round(((box.left   / 100) * cw - ox) / scale));
-    const y1 = Math.max(0,  Math.round(((box.top    / 100) * ch - oy) / scale));
-    const x2 = Math.min(iw, Math.round(((box.right  / 100) * cw - ox) / scale));
-    const y2 = Math.min(ih, Math.round(((box.bottom / 100) * ch - oy) / scale));
-    const cropW = x2 - x1;
-    const cropH = y2 - y1;
+    // Fit image inside canvas (letterbox)
+    const scale = Math.min(cW / imgW, cH / imgH);
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
+    const ox = (cW - drawW) / 2;
+    const oy = (cH - drawH) / 2;
 
-    // Guard: if crop is too small just use the full image — never show white
-    if (cropW < 20 || cropH < 20) {
-      onConfirm(dataUrl);
-      return;
+    // Draw full image
+    ctx.clearRect(0, 0, cW, cH);
+    ctx.drawImage(img, ox, oy, drawW, drawH);
+
+    if (!crns || crns.length < 4) return;
+
+    // Convert image coords → canvas pixels
+    const toPx = c => ({ x: ox + (c.x / imgW) * drawW, y: oy + (c.y / imgH) * drawH });
+    const pts = crns.map(toPx);
+
+    // Darken outside crop area
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, cW, cH);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.clip();
+    ctx.clearRect(0, 0, cW, cH);
+    ctx.drawImage(img, ox, oy, drawW, drawH);
+    ctx.restore();
+
+    // Green border
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.strokeStyle = '#00FF88';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Corner handles
+    const labels = ['↖','↗','↘','↙'];
+    pts.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+      ctx.fillStyle = '#00FF88';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(labels[i], p.x, p.y);
+    });
+  }, [imgW, imgH]);
+
+  // Load image then draw — runs once on mount
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      loadedImgRef.current = img;
+      setTimeout(() => {
+        draw(img, cornersRef.current);
+      }, 50);
+    };
+    img.onerror = (e) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[CropScreen] image failed to load', e);
+      }
+    };
+    img.src = dataUrl;
+  }, []); // eslint-disable-line
+
+  // Redraw whenever corners change (dragging)
+  useEffect(() => {
+    if (loadedImgRef.current) {
+      draw(loadedImgRef.current, corners);
     }
+  }, [corners, draw]);
 
-    const dst = document.createElement('canvas');
-    dst.width  = cropW;
-    dst.height = cropH;
-    dst.getContext('2d').drawImage(img, x1, y1, cropW, cropH, 0, 0, cropW, cropH);
-    const result = dst.toDataURL('image/jpeg', 0.92);
-    // Guard: if canvas produced a blank result, fall back to full image
-    if (!result || result.length < 1000) {
-      onConfirm(dataUrl);
-      return;
-    }
-    onConfirm(result);
+  // Handle window resize
+  useEffect(() => {
+    const onResize = () => {
+      if (loadedImgRef.current) draw(loadedImgRef.current, cornersRef.current);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [draw]);
+
+  // Get touch/mouse position relative to canvas, scaled to canvas pixel space
+  const getCanvasPos = (e) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return {
+      x: (src.clientX - rect.left) * (canvas.width / rect.width),
+      y: (src.clientY - rect.top) * (canvas.height / rect.height),
+    };
   };
 
-  // ── Dragging logic ───────────────────────────────────────────────
-  const onHandleStart = (e, corner) => {
+  // Convert canvas pixel → image coordinate
+  const toImgCoord = (cx, cy) => {
+    const canvas = canvasRef.current;
+    const cW = canvas.width, cH = canvas.height;
+    const scale = Math.min(cW / imgW, cH / imgH);
+    const drawW = imgW * scale, drawH = imgH * scale;
+    const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
+    return {
+      x: Math.max(0, Math.min(imgW, ((cx - ox) / drawW) * imgW)),
+      y: Math.max(0, Math.min(imgH, ((cy - oy) / drawH) * imgH)),
+    };
+  };
+
+  // Find nearest corner handle within 50px
+  const hitCorner = (cx, cy) => {
+    const canvas = canvasRef.current;
+    const cW = canvas.width, cH = canvas.height;
+    const scale = Math.min(cW / imgW, cH / imgH);
+    const drawW = imgW * scale, drawH = imgH * scale;
+    const ox = (cW - drawW) / 2, oy = (cH - drawH) / 2;
+    const crns = cornersRef.current;
+    if (!crns) return -1;
+    for (let i = 0; i < crns.length; i++) {
+      const px = ox + (crns[i].x / imgW) * drawW;
+      const py = oy + (crns[i].y / imgH) * drawH;
+      if (Math.hypot(cx - px, cy - py) < 50) return i;
+    }
+    return -1;
+  };
+
+  const onPointerDown = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    const src = e.touches ? e.touches[0] : e;
-    dragging.current = {
-      corner,
-      startX:   src.clientX,
-      startY:   src.clientY,
-      startBox: { ...box },
-    };
+    const { x, y } = getCanvasPos(e);
+    draggingRef.current = hitCorner(x, y);
   };
 
-  const onMove = (e) => {
-    const d = dragging.current;
-    if (!d) return;
-    const src = e.touches ? e.touches[0] : e;
-    const container = containerRef.current;
-    if (!container) return;
-    const cw = container.offsetWidth;
-    const ch = container.offsetHeight;
-    const dx = ((src.clientX - d.startX) / cw) * 100;
-    const dy = ((src.clientY - d.startY) / ch) * 100;
-    const sb = d.startBox;
-    const MIN = 10;
-
-    // Read corner OUTSIDE setBox to avoid stale closure
-    const corner = d.corner;
-    let { left, top, right, bottom } = sb;
-    switch (corner) {
-      case 'tl':
-        left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
-        top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
-        break;
-      case 'tr':
-        right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
-        top    = Math.max(0,   Math.min(sb.top    + dy, sb.bottom - MIN));
-        break;
-      case 'br':
-        right  = Math.min(100, Math.max(sb.right  + dx, sb.left   + MIN));
-        bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
-        break;
-      case 'bl':
-        left   = Math.max(0,   Math.min(sb.left   + dx, sb.right  - MIN));
-        bottom = Math.min(100, Math.max(sb.bottom + dy, sb.top    + MIN));
-        break;
-      default: break;
-    }
-    setBox({ left, top, right, bottom });
+  const onPointerMove = (e) => {
+    if (draggingRef.current == null || draggingRef.current < 0) return;
+    e.preventDefault();
+    const { x, y } = getCanvasPos(e);
+    const coord = toImgCoord(x, y);
+    setCorners(prev => prev.map((c, i) => i === draggingRef.current ? coord : c));
   };
 
-  const onEnd = () => { dragging.current = null; };
-
-  // ── Handle style helper ──────────────────────────────────────────
-  const handle = (corner, posStyle, label) => (
-    <div
-      key={corner}
-      style={{
-        position: 'absolute',
-        width: 40, height: 40,
-        borderRadius: '50%',
-        background: '#00FF88',
-        border: '3px solid #fff',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 15, fontWeight: 700, color: '#000',
-        cursor: 'grab', zIndex: 10,
-        touchAction: 'none',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
-        transform: 'translate(-50%,-50%)',
-        ...posStyle,
-      }}
-      onMouseDown={e => onHandleStart(e, corner)}
-      onTouchStart={e => onHandleStart(e, corner)}
-    >{label}</div>
-  );
+  const onPointerUp = () => { draggingRef.current = null; };
 
   return (
-    <div
-      style={{ position:'fixed', inset:0, background:'#000', zIndex:9999, display:'flex', flexDirection:'column' }}
-      onMouseMove={onMove} onMouseUp={onEnd}
-      onTouchMove={onMove} onTouchEnd={onEnd}
-    >
+    <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
-      <div style={{ background:'#000', padding:'12px 20px', paddingTop:'env(safe-area-inset-top,12px)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-        <button onClick={onRetake} style={{ background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, cursor:'pointer', padding:'10px 16px', borderRadius:8, display:'flex', alignItems:'center', gap:6 }}>
-          <ArrowLeft size={15}/> Retake
-        </button>
-        <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>Adjust Crop</span>
-        <button onClick={confirmCrop} style={{ background:'#007AFF', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-          Use <Check size={15}/>
-        </button>
-      </div>
-      <div style={{ color:'rgba(255,255,255,0.5)', fontSize:12, textAlign:'center', padding:'4px 0', flexShrink:0 }}>
-        Drag each green corner individually
-      </div>
-
-      {/* Image + crop overlay */}
-      <div
-        ref={containerRef}
-        style={{ flex:1, position:'relative', overflow:'hidden', background:'#000', display:'flex', alignItems:'center', justifyContent:'center' }}
-      >
-        {!imgLoaded && (
-          <Loader size={32} color="#fff" style={{ animation:'spin 1s linear infinite' }} />
-        )}
-        <img
-          ref={imgRef}
-          src={dataUrl}
-          onLoad={(e) => {
-            setImgNatural({ w: e.target.naturalWidth, h: e.target.naturalHeight });
-            setImgLoaded(true);
-          }}
-          alt="Captured"
-          draggable={false}
-          style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain', display: imgLoaded ? 'block' : 'none', userSelect:'none', pointerEvents:'none' }}
-        />
-
-        {imgLoaded && (() => {
-          const L  = `${box.left}%`;
-          const T  = `${box.top}%`;
-          const R  = `${100 - box.right}%`;
-          const B  = `${100 - box.bottom}%`;
-          return (
-            <>
-              {/* Dark mask — 4 sides */}
-              <div style={{ position:'absolute', inset:0, pointerEvents:'none' }}>
-                <div style={{ position:'absolute', top:0,    left:0, right:0,  height:T,              background:'rgba(0,0,0,0.6)' }}/>
-                <div style={{ position:'absolute', bottom:0, left:0, right:0,  height:B,              background:'rgba(0,0,0,0.6)' }}/>
-                <div style={{ position:'absolute', top:T,    left:0, width:L,  bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
-                <div style={{ position:'absolute', top:T,    right:0, width:R, bottom:B,              background:'rgba(0,0,0,0.6)' }}/>
-                <div style={{ position:'absolute', top:T, left:L, right:R, bottom:B, border:'2.5px solid #00FF88' }}/>
-              </div>
-              {/* Individual corner handles — each pinned to its own coordinate */}
-              {handle('tl', { top: T,              left: L              }, '↖')}
-              {handle('tr', { top: T,              left: `${box.right}%`}, '↗')}
-              {handle('br', { top: `${box.bottom}%`, left: `${box.right}%`}, '↘')}
-              {handle('bl', { top: `${box.bottom}%`, left: L              }, '↙')}
-            </>
-          );
-        })()}
-      </div>
-
-      {/* Bottom bar */}
-      <div style={{ flexShrink:0, background:'#000', padding:'14px 24px', paddingBottom:'env(safe-area-inset-bottom,14px)', display:'flex', gap:12 }}>
-        <button onClick={onRetake} style={{ flex:1, background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, fontWeight:600, padding:'14px', borderRadius:12, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          <ArrowLeft size={15}/> Retake
-        </button>
-        <button onClick={confirmCrop} style={{ flex:2, background:'#007AFF', color:'#fff', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          <Check size={16}/> Use This Page
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── QR SCANNER COMPONENT ─────────────────────────────────────────────────────
-// Loads jsQR from CDN for reliable cross-device QR detection
-function QRScanner({ onResult, onClose }) {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  const animRef = useRef(null);
-  const doneRef = useRef(false);
-  const [status, setStatus] = useState('Loading scanner...');
-
-  useEffect(() => {
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
-        streamRef.current = stream;
-        if (!videoRef.current) return;
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setStatus('Point camera at QR code');
-
-        const scan = () => {
-          if (doneRef.current) return;
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-          if (!video || !canvas || video.readyState < 2) {
-            animRef.current = requestAnimationFrame(scan); return;
-          }
-          canvas.width  = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imgData.data, imgData.width, imgData.height, {
-            inversionAttempts: 'dontInvert',
-          });
-          if (code && code.data) {
-            doneRef.current = true;
-            onResult(code.data);
-            return;
-          }
-          animRef.current = requestAnimationFrame(scan);
-        };
-
-        animRef.current = requestAnimationFrame(scan);
-      } catch (err) {
-        setStatus('Camera access denied. Please allow camera permission.');
-      }
-    };
-
-    start();
-    return () => {
-      doneRef.current = true;
-      if (animRef.current) cancelAnimationFrame(animRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-    };
-  }, []); // eslint-disable-line
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#000', zIndex: 9999,
-      display: 'flex', flexDirection: 'column',
-    }}>
-      {/* Header */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 20px', background: 'rgba(0,0,0,0.7)', flexShrink: 0,
+        background: '#000', padding: '12px 20px',
+        paddingTop: 'env(safe-area-inset-top, 12px)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexShrink: 0, zIndex: 10, position: 'relative'
       }}>
-        <button onClick={onClose} style={{
-          background: 'none', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1,
-        }}><X size={14} /></button>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Scan QR Code</span>
-        <div style={{ width: 32 }} />
-      </div>
-
-      {/* Camera */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <video ref={videoRef} playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-        {/* Viewfinder overlay */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          pointerEvents: 'none',
-        }}>
-          <div style={{ position: 'relative', width: 240, height: 240 }}>
-            {/* Dimmed corners */}
-            {[
-              { top: 0, left: 0, borderTop: '3px solid #fff', borderLeft: '3px solid #fff', borderRadius: '12px 0 0 0' },
-              { top: 0, right: 0, borderTop: '3px solid #fff', borderRight: '3px solid #fff', borderRadius: '0 12px 0 0' },
-              { bottom: 0, left: 0, borderBottom: '3px solid #fff', borderLeft: '3px solid #fff', borderRadius: '0 0 0 12px' },
-              { bottom: 0, right: 0, borderBottom: '3px solid #fff', borderRight: '3px solid #fff', borderRadius: '0 0 12px 0' },
-            ].map((style, i) => (
-              <div key={i} style={{ position: 'absolute', width: 36, height: 36, ...style }} />
-            ))}
-            {/* Scan line animation */}
-            <div style={{
-              position: 'absolute', left: 8, right: 8, height: 2,
-              background: 'linear-gradient(90deg, transparent, #8B0000, transparent)',
-              animation: 'qr-scan-line 1.8s ease-in-out infinite',
-            }} />
-          </div>
-        </div>
-
-        {/* Status */}
-        <div style={{
-          position: 'absolute', bottom: 40, left: 0, right: 0,
-          textAlign: 'center', color: '#fff', fontSize: 14, fontWeight: 600,
-          textShadow: '0 1px 4px rgba(0,0,0,0.7)',
-        }}>{status}</div>
-      </div>
-
-      <style>{`
-        @keyframes qr-scan-line {
-          0%   { top: 8px; opacity: 1; }
-          50%  { top: calc(100% - 8px); opacity: 1; }
-          100% { top: 8px; opacity: 1; }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// ── INLINE BARCODE SCANNER ───────────────────────────────────────────────────
-// Uses @zxing/browser (npm) — supports Code128, QR, EAN, and more.
-function InlineQRScanner({ onResult, onCancel }) {
-  const videoRef  = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  const animRef   = useRef(null);
-  const readerRef = useRef(null);
-  const doneRef   = useRef(false);
-  const [status, setStatus] = useState('カメラ起動中...');
-
-  useEffect(() => {
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        await video.play();
-        setStatus('QRコードをスキャン');
-
-        // Exact same loop as QRScanner — using jsQR
-        const scan = () => {
-          if (doneRef.current) return;
-          const canvas = canvasRef.current;
-          if (!video || !canvas || video.readyState < 2) {
-            animRef.current = requestAnimationFrame(scan); return;
-          }
-          canvas.width  = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imgData.data, imgData.width, imgData.height, {
-            inversionAttempts: 'dontInvert',
-          });
-          if (code && code.data && !code.data.startsWith('http')) {
-            doneRef.current = true;
-            stream.getTracks().forEach(t => t.stop());
-            onResult(code.data);
-            return;
-          }
-          animRef.current = requestAnimationFrame(scan);
-        };
-
-        animRef.current = requestAnimationFrame(scan);
-      } catch (e) {
-        setStatus('カメラエラー: ' + e.message);
-      }
-    };
-
-    start();
-    return () => {
-      doneRef.current = true;
-      if (animRef.current) cancelAnimationFrame(animRef.current);
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-    };
-  }, []); // eslint-disable-line
-
-  return (
-    <div style={{ position: 'relative', width: '100%', height: 220, borderRadius: 12, overflow: 'hidden', background: '#000' }}>
-      <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} playsInline muted />
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div style={{ width: 160, height: 160, border: '2.5px solid #00FF88', borderRadius: 12, position: 'relative', boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
-          {/* Corner accents */}
-          {[{top:0,left:0},{top:0,right:0},{bottom:0,left:0},{bottom:0,right:0}].map((pos,i) => (
-            <div key={i} style={{ position:'absolute', width:18, height:18,
-              borderTop: (pos.top===0) ? '3px solid #00FF88' : 'none',
-              borderBottom: (pos.bottom===0 && pos.bottom!==undefined) ? '3px solid #00FF88' : 'none',
-              borderLeft: (pos.left===0) ? '3px solid #00FF88' : 'none',
-              borderRight: (pos.right===0 && pos.right!==undefined) ? '3px solid #00FF88' : 'none',
-              ...pos }} />
-          ))}
-          <div style={{ position: 'absolute', left: 4, right: 4, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#00FF88,transparent)', animation: 'qr-scan-line 1.2s ease-in-out infinite' }} />
-        </div>
-        <div style={{ color: '#fff', fontSize: 12, marginTop: 8, fontWeight: 600, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: 20 }}>{status}</div>
-      </div>
-      <button onClick={onCancel}
-        style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <X size={14} />
-      </button>
-    </div>
-  );
-}
-
-// ── QUICK ADD EXAM MODAL ─────────────────────────────────────────────────────
-function QuickAddExamModal({ student, categories, onSave, onClose }) {
-  // categories passed as live prop from App state — always fresh
-
-  const [categoryId,  setCategoryId]  = useState(categories.length === 1 ? categories[0]._id : '');
-  const [examNameEn,  setExamNameEn]  = useState('');
-  const [examNameJa,  setExamNameJa]  = useState('');
-  const [score,       setScore]       = useState('');
-  const [totalScore,  setTotalScore]  = useState('');
-  const [examDate,    setExamDate]    = useState(new Date().toISOString().split('T')[0]);
-  const [showScanner, setShowScanner] = useState(false);
-  const [saving,      setSaving]      = useState(false);
-  const [scanFlash,   setScanFlash]   = useState(false);
-
-  const handleBarcodeResult = (text) => {
-    setShowScanner(false);
-    setScanFlash(true);
-    setTimeout(() => setScanFlash(false), 2000);
-    if (text.includes('|')) {
-      // Format: nameEn|nameJa|category|totalScore
-      const parts = text.split('|');
-      const en    = (parts[0] || '').trim();
-      const ja    = (parts[1] || '').trim();
-      const cat   = (parts[2] || '').trim();
-      const total = (parts[3] || '').trim();
-      setExamNameEn(en);
-      setExamNameJa(ja);
-      // Auto-select category if it matches one of the student's categories
-      if (cat) {
-        const matched = categories.find(c => c.name.toLowerCase() === cat.toLowerCase());
-        if (matched) setCategoryId(matched._id);
-      }
-      // Auto-fill total score
-      if (total && !isNaN(parseInt(total))) setTotalScore(total);
-    } else {
-      setExamNameEn(text.trim());
-    }
-  };
-
-  const canSave = categoryId && examNameEn && score && totalScore;
-
-  const handleSave = async () => {
-    if (!canSave || saving) return;
-    setSaving(true);
-    const cat = categories.find(c => c._id === categoryId);
-    await onSave({ category: cat, examNameEn, examNameJa, score: parseInt(score), totalScore: parseInt(totalScore), date: examDate });
-    setSaving(false);
-  };
-
-  return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-sheet">
-        <div className="modal-handle" />
-        <h2 className="modal-title">Quick Add Exam</h2>
-
-        {/* Category */}
-        <div className="form-group">
-          <label>Category</label>
-          <select
-            value={categoryId}
-            onChange={e => setCategoryId(e.target.value)}
-            style={{ display:'block', width:'100%', padding:'13px 15px', fontSize:15, borderRadius:'var(--radius-md)', border:'1.5px solid var(--border-med)', background:'var(--surface2)', color:'var(--text-primary)', outline:'none' }}
-          >
-            <option value="">Select category…</option>
-            {categories.map(cat => (
-              <option key={cat._id} value={cat._id}>{cat.name}</option>
-            ))}
-          </select>
-          {categories.length === 0 && (
-            <p style={{ fontSize:12, color:'var(--red)', marginTop:6 }}>No categories yet — add one first from the profile.</p>
-          )}
-        </div>
-
-        {/* Barcode Scanner */}
-        <div className="form-group">
-          <label>Scan QR Code <span style={{ fontWeight:400, color:'var(--text-tertiary)', fontSize:12 }}>— auto-fills exam names</span></label>
-          <button
-            onClick={() => setShowScanner(v => !v)}
-            className={showScanner ? 'btn-secondary' : 'btn-secondary'}
-            style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, borderColor: showScanner ? 'var(--red)' : 'var(--border-med)', color: showScanner ? 'var(--red)' : 'var(--text-secondary)' }}
-          >
-            {showScanner ? <><X size={14}/> Close</> : <><Camera size={14}/> Scan QR</>}
-          </button>
-          {showScanner && (
-            <div style={{ marginTop:10 }}>
-              <InlineQRScanner onResult={handleBarcodeResult} onCancel={() => setShowScanner(false)} />
-            </div>
-          )}
-          {scanFlash && (
-            <div style={{ marginTop:8, padding:'8px 12px', background:'var(--green-soft)', borderRadius:'var(--radius-sm)', color:'var(--green)', fontWeight:600, fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
-              <CheckCircle size={14}/> Barcode scanned successfully!
-            </div>
-          )}
-        </div>
-
-        {/* Exam Name EN */}
-        <div className="form-group">
-          <label>Exam Name (English)</label>
-          <input
-            type="text"
-            value={examNameEn}
-            onChange={e => setExamNameEn(e.target.value)}
-            placeholder="e.g. Chapter 3 Quiz"
-          />
-        </div>
-
-        {/* Exam Name JP */}
-        <div className="form-group">
-          <label><Flag size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>試験名（日本語）</label>
-          <input
-            type="text"
-            value={examNameJa}
-            onChange={e => setExamNameJa(e.target.value)}
-            placeholder="例：第3章テスト"
-          />
-        </div>
-
-        {/* Score / Total */}
-        <div style={{ display:'flex', gap:12 }}>
-          <div className="form-group" style={{ flex:1 }}>
-            <label>Score</label>
-            <input type="number" min="0" value={score} onChange={e => setScore(e.target.value)} placeholder="85" />
-          </div>
-          <div className="form-group" style={{ flex:1 }}>
-            <label>Total</label>
-            <input type="number" min="1" value={totalScore} onChange={e => setTotalScore(e.target.value)} placeholder="100" />
-          </div>
-        </div>
-
-        {/* Date */}
-        <div className="form-group">
-          <label>Date</label>
-          <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} />
-        </div>
-
-        {/* Save */}
-        <button
-          className="btn-primary"
-          onClick={handleSave}
-          disabled={!canSave || saving}
-          style={{ opacity: canSave ? 1 : 0.45, cursor: canSave ? 'pointer' : 'default' }}
-        >
-          {saving ? 'Saving…' : '+ Add Exam'}
+        <button onClick={onRetake} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
+          ← Retake
         </button>
-
-        <button className="btn-secondary" onClick={onClose} style={{ marginTop:10 }}>
-          Cancel
+        <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Adjust Crop</span>
+        <button onClick={onConfirm} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+          Use ✓
+        </button>
+      </div>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center', padding: '5px 0', flexShrink: 0 }}>
+        Drag the green corners to adjust
+      </div>
+      {/* Wrapper gives the canvas measurable dimensions */}
+      <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#000' }}>
+        <canvas
+          ref={canvasRef}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none' }}
+          onMouseDown={onPointerDown}
+          onMouseMove={onPointerMove}
+          onMouseUp={onPointerUp}
+          onMouseLeave={onPointerUp}
+          onTouchStart={onPointerDown}
+          onTouchMove={onPointerMove}
+          onTouchEnd={onPointerUp}
+        />
+      </div>
+      {/* Bottom confirm button — always reachable even if top bar is under notch */}
+      <div style={{
+        flexShrink: 0, background: '#000', padding: '14px 24px',
+        paddingBottom: 'env(safe-area-inset-bottom, 14px)',
+        display: 'flex', gap: 12
+      }}>
+        <button onClick={onRetake} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 600, padding: '14px', borderRadius: 12, cursor: 'pointer' }}>
+          ← Retake
+        </button>
+        <button onClick={onConfirm} style={{ flex: 2, background: '#007AFF', color: '#fff', border: 'none', borderRadius: 12, padding: '14px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+          ✓ Use This Page
         </button>
       </div>
     </div>
   );
 }
-
 
 // ── DOCUMENT SCANNER COMPONENT (CamScanner-style) ──────────────────────────
 function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
@@ -1433,539 +974,490 @@ function DocumentScanner({ onCapture, onClose, bulkMode = false }) {
   const overlayCanvasRef = useRef(null);
   const streamRef = useRef(null);
   const animFrameRef = useRef(null);
-  const capturingRef = useRef(false);
+  const stableCountRef = useRef(0);
+  const lastCornersRef = useRef(null);
 
-  // phase: 'camera' | 'crop' | 'review'
+  // phase: 'camera' | 'crop' | 'review' (bulk only)
   const [phase, setPhase] = useState('camera');
   const [capturedDataUrl, setCapturedDataUrl] = useState(null);
-  const [capturedW, setCapturedW] = useState(1);
-  const [capturedH, setCapturedH] = useState(1);
+  const [imgSize, setImgSize] = useState({ w: 1, h: 1 });
+
+  // 4 draggable corners [TL, TR, BR, BL]
+  const [corners, setCorners] = useState(null);
+
   const [status, setStatus] = useState('Initializing camera...');
+  const [detected, setDetected] = useState(false);
+  const capturingRef = useRef(false);
+
+  // Bulk scan pages accumulator
   const [scannedPages, setScannedPages] = useState([]);
   const [bulkUploading, setBulkUploading] = useState(false);
 
-  // ── START CAMERA ─────────────────────────────────────────────────
+  // ── CAMERA PHASE ─────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'camera') return;
-    capturingRef.current = false;
-    let active = true;
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
         });
-        if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        video.onloadedmetadata = async () => {
-          try { await video.play(); } catch {}
-          setStatus('Point camera at document — tap shutter');
-          animFrameRef.current = requestAnimationFrame(overlayLoop);
-        };
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          setStatus('Point camera at document');
+          animFrameRef.current = requestAnimationFrame(detectLoop);
+        }
       } catch { setStatus('Camera access denied.'); }
     };
     startCamera();
     return () => {
-      active = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
     };
   }, [phase]); // eslint-disable-line
 
-  // ── OVERLAY GUIDE RECT ───────────────────────────────────────────
-  const overlayLoop = () => {
-    const overlay = overlayCanvasRef.current;
+  // ── EDGE HINT LOOP (dotted guide only, no auto-capture) ───────────
+  const detectLoop = () => {
     const video = videoRef.current;
-    if (!overlay || !video || video.readyState < 2) { animFrameRef.current = requestAnimationFrame(overlayLoop); return; }
+    const canvas = canvasRef.current;
+    const overlay = overlayCanvasRef.current;
+    if (!video || !canvas || !overlay || video.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(detectLoop);
+      return;
+    }
+    const W = video.videoWidth;
+    const H = video.videoHeight;
+    const SW = Math.floor(W / 2), SH = Math.floor(H / 2);
+    canvas.width = SW; canvas.height = SH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, SW, SH);
+    const imageData = ctx.getImageData(0, 0, SW, SH);
+
     overlay.width = overlay.offsetWidth;
     overlay.height = overlay.offsetHeight;
-    if (!overlay.width || !overlay.height) { animFrameRef.current = requestAnimationFrame(overlayLoop); return; }
-    const ctx = overlay.getContext('2d');
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
-    const px = overlay.width * 0.075, py = overlay.height * 0.1;
-    const rw = overlay.width - px * 2, rh = overlay.height - py * 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(0, 0, overlay.width, overlay.height);
-    ctx.clearRect(px, py, rw, rh);
-    ctx.strokeStyle = '#00FF88'; ctx.lineWidth = 3; ctx.setLineDash([12,6]);
-    ctx.strokeRect(px, py, rw, rh); ctx.setLineDash([]);
-    [[px,py],[px+rw,py],[px+rw,py+rh],[px,py+rh]].forEach(([x,y]) => {
-      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fillStyle='#00FF88'; ctx.fill();
-    });
-    animFrameRef.current = requestAnimationFrame(overlayLoop);
+    const oCtx = overlay.getContext('2d');
+    oCtx.clearRect(0, 0, overlay.width, overlay.height);
+
+    const raw = findEdgeHint(imageData, SW, SH);
+    if (raw) {
+      const scaled = raw.map(p => ({ x: p.x * 2, y: p.y * 2 }));
+      const sx = overlay.width / W, sy = overlay.height / H;
+      const pts = scaled.map(p => ({ x: p.x * sx, y: p.y * sy }));
+      oCtx.beginPath();
+      oCtx.moveTo(pts[0].x, pts[0].y);
+      pts.forEach(p => oCtx.lineTo(p.x, p.y));
+      oCtx.closePath();
+      oCtx.strokeStyle = '#00FF88';
+      oCtx.lineWidth = 3;
+      oCtx.setLineDash([10, 6]);
+      oCtx.stroke();
+      oCtx.setLineDash([]);
+      oCtx.fillStyle = 'rgba(0,255,136,0.08)';
+      oCtx.fill();
+      pts.forEach(p => {
+        oCtx.beginPath();
+        oCtx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+        oCtx.fillStyle = '#00FF88';
+        oCtx.fill();
+      });
+      lastCornersRef.current = scaled;
+      setDetected(true);
+      setStatus('Document in frame — tap 📸 to capture');
+    } else {
+      lastCornersRef.current = null;
+      setDetected(false);
+      setStatus('Point camera at document');
+    }
+    animFrameRef.current = requestAnimationFrame(detectLoop);
   };
 
-  // ── TAKE PHOTO → crop phase ──────────────────────────────────────
+  const findEdgeHint = (imageData, W, H) => {
+    const data = imageData.data;
+    const STEP = 4;
+    const edges = new Uint8Array(W * H);
+    for (let y = STEP; y < H - STEP; y += STEP) {
+      for (let x = STEP; x < W - STEP; x += STEP) {
+        const i = (y * W + x) * 4;
+        const ir = (y * W + x + STEP) * 4;
+        const id = ((y + STEP) * W + x) * 4;
+        const b = (data[i] + data[i+1] + data[i+2]) / 3;
+        const br = (data[ir] + data[ir+1] + data[ir+2]) / 3;
+        const bd = (data[id] + data[id+1] + data[id+2]) / 3;
+        if (Math.abs(b - br) + Math.abs(b - bd) > 35) edges[y * W + x] = 1;
+      }
+    }
+    const M = Math.floor(W * 0.04);
+    let top = -1, bottom = -1, left = -1, right = -1;
+    for (let y = M; y < H / 2 && top === -1; y++) {
+      let c = 0; for (let x = M; x < W - M; x++) if (edges[y * W + x]) c++;
+      if (c > W * 0.2) top = y;
+    }
+    for (let y = H - M; y > H / 2 && bottom === -1; y--) {
+      let c = 0; for (let x = M; x < W - M; x++) if (edges[y * W + x]) c++;
+      if (c > W * 0.2) bottom = y;
+    }
+    for (let x = M; x < W / 2 && left === -1; x++) {
+      let c = 0; for (let y = M; y < H - M; y++) if (edges[y * W + x]) c++;
+      if (c > H * 0.15) left = x;
+    }
+    for (let x = W - M; x > W / 2 && right === -1; x--) {
+      let c = 0; for (let y = M; y < H - M; y++) if (edges[y * W + x]) c++;
+      if (c > H * 0.15) right = x;
+    }
+    if (top === -1 || bottom === -1 || left === -1 || right === -1) return null;
+    if ((right - left) < W * 0.25 || (bottom - top) < H * 0.25) return null;
+    return [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }];
+  };
+
+  // ── TAKE PHOTO → go to crop phase ────────────────────────────────
   const takePhoto = () => {
     if (capturingRef.current) return;
     capturingRef.current = true;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) { capturingRef.current = false; return; }
-    const capture = () => {
-      const W = video.videoWidth, H = video.videoHeight;
-      if (!W || !H || video.readyState < 2) { requestAnimationFrame(capture); return; }
-      canvas.width = W; canvas.height = H;
-      canvas.getContext('2d').drawImage(video, 0, 0, W, H);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-      setCapturedDataUrl(dataUrl);
-      setCapturedW(W); setCapturedH(H);
-      setPhase('crop');
+    if (!video || !canvas) return;
+
+    // Read dimensions and capture frame BEFORE stopping the stream
+    const W = video.videoWidth || video.clientWidth;
+    const H = video.videoHeight || video.clientHeight;
+    canvas.width = W; canvas.height = H;
+    canvas.getContext('2d').drawImage(video, 0, 0, W, H);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+    // Stop stream only after capture
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+
+    setCapturedDataUrl(dataUrl);
+
+    // Init corners from detection or default
+    const detected = lastCornersRef.current;
+    const initCorners = detected ? [
+      { ...detected[0] }, { ...detected[1] }, { ...detected[2] }, { ...detected[3] }
+    ] : [
+      { x: W * 0.08, y: H * 0.08 },
+      { x: W * 0.92, y: H * 0.08 },
+      { x: W * 0.92, y: H * 0.92 },
+      { x: W * 0.08, y: H * 0.92 }
+    ];
+    setImgSize({ w: W, h: H });
+    setCorners(initCorners);
+    setPhase('crop');
+  };
+
+
+
+  const confirmCrop = () => {
+    if (!corners || !capturedDataUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      // Sort corners robustly into TL, TR, BR, BL regardless of drag order
+      const pts = [...corners];
+      const cx = pts.reduce((s,p) => s+p.x, 0) / 4;
+      const cy = pts.reduce((s,p) => s+p.y, 0) / 4;
+      // Classify by angle from centroid
+      pts.sort((a, b) => Math.atan2(a.y-cy, a.x-cx) - Math.atan2(b.y-cy, b.x-cx));
+      // After angle sort: left-top, left-bottom, right-bottom, right-top (CCW from -π)
+      // Re-sort: top-left has min(x+y), top-right has min(y-x), etc.
+      const sumSort  = [...pts].sort((a,b) => (a.x+a.y)-(b.x+b.y));
+      const diffSort = [...pts].sort((a,b) => (a.x-a.y)-(b.x-b.y));
+      const tl = sumSort[0];
+      const br = sumSort[3];
+      const tr = diffSort[3];
+      const bl = diffSort[0];
+
+      // Output dimensions based on actual edge lengths
+      const wTop   = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+      const wBot   = Math.hypot(br.x-bl.x, br.y-bl.y);
+      const hLeft  = Math.hypot(bl.x-tl.x, bl.y-tl.y);
+      const hRight = Math.hypot(br.x-tr.x, br.y-tr.y);
+      const outW   = Math.round(Math.max(wTop, wBot));
+      const outH   = Math.round(Math.max(hLeft, hRight));
+
+      // ── Compute inverse homography (dest → src) ──────────────────
+      // Source quad: tl, tr, br, bl
+      // Dest quad:   (0,0), (W,0), (W,H), (0,H)
+      // Solve 8 unknowns h00..h22 (h22=1) using 8 equations.
+      // Using the direct linear transform (DLT).
+
+      const sx0=tl.x, sy0=tl.y;
+      const sx1=tr.x, sy1=tr.y;
+      const sx2=br.x, sy2=br.y;
+      const sx3=bl.x, sy3=bl.y;
+      const dx0=0,    dy0=0;
+      const dx1=outW, dy1=0;
+      const dx2=outW, dy2=outH;
+      const dx3=0,    dy3=outH;
+
+      // Build 8x8 matrix A and vector b for Ah=b
+      // For each correspondence (dxi,dyi) -> (sxi,syi):
+      //   sxi = (h0*dxi + h1*dyi + h2) / (h6*dxi + h7*dyi + 1)
+      //   syi = (h3*dxi + h4*dyi + h5) / (h6*dxi + h7*dyi + 1)
+      const corrPts = [
+        [dx0,dy0,sx0,sy0],[dx1,dy1,sx1,sy1],
+        [dx2,dy2,sx2,sy2],[dx3,dy3,sx3,sy3],
+      ];
+      const A = [], b = [];
+      for (const [dx,dy,sx,sy] of corrPts) {
+        A.push([dx, dy, 1,  0,  0,  0, -sx*dx, -sx*dy]);
+        A.push([ 0,  0, 0, dx, dy,  1, -sy*dx, -sy*dy]);
+        b.push(sx); b.push(sy);
+      }
+
+      // Gaussian elimination to solve Ah=b
+      const n = 8;
+      const M = A.map((row, i) => [...row, b[i]]);
+      for (let col = 0; col < n; col++) {
+        // Pivot
+        let maxRow = col;
+        for (let r = col+1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[maxRow][col])) maxRow = r;
+        [M[col], M[maxRow]] = [M[maxRow], M[col]];
+        const pivot = M[col][col];
+        if (Math.abs(pivot) < 1e-10) continue;
+        for (let r = col+1; r < n; r++) {
+          const f = M[r][col] / pivot;
+          for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+        }
+      }
+      const h = new Array(n).fill(0);
+      for (let r = n-1; r >= 0; r--) {
+        h[r] = M[r][n];
+        for (let c = r+1; c < n; c++) h[r] -= M[r][c] * h[c];
+        h[r] /= M[r][r];
+      }
+      // h = [h0,h1,h2,h3,h4,h5,h6,h7], h8=1
+      const [h0,h1,h2,h3,h4,h5,h6,h7] = h;
+
+      // ── Rasterize ─────────────────────────────────────────────────
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width  = img.naturalWidth  || imgSize.w;
+      srcCanvas.height = img.naturalHeight || imgSize.h;
+      srcCanvas.getContext('2d').drawImage(img, 0, 0);
+      const srcData = srcCanvas.getContext('2d').getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+      const sw = srcData.width, sh = srcData.height;
+
+      const dst = document.createElement('canvas');
+      dst.width = outW; dst.height = outH;
+      const outData = dst.getContext('2d').createImageData(outW, outH);
+
+      for (let dy = 0; dy < outH; dy++) {
+        for (let dx = 0; dx < outW; dx++) {
+          const w_  = h6*dx + h7*dy + 1;
+          const sx  = (h0*dx + h1*dy + h2) / w_;
+          const sy  = (h3*dx + h4*dy + h5) / w_;
+
+          // Bilinear sample from source
+          const x0 = Math.floor(sx), y0 = Math.floor(sy);
+          const x1 = x0+1,           y1 = y0+1;
+          const fx = sx-x0,           fy = sy-y0;
+          const di = (dy*outW + dx)*4;
+
+          if (x0<0||y0<0||x1>=sw||y1>=sh) {
+            outData.data[di+3]=0; continue;
+          }
+          const i00=(y0*sw+x0)*4, i10=(y0*sw+x1)*4;
+          const i01=(y1*sw+x0)*4, i11=(y1*sw+x1)*4;
+          for (let c=0;c<3;c++) {
+            outData.data[di+c] = Math.round(
+              srcData.data[i00+c]*(1-fx)*(1-fy) +
+              srcData.data[i10+c]*fx*(1-fy) +
+              srcData.data[i01+c]*(1-fx)*fy +
+              srcData.data[i11+c]*fx*fy
+            );
+          }
+          outData.data[di+3] = 255;
+        }
+      }
+      dst.getContext('2d').putImageData(outData, 0, 0);
+      const croppedUrl = dst.toDataURL('image/jpeg', 0.92);
+      if (bulkMode) {
+        setScannedPages(prev => [...prev, croppedUrl]);
+        setPhase('review');
+      } else {
+        onCapture(croppedUrl);
+      }
     };
-    capture();
+    img.src = capturedDataUrl;
   };
 
-  // ── CROP CONFIRMED ───────────────────────────────────────────────
-  const handleCropDone = (croppedDataUrl) => {
-    if (bulkMode) {
-      setScannedPages(prev => [...prev, croppedDataUrl]);
-      setCapturedDataUrl(null);
-      setPhase('review');
-    } else {
-      onCapture(croppedDataUrl);
-    }
+  // Shared reset — used by both "Retake" and "Scan Next Page"
+  const resetToCamera = () => {
+    capturingRef.current = false;
+    setCapturedDataUrl(null);
+    setCorners(null);
+    stableCountRef.current = 0;
+    lastCornersRef.current = null;
+    setDetected(false);
+    setPhase('camera');
   };
 
-  const retake = () => { setCapturedDataUrl(null); setPhase('camera'); };
-  const scanNextPage = () => { setCapturedDataUrl(null); setPhase('camera'); };
+  const retake = resetToCamera;
+
+  // Bulk: go back to camera to scan next page
+  const scanNextPage = resetToCamera;
+
+  // Bulk: upload all scanned pages
   const finishBulkScan = async () => {
-    if (!scannedPages.length) return;
+    if (scannedPages.length === 0) return;
     setBulkUploading(true);
     await onCapture(scannedPages);
     setBulkUploading(false);
   };
-  const removeBulkPage = (idx) => setScannedPages(prev => prev.filter((_, i) => i !== idx));
 
-  // ── CROP PHASE ────────────────────────────────────────────────────
-  if (phase === 'crop' && capturedDataUrl) {
-    return (
-      <CropScreen
-        dataUrl={capturedDataUrl}
-        onConfirm={handleCropDone}
-        onRetake={retake}
-      />
-    );
-  }
+  // Bulk: remove a page from the list
+  const removeBulkPage = (idx) => {
+    setScannedPages(prev => prev.filter((_, i) => i !== idx));
+  };
 
   // ── BULK REVIEW PHASE ─────────────────────────────────────────────
   if (bulkMode && phase === 'review') {
     return (
-      <div style={{ position:'fixed', inset:0, background:'#111', zIndex:9999, display:'flex', flexDirection:'column' }}>
-        <div style={{ background:'#000', padding:'12px 20px', paddingTop:'env(safe-area-inset-top,12px)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <button onClick={onClose} style={{ background:'rgba(255,255,255,0.1)', border:'none', color:'#fff', fontSize:15, cursor:'pointer', padding:'10px 16px', borderRadius:8 }}>Cancel</button>
-          <span style={{ color:'#fff', fontSize:15, fontWeight:600 }}>{scannedPages.length} Page{scannedPages.length!==1?'s':''} Scanned</span>
-          <button onClick={finishBulkScan} disabled={bulkUploading||!scannedPages.length}
-            style={{ background:!scannedPages.length?'rgba(0,122,255,0.4)':'#34C759', color:'#fff', border:'none', borderRadius:8, padding:'10px 14px', fontSize:14, fontWeight:700, cursor:!scannedPages.length?'default':'pointer' }}>
-            {bulkUploading?<><Loader size={14} style={{animation:'spin 1s linear infinite',marginRight:4,verticalAlign:'middle'}}/>Uploading…</>:<><CheckCircle size={14} style={{marginRight:4,verticalAlign:'middle'}}/>Done ({scannedPages.length})</>}
+      <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+        {/* Top bar */}
+        <div style={{
+          background: '#000', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
+          paddingTop: 'env(safe-area-inset-top, 12px)'
+        }}>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 15, cursor: 'pointer', padding: '10px 16px', borderRadius: 8 }}>
+            Cancel
+          </button>
+          <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
+            {scannedPages.length} Page{scannedPages.length !== 1 ? 's' : ''} Scanned
+          </span>
+          <button
+            onClick={finishBulkScan}
+            disabled={bulkUploading || scannedPages.length === 0}
+            style={{ background: scannedPages.length === 0 ? 'rgba(0,122,255,0.4)' : '#34C759', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: scannedPages.length === 0 ? 'default' : 'pointer' }}
+          >
+            {bulkUploading ? '⏳ Uploading…' : `✅ Done (${scannedPages.length})`}
           </button>
         </div>
-        <div style={{ flex:1, overflowY:'auto', padding:12, display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:10, alignContent:'start' }}>
-          {scannedPages.map((url,idx) => (
-            <div key={idx} style={{ position:'relative', borderRadius:10, overflow:'hidden', background:'#222', aspectRatio:'3/4' }}>
-              <img src={url} alt={`Page ${idx+1}`} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-              <div style={{ position:'absolute', top:6, left:6, background:'rgba(0,0,0,0.72)', color:'#fff', fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:10 }}>Page {idx+1}</div>
-              <button onClick={()=>removeBulkPage(idx)} style={{ position:'absolute', top:6, right:6, background:'rgba(255,59,48,0.9)', color:'#fff', border:'none', borderRadius:'50%', width:26, height:26, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><X size={14}/></button>
+
+        {/* Scrollable pages grid — takes remaining space above bottom bar */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, alignContent: 'start' }}>
+          {scannedPages.map((url, idx) => (
+            <div key={idx} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#222', aspectRatio: '3/4' }}>
+              <img src={url} alt={`Page ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>
+                Page {idx + 1}
+              </div>
+              <button
+                onClick={() => removeBulkPage(idx)}
+                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255,59,48,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+              >✕</button>
             </div>
           ))}
         </div>
-        <div style={{ flexShrink:0, background:'#000', padding:'14px 24px', paddingBottom:'env(safe-area-inset-bottom,14px)', display:'flex', justifyContent:'center' }}>
-          <button onClick={scanNextPage} style={{ background:'#fff', color:'#000', border:'none', borderRadius:14, padding:'14px 48px', fontSize:16, fontWeight:700, cursor:'pointer' }}>
-            <Camera size={16} style={{marginRight:8,verticalAlign:'middle'}}/>Scan Next Page
+
+        {/* Bottom bar — always visible, never scrolled away */}
+        <div style={{
+          flexShrink: 0, background: '#000', padding: '14px 24px',
+          paddingBottom: 'env(safe-area-inset-bottom, 14px)',
+          display: 'flex', justifyContent: 'center'
+        }}>
+          <button
+            onClick={scanNextPage}
+            style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 14, padding: '14px 48px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+          >
+            📸 Scan Next Page
           </button>
         </div>
       </div>
     );
   }
 
-  // ── CAMERA PHASE ─────────────────────────────────────────────────
+  // ── CROP RENDER ──────────────────────────────────────────────────
+  if (phase === 'crop' && capturedDataUrl && corners) {
+    return <CropScreen
+      dataUrl={capturedDataUrl}
+      imgW={imgSize.w}
+      imgH={imgSize.h}
+      corners={corners}
+      setCorners={setCorners}
+      onConfirm={confirmCrop}
+      onRetake={retake}
+    />;
+  }
+
+  // Camera phase
   return (
-    <div style={{ position:'fixed', inset:0, background:'#000', zIndex:9999, display:'flex', flexDirection:'column' }}>
-      <div style={{ flexShrink:0, background:'rgba(0,0,0,0.85)', paddingTop:'env(safe-area-inset-top,12px)', padding:'12px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', color:'#fff', border:'none', borderRadius:10, padding:'8px 18px', fontSize:15, cursor:'pointer' }}>Cancel</button>
-        <div style={{ background:'rgba(60,60,60,0.9)', color:'#fff', padding:'6px 16px', borderRadius:20, fontSize:13, fontWeight:600 }}>{status}</div>
-        {bulkMode && scannedPages.length > 0
-          ? <button onClick={()=>setPhase('review')} style={{ background:'#34C759', color:'#fff', border:'none', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, cursor:'pointer' }}>Review ({scannedPages.length})</button>
-          : <div style={{width:80}}/>}
+    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+      {/* Status bar at top */}
+      <div style={{
+        flexShrink: 0, paddingTop: 'env(safe-area-inset-top, 12px)',
+        background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 16px'
+      }}>
+        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 18px', fontSize: 15, cursor: 'pointer' }}>
+          Cancel
+        </button>
+        <div style={{
+          background: detected ? 'rgba(0,160,70,0.92)' : 'rgba(60,60,60,0.9)',
+          color: '#fff', padding: '6px 16px', borderRadius: 20,
+          fontSize: 13, fontWeight: 600
+        }}>
+          {detected ? '🟢 ' + status : '🔍 ' + status}
+        </div>
+        {/* Page counter / review shortcut */}
+        {bulkMode && scannedPages.length > 0 ? (
+          <button
+            onClick={() => setPhase('review')}
+            style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', minWidth: 60, textAlign: 'center' }}
+          >
+            {scannedPages.length}p ›
+          </button>
+        ) : (
+          <div style={{ width: 70 }} />
+        )}
       </div>
-      <div style={{ flex:1, position:'relative', overflow:'hidden' }}>
-        <video ref={videoRef} style={{ width:'100%', height:'100%', objectFit:'cover' }} playsInline muted />
-        <canvas ref={overlayCanvasRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }} />
-        <canvas ref={canvasRef} style={{ display:'none' }} />
+
+      {/* Camera viewfinder */}
+      <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+        <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+        <canvas ref={overlayCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+        {/* Dotted guide when nothing detected */}
+        {!detected && (
+          <div style={{
+            position: 'absolute', top: '6%', left: '5%', right: '5%', bottom: '6%',
+            border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 12, pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Place document inside</span>
+          </div>
+        )}
       </div>
-      <div style={{ flexShrink:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 0', paddingBottom:'env(safe-area-inset-bottom,24px)' }}>
-        <button onClick={takePhoto} style={{ width:72, height:72, borderRadius:'50%', background:'#fff', border:'4px solid rgba(255,255,255,0.4)', boxShadow:'0 0 0 3px #fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <Camera size={28} color="#000"/>
+
+      {/* Bottom shutter bar - always visible, fixed height */}
+      <div style={{
+        flexShrink: 0, background: '#111',
+        paddingBottom: 'env(safe-area-inset-bottom, 12px)',
+        height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}>
+        <button onClick={takePhoto} style={{
+          background: '#fff', color: '#000', border: 'none', borderRadius: 50,
+          width: 72, height: 72, fontSize: 28, fontWeight: 700, cursor: 'pointer',
+          boxShadow: '0 0 0 5px rgba(255,255,255,0.25), 0 0 0 8px rgba(255,255,255,0.1)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0
+        }}>
+          📸
         </button>
       </div>
     </div>
   );
 }
+
 
 // ── SETTINGS PAGE ────────────────────────────────────────────────────────────
-// ── QR CODE GENERATOR TAB ────────────────────────────────────────────────────
-
-function QRItem({ entry, onDelete }) {
-  const canvasRef = useRef(null);
-
-  // QR value format: nameEn|nameJa|category|totalScore
-  // Fields after nameEn are optional; empty string preserved for positional parsing
-  const buildQRValue = (e) => {
-    const parts = [e.nameEn, e.nameJa || '', e.category || '', e.totalScore ? String(e.totalScore) : ''];
-    // Trim trailing empty parts only if ALL optional fields are empty
-    if (!e.nameJa && !e.category && !e.totalScore) return e.nameEn;
-    return parts.join('|');
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const value = buildQRValue(entry);
-    QRCode.toCanvas(canvas, value, {
-      width: 200,
-      margin: 2,
-      color: { dark: '#000000', light: '#ffffff' },
-    }).catch(e => console.error('QR error', e));
-  }, [entry.nameEn, entry.nameJa, entry.category, entry.totalScore]);
-
-  const handleDownload = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = `${entry.nameEn.replace(/\s+/g, '-')}-qr.png`;
-    a.click();
-  };
-
-  const handlePrint = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const imgData = canvas.toDataURL('image/png');
-    const win = window.open('', '_blank');
-    win.document.write(`
-      <html><head><title>${entry.nameEn}</title>
-      <style>
-        body { margin: 24px; font-family: -apple-system, sans-serif; text-align: center; }
-        img { display: block; margin: 0 auto; }
-        .meta { font-size:12px; color:#888; margin-top:4px; }
-        @media print { button { display: none; } }
-      </style></head>
-      <body>
-        <div style="font-size:18px;font-weight:700;margin-bottom:2px;">${entry.nameEn}</div>
-        ${entry.nameJa ? `<div style="font-size:14px;color:#555;margin-bottom:4px;">${entry.nameJa}</div>` : ''}
-        ${entry.category ? `<div class="meta">📁 ${entry.category}</div>` : ''}
-        ${entry.totalScore ? `<div class="meta">Total Score: ${entry.totalScore}</div>` : ''}
-        <div style="margin-bottom:12px;"></div>
-        <img src="${imgData}" width="200" height="200" />
-        <script>window.onload=()=>{ window.print(); }<\/script>
-      </body></html>`);
-    win.document.close();
-  };
-
-  return (
-    <div style={{ background:'#fff', borderRadius:16, padding:16, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:12 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e' }}>{entry.nameEn}</div>
-          {entry.nameJa && <div style={{ fontSize:13, color:'#8e8e93', marginTop:2 }}>{entry.nameJa}</div>}
-          <div style={{ display:'flex', gap:8, marginTop:4, flexWrap:'wrap' }}>
-            {entry.category && (
-              <span style={{ fontSize:12, color:'#8B0000', background:'rgba(139,0,0,0.08)', borderRadius:6, padding:'2px 8px', fontWeight:600 }}>
-                📁 {entry.category}
-              </span>
-            )}
-            {entry.totalScore && (
-              <span style={{ fontSize:12, color:'#007AFF', background:'rgba(0,122,255,0.08)', borderRadius:6, padding:'2px 8px', fontWeight:600 }}>
-                Total: {entry.totalScore}
-              </span>
-            )}
-          </div>
-        </div>
-        <button onClick={() => onDelete(entry.id)} style={{ background:'none', border:'none', color:'#ff3b30', cursor:'pointer', padding:4, flexShrink:0 }}>
-          <Trash2 size={16}/>
-        </button>
-      </div>
-      <div style={{ display:'flex', justifyContent:'center', background:'#fafafa', borderRadius:10, padding:12, marginBottom:10 }}>
-        <canvas ref={canvasRef} />
-      </div>
-      <div style={{ display:'flex', gap:8 }}>
-        <button onClick={handlePrint}
-          style={{ flex:1, background:'#8B0000', color:'#fff', border:'none', borderRadius:10, padding:'10px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
-          🖨️ Print
-        </button>
-        <button onClick={handleDownload}
-          style={{ flex:1, background:'#f2f2f7', color:'#3a3a3c', border:'none', borderRadius:10, padding:'10px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
-          ⬇️ Save PNG
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function BarcodeGeneratorTab({ batches = [] }) {
-  const [nameEn,      setNameEn]     = useState('');
-  const [nameJa,      setNameJa]     = useState('');
-  const [selectedBatchId, setSelectedBatchId] = useState('');
-  const [category,    setCategory]   = useState('');
-  const [totalScore,  setTotalScore] = useState('');
-  const [entries,     setEntries]    = useState([]);
-
-  // Categories unique to the selected batch only
-  const batchCats = useMemo(() => {
-    if (!selectedBatchId) return [];
-    const batch = batches.find(b => b._id === selectedBatchId);
-    if (!batch) return [];
-    // Use normalized key (trimmed + lowercase) to deduplicate, keep first-seen casing
-    const seen = new Map();
-    (batch.students || []).forEach(s =>
-      (s.categories || []).forEach(c => {
-        if (!c.name) return;
-        const key = c.name.trim().toLowerCase();
-        if (!seen.has(key)) seen.set(key, c.name.trim());
-      })
-    );
-    return Array.from(seen.values()).sort();
-  }, [batches, selectedBatchId]);
-
-  // Reset category when batch changes
-  const handleBatchChange = (batchId) => {
-    setSelectedBatchId(batchId);
-    setCategory('');
-  };
-
-  const addEntry = () => {
-    if (!nameEn.trim()) return;
-    setEntries(prev => [...prev, {
-      id: Date.now(),
-      nameEn: nameEn.trim(),
-      nameJa: nameJa.trim(),
-      category: category,
-      totalScore: totalScore ? parseInt(totalScore) : null,
-    }]);
-    setNameEn('');
-    setNameJa('');
-    // keep batch, category & totalScore for easy batch-generating same exam type
-  };
-
-  const deleteEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id));
-
-  // QR value format: nameEn|nameJa|category|totalScore
-  const buildQRValue = (entry) => {
-    if (!entry.nameJa && !entry.category && !entry.totalScore) return entry.nameEn;
-    return [entry.nameEn, entry.nameJa || '', entry.category || '', entry.totalScore ? String(entry.totalScore) : ''].join('|');
-  };
-
-  const printAll = () => {
-    const canvases = document.querySelectorAll('.qr-canvas-print');
-    let rows = '';
-    entries.forEach((entry, i) => {
-      const c = canvases[i];
-      if (!c) return;
-      rows += `
-        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #e0e0e0;border-radius:8px;padding:16px;text-align:center;">
-          <div style="font-size:16px;font-weight:700;margin-bottom:2px;">${entry.nameEn}</div>
-          ${entry.nameJa ? `<div style="font-size:13px;color:#555;margin-bottom:4px;">${entry.nameJa}</div>` : ''}
-          ${entry.category ? `<div style="font-size:12px;color:#8B0000;margin-bottom:2px;">📁 ${entry.category}</div>` : ''}
-          ${entry.totalScore ? `<div style="font-size:12px;color:#555;margin-bottom:8px;">Total Score: ${entry.totalScore}</div>` : '<div style="margin-bottom:8px;"></div>'}
-          <img src="${c.toDataURL('image/png')}" width="180" />
-        </div>`;
-    });
-    const win = window.open('', '_blank');
-    win.document.write(`<html><head><title>Exam QR Codes</title>
-      <style>body{margin:20px;font-family:-apple-system,sans-serif;}@media print{button{display:none;}}</style>
-      </head><body>${rows}<script>window.onload=()=>{window.print();}<\/script></body></html>`);
-    win.document.close();
-  };
-
-  const inputStyle = { display:'block', width:'100%', padding:'12px 14px', fontSize:15, borderRadius:10, border:'1.5px solid #e5e5ea', background:'#f9f9f9', outline:'none', boxSizing:'border-box' };
-  const selectStyle = { ...inputStyle, appearance:'auto', color:'#1c1c1e' };
-  const labelStyle  = { fontSize:12, fontWeight:600, color:'#8e8e93', display:'block', marginBottom:6 };
-
-  return (
-    <div>
-      <div style={{ background:'#fff', borderRadius:16, padding:20, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', marginBottom:16 }}>
-        <div style={{ fontSize:15, fontWeight:700, color:'#1c1c1e', marginBottom:4 }}>📱 Exam QR Code Generator</div>
-        <div style={{ fontSize:12, color:'#8e8e93', marginBottom:16 }}>Scan with the Add Exam modal to auto-fill exam name, category, and total score</div>
-
-        {/* Step 1 — Select Batch */}
-        <div style={{ marginBottom:12 }}>
-          <label style={labelStyle}>
-            <Layers size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>Batch *
-          </label>
-          <select
-            value={selectedBatchId}
-            onChange={e => handleBatchChange(e.target.value)}
-            style={{ ...selectStyle, color: selectedBatchId ? '#1c1c1e' : '#8e8e93' }}
-          >
-            <option value="">Select batch…</option>
-            {batches.map(b => (
-              <option key={b._id} value={b._id}>{b.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Step 2 — Exam Category (updates when batch is selected) */}
-        <div style={{ marginBottom:12 }}>
-          <label style={labelStyle}>
-            <Folder size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>Exam Category — optional
-          </label>
-          <select
-            value={category}
-            onChange={e => setCategory(e.target.value)}
-            disabled={!selectedBatchId}
-            style={{ ...selectStyle, color: category ? '#1c1c1e' : '#8e8e93', opacity: selectedBatchId ? 1 : 0.45 }}
-          >
-            <option value="">{selectedBatchId ? 'Select category…' : 'Select a batch first'}</option>
-            {batchCats.length === 0 && selectedBatchId
-              ? <option disabled>No categories in this batch</option>
-              : batchCats.map(c => <option key={c} value={c}>{c}</option>)
-            }
-          </select>
-          {selectedBatchId && (
-            <div style={{ fontSize:11, color:'#8e8e93', marginTop:4 }}>
-              Showing categories from selected batch only. When scanned, auto-selects matching category.
-            </div>
-          )}
-        </div>
-
-        {/* Exam Name EN */}
-        <div style={{ marginBottom:12 }}>
-          <label style={labelStyle}>Exam Name (English) *</label>
-          <input type="text" value={nameEn} onChange={e => setNameEn(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addEntry()}
-            placeholder="e.g. Chapter 3 Quiz"
-            style={inputStyle}
-          />
-        </div>
-
-        {/* Exam Name JA */}
-        <div style={{ marginBottom:12 }}>
-          <label style={labelStyle}>
-            <Flag size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>試験名（日本語）— optional
-          </label>
-          <input type="text" value={nameJa} onChange={e => setNameJa(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addEntry()}
-            placeholder="例：第3章テスト"
-            style={inputStyle}
-          />
-        </div>
-
-        {/* Total Score */}
-        <div style={{ marginBottom:16 }}>
-          <label style={labelStyle}>
-            <Target size={11} style={{ marginRight:4, verticalAlign:'middle' }}/>Total Score — optional
-          </label>
-          <input
-            type="number"
-            min="1"
-            value={totalScore}
-            onChange={e => setTotalScore(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addEntry()}
-            placeholder="e.g. 100"
-            style={inputStyle}
-          />
-          <div style={{ fontSize:11, color:'#8e8e93', marginTop:4 }}>
-            Auto-fills the Total field in the modal — you only need to type the score.
-          </div>
-        </div>
-
-        <button onClick={addEntry} disabled={!nameEn.trim()}
-          style={{ width:'100%', background: nameEn.trim() ? '#8B0000' : '#e5e5ea', color: nameEn.trim() ? '#fff' : '#aaa', border:'none', borderRadius:12, padding:'14px', fontSize:16, fontWeight:700, cursor: nameEn.trim() ? 'pointer' : 'default' }}>
-          + Generate QR Code
-        </button>
-      </div>
-
-      {entries.length > 1 && (
-        <button onClick={printAll}
-          style={{ width:'100%', background:'#1c1c1e', color:'#fff', border:'none', borderRadius:12, padding:'13px', fontSize:15, fontWeight:600, cursor:'pointer', marginBottom:16, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          🖨️ Print All ({entries.length})
-        </button>
-      )}
-
-      {entries.length === 0 && (
-        <div style={{ textAlign:'center', padding:'40px 20px', color:'#8e8e93' }}>
-          <div style={{ fontSize:36, marginBottom:8 }}>📱</div>
-          <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>No QR codes yet</div>
-          <div style={{ fontSize:13 }}>Select a batch and fill in the exam details above</div>
-        </div>
-      )}
-
-      {entries.map(entry => <QRItem key={entry.id} entry={entry} onDelete={deleteEntry} />)}
-
-      {/* Hidden canvases for Print All */}
-      <div style={{ display:'none' }}>
-        {entries.map(entry => {
-          const value = buildQRValue(entry);
-          const ref = (el) => {
-            if (!el) return;
-            QRCode.toCanvas(el, value, { width: 200, margin: 2 }).catch(() => {});
-          };
-          return <canvas key={entry.id} className="qr-canvas-print" ref={ref} />;
-        })}
-      </div>
-    </div>
-  );
-}
-
 function SettingsPage({ batches, onClose, API }) {
   const [storage, setStorage] = useState(null);
   const [storageLoading, setStorageLoading] = useState(true);
   const [storageError, setStorageError] = useState(null);
   const [clearLoading, setClearLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('storage');
-  const isAdminUser = (typeof safeLocalGet === 'function' ? safeLocalGet(ROLE_KEY) : null) === 'admin';
-
-  // ── Change Password state ──
-  const [pwAccounts, setPwAccounts] = useState([]);
-  const [pwTarget, setPwTarget] = useState('');        // target username
-  const [pwCurrent, setPwCurrent] = useState('');
-  const [pwNew, setPwNew] = useState('');
-  const [pwConfirm, setPwConfirm] = useState('');
-  const [pwMsg, setPwMsg] = useState(null);            // { type:'ok'|'err', text }
-  const [pwBusy, setPwBusy] = useState(false);
-
-  useEffect(() => {
-    if (activeSection !== 'security' || !isAdminUser) return;
-    (async () => {
-      try {
-        const token = safeLocalGet(TOKEN_KEY);
-        const res = await fetch(`${API}/auth/accounts`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        });
-        const data = await res.json();
-        if (Array.isArray(data)) setPwAccounts(data);
-      } catch {}
-    })();
-  }, [activeSection, isAdminUser, API]);
-
-  const submitChangePassword = async () => {
-    setPwMsg(null);
-    if (!pwTarget) { setPwMsg({ type: 'err', text: 'Please choose an account.' }); return; }
-    if (pwNew.length < 6) { setPwMsg({ type: 'err', text: 'New password must be at least 6 characters.' }); return; }
-    if (pwNew !== pwConfirm) { setPwMsg({ type: 'err', text: 'New password and confirmation do not match.' }); return; }
-    setPwBusy(true);
-    try {
-      const token = safeLocalGet(TOKEN_KEY);
-      const res = await fetch(`${API}/auth/change-password`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, targetUsername: pwTarget, currentPassword: pwCurrent, newPassword: pwNew }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) { setPwMsg({ type: 'err', text: data.error || 'Could not change password.' }); return; }
-      // If the admin changed their OWN password, the server returns a fresh token — keep this session alive
-      if (data.token) safeLocalSet(TOKEN_KEY, data.token);
-      setPwMsg({ type: 'ok', text: `Password updated for "${data.rotated}". Anyone currently logged into that account will be signed out.` });
-      setPwCurrent(''); setPwNew(''); setPwConfirm('');
-    } catch (e) {
-      setPwMsg({ type: 'err', text: 'Cannot reach the server. Please try again.' });
-    } finally {
-      setPwBusy(false);
-    }
-  };
 
   // Compute app stats from batches
   const totalStudents = batches.reduce((s, b) => s + b.students.length, 0);
@@ -2036,8 +1528,6 @@ useEffect(() => {
     { id: 'stats', label: t('appInfoTab') },
     { id: 'server', label: t('serverTab') },
     { id: 'manage', label: t('manageTab') },
-    { id: 'barcodes', label: 'QR Codes' },
-    ...(isAdminUser ? [{ id: 'security', label: 'Security' }] : []),
   ];
 
   return (
@@ -2087,9 +1577,9 @@ useEffect(() => {
           <div>
             <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', display: 'flex', alignItems: 'center', gap: 6 }}><Layers size={15} /> Cloudinary Storage</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}>☁️ Cloudinary Storage</span>
                 {storageLoading && <span style={{ fontSize: 12, color: '#8e8e93' }}>Loading…</span>}
-                {storageError && <span style={{ fontSize: 12, color: '#ff3b30', display: 'flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} /> Error</span>}
+                {storageError && <span style={{ fontSize: 12, color: '#ff3b30' }}>⚠ Error</span>}
               </div>
 
               {storageLoading ? (
@@ -2137,8 +1627,8 @@ useEffect(() => {
                   {storage?.resources && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       {[
-                        { label: <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Image size={13} /> Images</span>, count: storage.resources.image_count, size: storage.resources.image_size },
-                        { label: <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><File size={13} /> Raw files</span>, count: storage.resources.raw_count, size: storage.resources.raw_size },
+                        { label: '🖼 Images', count: storage.resources.image_count, size: storage.resources.image_size },
+                        { label: '📄 Raw files', count: storage.resources.raw_count, size: storage.resources.raw_size },
                       ].map((r, i) => (
                         <div key={i} style={{ background: '#f9f9f9', borderRadius: 12, padding: '12px 14px' }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: '#1c1c1e', marginBottom: 2 }}>{r.label}</div>
@@ -2150,8 +1640,8 @@ useEffect(() => {
                   )}
 
                   {usedPct > 80 && (
-                    <div style={{ marginTop: 14, background: '#fff3cd', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#856404', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <AlertTriangle size={14} color="#856404" /> Storage is getting full. Consider archiving old images.
+                    <div style={{ marginTop: 14, background: '#fff3cd', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#856404', fontWeight: 500 }}>
+                      ⚠️ Storage is getting full. Consider archiving old images.
                     </div>
                   )}
                 </>
@@ -2177,13 +1667,13 @@ useEffect(() => {
             </div>
 
             {[
-              { icon: <Layers size={26} color="#8B0000" />, label: t('totalBatches'), value: totalBatches },
-              { icon: <Users size={26} color="#8B0000" />, label: t('totalStudents'), value: totalStudents.toLocaleString() },
-              { icon: <FileText size={26} color="#8B0000" />, label: t('totalExams'), value: totalExams.toLocaleString() },
-              { icon: <Image size={26} color="#8B0000" />, label: t('totalImages'), value: totalImages.toLocaleString() },
+              { icon: '🗂️', label: t('totalBatches'), value: totalBatches },
+              { icon: '👥', label: t('totalStudents'), value: totalStudents.toLocaleString() },
+              { icon: '📝', label: t('totalExams'), value: totalExams.toLocaleString() },
+              { icon: '🖼️', label: t('totalImages'), value: totalImages.toLocaleString() },
             ].map((stat, i) => (
               <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 12, background: 'rgba(139,0,0,0.08)', flexShrink: 0 }}>{stat.icon}</span>
+                <span style={{ fontSize: 28 }}>{stat.icon}</span>
                 <div>
                   <div style={{ fontSize: 13, color: '#8e8e93' }}>{stat.label}</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', lineHeight: 1.2 }}>{stat.value}</div>
@@ -2202,7 +1692,7 @@ useEffect(() => {
         {activeSection === 'manage' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}><Image size={15} style={{ marginRight: 6, verticalAlign: "middle" }} />Image Storage</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>🖼️ Image Storage</div>
               <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 16px 0', lineHeight: 1.5 }}>
                 To free up Cloudinary storage, use the <strong>📦 Archive</strong> feature per student to move old exam images to the archive folder. Archived images are still accessible but won't count against your active quota in most plans.
               </p>
@@ -2215,15 +1705,15 @@ useEffect(() => {
             <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>🗑️ Permanent Delete</div>
               <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-                To permanently delete a student and all their images from Cloudinary and the database, use the <strong>Delete</strong> button on the student's Categories screen. This <strong>cannot be undone</strong>.
+                To permanently delete a student and all their images from Cloudinary and the database, use the <strong>🗑️ Delete</strong> button on the student's Categories screen. This <strong>cannot be undone</strong>.
               </p>
               <div style={{ background: '#fff3f3', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#c0392b', fontWeight: 500 }}>
-                <p style={{ margin: '8px 0 0', fontSize: 12, color: '#856404', display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={12} /> Permanent delete removes all data from Cloudinary and MongoDB.</p>
+                ⚠️ Permanent delete removes all data from Cloudinary and MongoDB.
               </div>
             </div>
 
             <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}><BarChart2 size={15} style={{ marginRight: 6, verticalAlign: "middle" }} />Storage by Batch</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 6 }}>📊 Storage by Batch</div>
               <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 12px 0' }}>Estimated image count per batch:</p>
               {batches.map(b => {
                 const imgCount = b.students.reduce((s, st) =>
@@ -2233,7 +1723,7 @@ useEffect(() => {
                 return (
                   <div key={b._id} style={{ marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}><BookOpen size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />{b.name}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#3a3a3c' }}>🎌 {b.name}</span>
                       <span style={{ fontSize: 12, color: '#8e8e93' }}>{imgCount} images</span>
                     </div>
                     <div style={{ background: '#f2f2f7', borderRadius: 99, height: 6, overflow: 'hidden' }}>
@@ -2258,13 +1748,13 @@ useEffect(() => {
                 border: 'none', borderRadius: 10, padding: '8px 18px',
                 fontSize: 13, fontWeight: 600, cursor: serverLoading ? 'default' : 'pointer'
               }}>
-                {serverLoading ? <><Loader size={13} style={{ animation: 'spin 1s linear infinite', marginRight: 4, verticalAlign: 'middle' }} />{t('loading')}</> : t('refresh')}
+                {serverLoading ? '⏳ ' + t('loading') : t('refresh')}
               </button>
             </div>
 
             {serverError && (
-              <div style={{ background: '#fff3f3', borderRadius: 14, padding: 16, color: '#c0392b', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <AlertTriangle size={14} /> {serverError}
+              <div style={{ background: '#fff3f3', borderRadius: 14, padding: 16, color: '#c0392b', fontSize: 13 }}>
+                ⚠️ {serverError}
               </div>
             )}
 
@@ -2291,15 +1781,15 @@ useEffect(() => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: r.apiAvailable ? '#f0fff4' : '#fffbe6', borderRadius: 10, fontSize: 12 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.apiAvailable ? '#34C759' : '#ff9500' }} />
                     <span style={{ color: r.apiAvailable ? '#1a7f37' : '#856404', fontWeight: 600 }}>
-                      {r.apiAvailable ? 'Live data mula sa Render API' : 'Estimated data (walang API key)'}
+                      {r.apiAvailable ? '✅ Live data mula sa Render API' : '⚠️ Estimated data (walang API key)'}
                     </span>
                   </div>
 
                   {/* Instance Hours Card */}
                   <div style={{ background: r.willSuspend ? '#fff3f3' : '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Clock size={15} /> Instance Hours
-                      {r.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={10} /> Malapit maubos!</span>}
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>
+                      ⏱️ Instance Hours
+                      {r.willSuspend && <span style={{ marginLeft: 8, fontSize: 12, background: '#ff3b30', color: '#fff', borderRadius: 6, padding: '2px 8px' }}>⚠️ Malapit maubos!</span>}
                     </div>
                     <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included Usage — resets every 1st of month</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -2317,8 +1807,8 @@ useEffect(() => {
                     </div>
                     <div style={{ fontSize: 12, color: '#8e8e93' }}>{renderPct}% ng 750h monthly limit</div>
                     {r.willSuspend && (
-                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <AlertCircle size={14} /> Bababa na sa 50 hours! Mag-migrate na o mag-upgrade bago ma-suspend ang app.
+                      <div style={{ marginTop: 10, background: '#fff0f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#c0392b', fontWeight: 600 }}>
+                        🚨 Bababa na sa 50 hours! Mag-migrate na o mag-upgrade bago ma-suspend ang app.
                       </div>
                     )}
                   </div>
@@ -2326,7 +1816,7 @@ useEffect(() => {
                   {/* Bandwidth Card */}
                   {r.bandwidthUsedBytes !== undefined && (
                     <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={15} /> Outbound Bandwidth</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 4 }}>🌐 Outbound Bandwidth</div>
                       <div style={{ fontSize: 11, color: '#8e8e93', marginBottom: 12 }}>Monthly Included: 100 GB</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                         <div>
@@ -2347,7 +1837,7 @@ useEffect(() => {
                   {/* Services List */}
                   {r.services && r.services.length > 0 && (
                     <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}><Rocket size={15} style={{ marginRight: 6, verticalAlign: "middle" }} />Render Services</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1c1e', marginBottom: 12 }}>🚀 Render Services</div>
                       {r.services.map((svc, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < r.services.length - 1 ? '1px solid #f2f2f7' : 'none' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2443,310 +1933,29 @@ useEffect(() => {
           </div>
         )}
 
-        {/* ── BARCODE GENERATOR TAB ── */}
-        {activeSection === 'barcodes' && <BarcodeGeneratorTab batches={batches} />}
-
-        {activeSection === 'security' && isAdminUser && (
-          <div style={{ padding: '4px 2px' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1c1c1e', margin: '4px 0 4px' }}>Change Password</h3>
-            <p style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 16px', lineHeight: 1.5 }}>
-              Passwords are stored securely on the server. Changing a password immediately signs out everyone currently using that account on every device — they will need to log in again with the new password.
-            </p>
-
-            <div style={{ background: '#fff', borderRadius: 14, padding: 16, boxShadow: '0 1px 8px rgba(0,0,0,0.05)', maxWidth: 460 }}>
-              <div className="form-group" style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 13, fontWeight: 600 }}>Account</label>
-                <select
-                  value={pwTarget}
-                  onChange={e => { setPwTarget(e.target.value); setPwMsg(null); }}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}
-                >
-                  <option value="">— Select an account —</option>
-                  {pwAccounts.map(a => (
-                    <option key={a.username} value={a.username}>{a.username} ({a.role})</option>
-                  ))}
-                </select>
-              </div>
-
-              {pwTarget && pwAccounts.find(a => a.username === pwTarget && a.role === 'admin') && (
-                <div className="form-group" style={{ marginBottom: 12 }}>
-                  <label style={{ fontSize: 13, fontWeight: 600 }}>Current password (required for admin)</label>
-                  <input type="password" value={pwCurrent} onChange={e => { setPwCurrent(e.target.value); setPwMsg(null); }}
-                    placeholder="Enter current admin password"
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box' }} />
-                </div>
-              )}
-
-              <div className="form-group" style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 13, fontWeight: 600 }}>New password</label>
-                <input type="password" value={pwNew} onChange={e => { setPwNew(e.target.value); setPwMsg(null); }}
-                  placeholder="At least 6 characters"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box' }} />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 4 }}>
-                <label style={{ fontSize: 13, fontWeight: 600 }}>Confirm new password</label>
-                <input type="password" value={pwConfirm} onChange={e => { setPwConfirm(e.target.value); setPwMsg(null); }}
-                  placeholder="Re-type new password"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, boxSizing: 'border-box' }} />
-              </div>
-
-              {pwMsg && (
-                <p style={{ fontSize: 13, margin: '12px 0 0', color: pwMsg.type === 'ok' ? '#1a7f37' : '#ff3b30', lineHeight: 1.45 }}>
-                  {pwMsg.text}
-                </p>
-              )}
-
-              <button
-                onClick={submitChangePassword}
-                disabled={pwBusy}
-                style={{ width: '100%', marginTop: 16, background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 700, cursor: pwBusy ? 'default' : 'pointer', opacity: pwBusy ? 0.7 : 1 }}>
-                {pwBusy ? 'Updating…' : 'Update Password'}
-              </button>
-            </div>
-          </div>
-        )}
-
       </div>
       <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
     </div>
   );
 }
 
-// ── SMART REMINDERS COMPONENT ────────────────────────────────────────────────
-function SmartReminders({ batches, onNavigate }) {
-  const [expanded, setExpanded] = useState(false);
-  const [dismissed, setDismissed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sage_dismissed_reminders') || '[]'); } catch { return []; }
-  });
-
-  const now = new Date();
-  const cutoff30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-  // Compute reminders across all batches
-  const reminders = [];
-
-  batches.forEach(batch => {
-    batch.students
-      .filter(s => !s.isArchived)
-      .forEach(student => {
-        // ── Exam reminder: no exam entry in last 30 days ──────────────────
-        let latestExamDate = null;
-        (student.categories || []).forEach(cat => {
-          (cat.items || []).forEach(item => {
-            if (item.date) {
-              const d = new Date(item.date);
-              if (!latestExamDate || d > latestExamDate) latestExamDate = d;
-            }
-          });
-        });
-
-        const hasNoRecentExam = !latestExamDate || latestExamDate < cutoff30;
-        if (hasNoRecentExam) {
-          const id = `exam-${batch._id}-${student._id}`;
-          const daysSince = latestExamDate
-            ? Math.floor((now - latestExamDate) / (1000 * 60 * 60 * 24))
-            : null;
-          reminders.push({
-            id,
-            type: 'exam',
-            student: student.name,
-            batch: batch.name,
-            batchObj: batch,
-            studentObj: student,
-            daysSince,
-            label: daysSince
-              ? `No exam for ${daysSince} days`
-              : 'No exam recorded yet',
-          });
-        }
-      });
-  });
-
-  // Filter out dismissed
-  const active = reminders.filter(r => !dismissed.includes(r.id));
-  const examReminders = active.filter(r => r.type === 'exam');
-
-  if (active.length === 0) return null;
-
-  const dismiss = (id, e) => {
-    e.stopPropagation();
-    const next = [...dismissed, id];
-    setDismissed(next);
-    try { localStorage.setItem('sage_dismissed_reminders', JSON.stringify(next)); } catch {}
-  };
-
-  const dismissAll = () => {
-    const next = [...dismissed, ...active.map(r => r.id)];
-    setDismissed(next);
-    try { localStorage.setItem('sage_dismissed_reminders', JSON.stringify(next)); } catch {}
-  };
-
-  const urgentCount = active.filter(r => r.daysSince === null || r.daysSince >= 45).length;
-  const bannerColor = urgentCount > 0
-    ? 'linear-gradient(135deg, #c0392b, #e74c3c)'
-    : 'linear-gradient(135deg, #e67e22, #f39c12)';
-
-  return (
-    <div style={{ margin: '12px 16px 0', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
-      {/* Collapsed banner */}
-      <div
-        onClick={() => setExpanded(e => !e)}
-        style={{
-          background: bannerColor,
-          borderRadius: expanded ? '14px 14px 0 0' : 14,
-          padding: '12px 16px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          cursor: 'pointer',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-          transition: 'border-radius 0.2s',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 20 }}>🔔</span>
-          <div>
-            <div style={{ color: '#fff', fontWeight: 700, fontSize: 14, lineHeight: 1.2 }}>
-              Smart Reminders
-            </div>
-            <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 }}>
-              {active.length} student{active.length !== 1 ? 's' : ''} need attention
-              {urgentCount > 0 && ` · ${urgentCount} urgent`}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            background: 'rgba(255,255,255,0.25)',
-            borderRadius: 20, minWidth: 26, height: 26,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 800, fontSize: 13,
-          }}>
-            {active.length}
-          </div>
-          <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 18, transition: 'transform 0.2s', display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'none' }}>
-            ›
-          </span>
-        </div>
-      </div>
-
-      {/* Expanded list */}
-      {expanded && (
-        <div style={{
-          background: 'var(--bg-card, #fff)',
-          borderRadius: '0 0 14px 14px',
-          border: '1px solid var(--border-color, #e5e5ea)',
-          borderTop: 'none',
-          overflow: 'hidden',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-        }}>
-          {/* Section header */}
-          <div style={{
-            padding: '10px 16px 6px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderBottom: '1px solid var(--border-color, #f0f0f0)',
-          }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary, #8e8e93)', letterSpacing: 0.3, display: 'flex', alignItems: 'center', gap: 5 }}>
-                <AlertTriangle size={12} /> NO EXAM IN 30+ DAYS — {examReminders.length}
-              </span>
-            <button
-              onClick={dismissAll}
-              style={{
-                background: 'none', border: 'none', color: '#8e8e93',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '2px 6px',
-              }}
-            >
-              Clear all
-            </button>
-          </div>
-
-          {examReminders.length === 0 && (
-            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-tertiary, #8e8e93)', fontSize: 13 }}>
-              All caught up! ✓
-            </div>
-          )}
-
-          {examReminders.map((r, i) => {
-            const isUrgent = r.daysSince === null || r.daysSince >= 45;
-            return (
-              <div
-                key={r.id}
-                style={{
-                  padding: '12px 16px',
-                  borderBottom: i < examReminders.length - 1 ? '1px solid var(--border-color, #f5f5f7)' : 'none',
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  cursor: onNavigate ? 'pointer' : 'default',
-                  background: isUrgent ? 'rgba(255,59,48,0.03)' : 'transparent',
-                  transition: 'background 0.15s',
-                }}
-                onClick={() => onNavigate && onNavigate(r.batchObj, r.studentObj)}
-              >
-                <div style={{
-                  width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                  background: isUrgent ? '#fff0f0' : '#fff8ee',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {isUrgent
-                    ? <AlertCircle size={18} color="#ff3b30" />
-                    : <AlertTriangle size={18} color="#ff9500" />
-                  }
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 14, fontWeight: 700,
-                    color: 'var(--text-primary, #1c1c1e)',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>
-                    {r.student}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary, #8e8e93)', marginTop: 2 }}>
-                    <BookOpen size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{r.batch} · {r.label}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {isUrgent && (
-                    <span style={{
-                      background: '#ff3b30', color: '#fff',
-                      fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
-                    }}>
-                      URGENT
-                    </span>
-                  )}
-                  <button
-                    onClick={(e) => dismiss(r.id, e)}
-                    style={{
-                      background: 'rgba(0,0,0,0.06)', border: 'none',
-                      borderRadius: '50%', width: 24, height: 24,
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 13, color: '#8e8e93', flexShrink: 0,
-                    }}
-                    title="Dismiss"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          <div style={{
-            padding: '10px 16px', background: 'var(--bg-secondary, #f9f9f9)',
-            borderTop: '1px solid var(--border-color, #f0f0f0)',
-            fontSize: 11, color: 'var(--text-tertiary, #8e8e93)', textAlign: 'center',
-          }}>
-            Tap a student to go to their profile · Dismissals reset on next session
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── LOGIN SCREEN ─────────────────────────────────────────────────────────────
-// NOTE: Credentials are no longer stored here. Authentication is handled by the
-// server (POST /api/auth/login). The frontend never sees any password.
+const ADMIN_USER = 'sagebulacan97';
+const ADMIN_PASS = 'July142018';
+const PHGIC_USER = 'PHGIC';
+const PHGIC_PASS = 'phgic';
+const SETOUCHI_USER = 'SETOUCHI';
+const SETOUCHI_PASS = 'setouchi';
+const WBC_USER = 'WBC';
+const WBC_PASS = 'wbc';
+const GYOUMUSUISHIN_USER = 'GYOUMUSUISHIN';
+const GYOUMUSUISHIN_PASS = 'gyoumusuishin';
+const GREENSERVICES_USER = 'GREEN SERVICES';
+const GREENSERVICES_PASS = 'greenservices';
+const SULOP_USER = 'SULOP';
+const SULOP_PASS = 'sulop';
 const AUTH_KEY = 'sage_auth';
 const ROLE_KEY = 'sage_role'; // 'admin' or 'viewer'
-const TOKEN_KEY = 'sage_token'; // server-issued session token
 
 const TEACHER_KEY = 'sage_teacher';
 
@@ -2756,56 +1965,19 @@ function TeacherSelect({ onSelect }) {
   const [loadingT, setLoadingT] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newEmoji, setNewEmoji] = useState('👩\u200d🏫');
+  const [newEmoji, setNewEmoji] = useState('👩‍🏫');
   const [saving, setSaving] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
-  const [globalQuery, setGlobalQuery] = useState('');
-  const [allBatches, setAllBatches] = useState([]);
-  const EMOJIS = ['\u{1F469}\u200d\u{1F3EB}','\u{1F468}\u200d\u{1F3EB}','\u{1F469}','\u{1F468}','\u{1F9D1}\u200d\u{1F3EB}'];
-
-  const [refreshing, setRefreshing] = useState(false);
-  const refreshAllBatches = () => {
-    setRefreshing(true);
-    fetch(`${API}/batches`)
-      .then(r => r.json())
-      .then(data => {
-        setAllBatches(Array.isArray(data) ? data : []);
-        setRefreshing(false);
-      })
-      .catch(() => setRefreshing(false));
-  };
+  const EMOJIS = ['👩‍🏫','👨‍🏫','👩','👨','🧑‍🏫'];
 
   useEffect(() => {
     fetch(`${API}/teachers`)
       .then(r => r.json())
       .then(data => { setTeachers(data); setLoadingT(false); })
       .catch(() => setLoadingT(false));
-    // Fetch ALL batches for global search (no teacher filter)
-    refreshAllBatches();
   }, []);
-
-  // Global search across ALL teachers and batches
-  const searchResults = globalQuery.trim().length >= 1 ? (() => {
-    const q = globalQuery.trim().toLowerCase();
-    const results = [];
-    allBatches.forEach(batch => {
-      batch.students
-        .filter(s => !s.isArchived)
-        .forEach(s => {
-          if (
-            s.name?.toLowerCase().includes(q) ||
-            s.companyName?.toLowerCase().includes(q) ||
-            s.kumiai?.toLowerCase().includes(q) ||
-            batch.name?.toLowerCase().includes(q)
-          ) {
-            results.push({ student: s, batch, isHiddenBatch: !!batch.isHiddenFromViewer });
-          }
-        });
-    });
-    return results.sort((a, b) => a.student.name.localeCompare(b.student.name));
-  })() : null;
 
   const addTeacher = async () => {
     if (!newName.trim()) return;
@@ -2849,117 +2021,7 @@ function TeacherSelect({ onSelect }) {
     <div className="teacher-screen">
       <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" />
       <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('selectTeacher')}</h2>
-      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16 }}>{t('tapNameToContinue')}</p>
-
-      {/* ── Global Search Bar ── */}
-      <div style={{ width: '100%', maxWidth: 400, marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }}><Search size={16} /></span>
-            <input
-              type="text"
-              value={globalQuery}
-              onChange={e => setGlobalQuery(e.target.value)}
-              onFocus={refreshAllBatches}
-              placeholder="Search any student across all teachers..."
-              style={{
-                width: '100%', boxSizing: 'border-box',
-                padding: '11px 36px 11px 38px',
-                borderRadius: 12, border: '1.5px solid var(--border-color, #e5e5ea)',
-                background: 'var(--bg-card, #fff)', color: 'var(--text-primary)',
-                fontSize: 15, outline: 'none',
-              }}
-            />
-            {globalQuery && (
-              <button onClick={() => setGlobalQuery('')} style={{
-                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: '50%',
-                width: 22, height: 22, cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}><X size={14} /></button>
-            )}
-          </div>
-          <button
-            onClick={() => { console.log('refresh clicked'); refreshAllBatches(); }}
-            style={{
-              flexShrink: 0, height: 40, borderRadius: 10, padding: '0 12px',
-              border: '1.5px solid var(--border-color, #e5e5ea)',
-              background: refreshing ? '#f0f0ff' : '#fff',
-              cursor: 'pointer', fontSize: 12, fontWeight: 600,
-              color: refreshing ? '#5856d6' : '#888',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {refreshing ? 'Refreshing...' : '↻ Refresh'}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Search Results ── */}
-      {searchResults !== null && (
-        <div style={{ width: '100%', maxWidth: 400, marginBottom: 16 }}>
-          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 8, fontWeight: 600 }}>
-            {searchResults.length === 0
-              ? `No results for "${globalQuery}"`
-              : `${searchResults.length} student${searchResults.length !== 1 ? 's' : ''} found`}
-          </p>
-          {searchResults.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-tertiary)', fontSize: 14 }}>
-              😕 No students found
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {searchResults.map(({ student, batch, isHiddenBatch }) => {
-                // Find which teacher owns this batch
-                const teacher = teachers.find(tc => tc._id === batch.teacherId);
-                const isOrphaned = !teacher;
-                return (
-                  <button
-                    key={student._id}
-                    onClick={() => {
-                      if (!isOrphaned) onSelect(teacher, student, batch);
-                    }}
-                    disabled={isOrphaned}
-                    title={isOrphaned ? 'Hindi na ma-access ang student na ito — maaaring na-delete na ang teacher o batch' : undefined}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '10px 14px', borderRadius: 12,
-                      border: `1.5px solid ${isOrphaned ? '#ffcccc' : 'var(--border-color, #e5e5ea)'}`,
-                      background: isOrphaned ? 'rgba(255,0,0,0.04)' : 'var(--bg-card, #fff)',
-                      cursor: isOrphaned ? 'not-allowed' : 'pointer',
-                      textAlign: 'left', width: '100%',
-                      opacity: isOrphaned ? 0.5 : 1,
-                    }}
-                  >
-                    <div style={{
-                      width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-                      background: 'var(--accent-light, #f0f0ff)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 18, fontWeight: 700, color: 'var(--accent)',
-                    }}>
-                      {student.photo
-                        ? <img src={student.photo} alt={student.name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
-                        : student.name?.[0]?.toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {student.name}
-                        {isOrphaned && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, background: '#ffcccc', color: '#c0392b', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>Unavailable</span>}
-                        {!isOrphaned && isHiddenBatch && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, background: 'rgba(255,149,0,0.15)', color: '#e67e00', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>Hidden from PHGIC</span>}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                        <BookOpen size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : isOrphaned ? ' · Teacher/batch no longer exists' : ''}
-                      </div>
-                    </div>
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: 18 }}>{isOrphaned ? '⚠️' : '›'}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>{t('tapNameToContinue')}</p>
       <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loadingT && <p className="loading-text">{t('loading')}</p>}
         {teachers.map(teacher => (
@@ -2970,7 +2032,7 @@ function TeacherSelect({ onSelect }) {
                   ? <img src={teacher.photo} alt={teacher.name} className="student-avatar" />
                   : <span style={{ fontSize: 34, lineHeight: 1 }}>{teacher.emoji}</span>
                 }
-                <span style={{ position: 'absolute', bottom: -2, right: -4, background: 'var(--accent)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}><MoreHorizontal size={10} /></span>
+                <span style={{ position: 'absolute', bottom: -2, right: -4, background: 'var(--accent)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>✎</span>
                 <input type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => e.target.files[0] && uploadTeacherPhoto(teacher._id, e.target.files[0])} />
               </label>
@@ -2989,7 +2051,7 @@ function TeacherSelect({ onSelect }) {
                   <input type="file" accept="image/*" style={{ display: 'none' }}
                     onChange={e => e.target.files[0] && uploadSignature(teacher._id, e.target.files[0])} />
                 </label>
-                <button onClick={() => setDeleteId(teacher._id)} className="delete-btn-icon"><X size={14} /></button>
+                <button onClick={() => setDeleteId(teacher._id)} className="delete-btn-icon">✕</button>
               </div>
             )}
           </div>
@@ -3019,7 +2081,7 @@ function TeacherSelect({ onSelect }) {
           </button>
         )}
       </div>
-      <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(TOKEN_KEY); safeLocalRemove(TEACHER_KEY); window.location.reload(); }}
+      <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(TEACHER_KEY); window.location.reload(); }}
         className="btn-logout" style={{ marginTop: 36 }}>
         {t('logout')}
       </button>
@@ -3039,32 +2101,39 @@ function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
   const passwordRef = useRef(null);
 
-  const handleLogin = async () => {
-    if (!username || !password) { setError('Please enter your username and password.'); return; }
-    setLoading(true); setError('');
-    try {
-      const res = await fetch(`${API}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.token) {
-        setError(data.error || 'Invalid username or password.');
-        return;
-      }
+  const handleLogin = () => {
+    if (username === ADMIN_USER && password === ADMIN_PASS) {
       safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, data.role);
-      safeLocalSet(TOKEN_KEY, data.token);
-      if (data.lang) safeLocalSet('sage_lang', data.lang);
-      onLogin(data.role);
-    } catch (e) {
-      setError('Cannot reach the server. Please check your connection and try again.');
-    } finally {
-      setLoading(false);
+      safeLocalSet(ROLE_KEY, 'admin');
+      onLogin('admin');
+    } else if (username === PHGIC_USER && password === PHGIC_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'viewer');
+      onLogin('viewer');
+    } else if (username === SETOUCHI_USER && password === SETOUCHI_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'setouchi');
+      onLogin('setouchi');
+    } else if (username === WBC_USER && password === WBC_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'wbc');
+      onLogin('wbc');
+    } else if (username === GYOUMUSUISHIN_USER && password === GYOUMUSUISHIN_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'gyoumusuishin');
+      onLogin('gyoumusuishin');
+    } else if (username === GREENSERVICES_USER && password === GREENSERVICES_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'greenservices');
+      onLogin('greenservices');
+    } else if (username === SULOP_USER && password === SULOP_PASS) {
+      safeLocalSet(AUTH_KEY, 'true');
+      safeLocalSet(ROLE_KEY, 'sulop');
+      onLogin('sulop');
+    } else {
+      setError('Invalid username or password.');
     }
   };
 
@@ -3095,12 +2164,12 @@ function LoginScreen({ onLogin }) {
               placeholder="Enter password"
             />
             <button onClick={() => setShowPass(p => !p)} className="password-toggle">
-              {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showPass ? '🙈' : '👁️'}
             </button>
           </div>
         </div>
-        {error && <p className="error-text">{error}</p>}
-        <button onClick={handleLogin} disabled={loading} className="btn-primary" style={{ marginTop: 8, opacity: loading ? 0.7 : 1 }}>{loading ? '…' : t('login')}</button>
+        {error && <p className="error-text">{t('invalidCredentials')}</p>}
+        <button onClick={handleLogin} className="btn-primary" style={{ marginTop: 8 }}>{t('login')}</button>
       </div>
     </div>
   );
@@ -3176,363 +2245,6 @@ function SplashScreen({ onDone }) {
   );
 }
 
-// ── PARENT QR POPUP ────────────────────────────────────────────────────────────
-function ParentQRPopup({ student, batch, teacher, onClose }) {
-  const [expiresAt, setExpiresAt] = useState(() => {
-    // Default: 7 days from now
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().split('T')[0];
-  });
-  const [generating, setGenerating] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState(null);
-  const [tokenInfo, setTokenInfo] = useState(null);
-  const [error, setError] = useState('');
-
-  const generate = async () => {
-    setGenerating(true); setError(''); setQrDataUrl(null); setTokenInfo(null);
-    try {
-      const expiry = new Date(expiresAt);
-      expiry.setHours(23, 59, 59, 999); // end of chosen day
-      const res = await fetch(`${API}/parent-token/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchId: batch._id,
-          studentId: student._id,
-          expiresAt: expiry.toISOString(),
-          createdBy: teacher?.name || 'Admin',
-        }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      const url = `${window.location.origin}/open.html?view=${data.token}`;
-      const dataUrl = await QRCode.toDataURL(url, { width: 360, margin: 2 });
-      setQrDataUrl(dataUrl);
-      setTokenInfo({ url, expiresAt: new Date(data.expiresAt) });
-    } catch (err) {
-      setError(err.message);
-    }
-    setGenerating(false);
-  };
-
-  const copyLink = () => {
-    if (tokenInfo?.url) {
-      navigator.clipboard.writeText(tokenInfo.url).then(() => alert('Link copied!')).catch(() => {});
-    }
-  };
-
-  const formatDate = (d) => d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999,
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-    }} onClick={onClose}>
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--bg-card, #fff)', borderRadius: '20px 20px 0 0',
-          padding: '24px 20px 40px', width: '100%', maxWidth: 480,
-          maxHeight: '90vh', overflowY: 'auto',
-          boxShadow: '0 -4px 32px rgba(0,0,0,0.18)',
-        }}
-      >
-        {/* Handle */}
-        <div style={{ width: 36, height: 4, background: '#e5e5ea', borderRadius: 2, margin: '0 auto 20px' }} />
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          {student.photo
-            ? <img src={student.photo} alt={student.name} style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
-            : <span style={{ }}><User size={36} strokeWidth={1.2} /></span>
-          }
-          <div>
-            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
-            <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-tertiary, #8e8e93)' }}><BookOpen size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />{batch.name}</p>
-          </div>
-        </div>
-
-        {/* Expiry picker */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'block', marginBottom: 6 }}>
-            📅 QR Expiration Date
-          </label>
-          <input
-            type="date"
-            value={expiresAt}
-            min={new Date().toISOString().split('T')[0]}
-            onChange={e => { setExpiresAt(e.target.value); setQrDataUrl(null); setTokenInfo(null); }}
-            style={{
-              width: '100%', boxSizing: 'border-box', padding: '11px 14px',
-              borderRadius: 10, border: '1.5px solid #e5e5ea',
-              fontSize: 15, background: 'var(--bg-card, #fff)',
-              color: 'var(--text-primary, #1c1c1e)',
-            }}
-          />
-          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-tertiary, #8e8e93)', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <AlertTriangle size={12} /> After this date, the QR code will no longer work.
-          </p>
-        </div>
-
-        {/* Info box */}
-        <div style={{ background: '#f0f7ff', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1565c0', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <Users size={14} style={{ marginTop: 1, flexShrink: 0 }} />
-          The parent can view all exam scores and scanned papers of <strong>{student.name}</strong> without logging in. No editing allowed.
-        </div>
-
-        {error && (
-          <div style={{ background: '#fff3f3', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#c62828', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertCircle size={14} /> {error}
-          </div>
-        )}
-
-        {/* Generated QR */}
-        {qrDataUrl && tokenInfo && (
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{
-              background: '#fff', borderRadius: 16, padding: 16, display: 'inline-block',
-              boxShadow: '0 2px 16px rgba(0,0,0,0.1)', marginBottom: 12,
-            }}>
-              <img src={qrDataUrl} alt="Parent QR Code" style={{ width: 200, height: 200, display: 'block' }} />
-            </div>
-            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <CheckCircle size={14} color="#2e7d32" /> QR ready to share!
-            </p>
-            <p style={{ margin: '0 0 12px', fontSize: 12, color: '#8e8e93' }}>
-              Expires: <strong>{formatDate(tokenInfo.expiresAt)}</strong>
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={copyLink}
-                style={{
-                  flex: 1, padding: '12px', borderRadius: 10,
-                  background: '#007AFF', color: '#fff', border: 'none',
-                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                }}
-              >🔗 Copy Link</button>
-              <a
-                href={qrDataUrl}
-                download={`${student.name}-parent-qr.png`}
-                style={{
-                  flex: 1, padding: '12px', borderRadius: 10,
-                  background: '#34C759', color: '#fff', border: 'none',
-                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                  textDecoration: 'none', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >⬇️ Save QR</a>
-            </div>
-          </div>
-        )}
-
-        <button
-          onClick={generate}
-          disabled={generating || !expiresAt}
-          style={{
-            width: '100%', padding: '15px',
-            background: generating ? '#e5e5ea' : 'linear-gradient(135deg, #8B0000, #c0392b)',
-            color: generating ? '#8e8e93' : '#fff',
-            border: 'none', borderRadius: 12,
-            fontSize: 16, fontWeight: 700,
-            cursor: generating ? 'default' : 'pointer',
-          }}
-        >
-          {generating
-            ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6, verticalAlign: 'middle' }} />Generating...</>
-            : qrDataUrl
-              ? <><RefreshCw size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Regenerate</>
-              : <><KeyRound size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Generate Parent QR</>
-          }
-        </button>
-
-        <button onClick={onClose} style={{
-          width: '100%', marginTop: 10, padding: '13px',
-          background: 'none', border: '1.5px solid #e5e5ea',
-          borderRadius: 12, fontSize: 15, color: '#8e8e93',
-          cursor: 'pointer', fontWeight: 600,
-        }}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
-// ── PARENT VIEW PAGE (no login required) ──────────────────────────────────────
-function ParentView({ data, token }) {
-  const [resolvedImgs, setResolvedImgs] = useState({});
-  const [imageViewer, setImageViewer] = useState(null);
-
-  const { student, batch, expiresAt } = data;
-  const expiry = new Date(expiresAt);
-
-  // Resolve image IDs to URLs
-  useEffect(() => {
-    const allIds = [];
-    student.categories.forEach(cat =>
-      cat.items.forEach(item =>
-        (item.images || []).forEach(id => {
-          if (id && !id.startsWith('data:') && !id.startsWith('http')) allIds.push(id);
-        })
-      )
-    );
-    if (!allIds.length) return;
-    fetch(`${API}/images/bulk`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: allIds }),
-    }).then(r => r.json()).then(map => setResolvedImgs(map)).catch(() => {});
-  }, []);
-
-  const resolveImg = (id) => {
-    if (!id) return null;
-    if (id.startsWith('data:') || id.startsWith('http')) return id;
-    return resolvedImgs[id] || null;
-  };
-
-  const formatDate = (d) => new Date(d).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-  const daysLeft = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
-
-  return (
-    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', background: '#f2f2f7', minHeight: '100vh' }}>
-      {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, #8B0000, #c0392b)',
-        padding: '24px 20px 20px',
-        paddingTop: 'env(safe-area-inset-top, 24px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-          {student.photo
-            ? <img src={student.photo} alt={student.name} style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(255,255,255,0.3)' }} />
-            : <span style={{ }}><User size={48} strokeWidth={1.2} /></span>
-          }
-          <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#fff' }}>{student.name}</h1>
-            <p style={{ margin: '3px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}><BookOpen size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />{batch.name}</p>
-            {student.companyName && <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}><Building2 size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{student.companyName}</p>}
-          </div>
-        </div>
-        {/* Expiry badge */}
-        <div style={{
-          background: daysLeft <= 1 ? 'rgba(255,59,48,0.25)' : 'rgba(255,255,255,0.15)',
-          borderRadius: 10, padding: '8px 14px', fontSize: 12, color: '#fff',
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          <span>{daysLeft <= 1 ? <AlertTriangle size={14} /> : <Lock size={14} />}</span>
-          <span>
-            {daysLeft <= 0 ? 'Expires today' : `View access expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`} · {formatDate(expiry)}
-          </span>
-        </div>
-      </div>
-
-      {/* Read-only badge */}
-      <div style={{ background: '#fff', padding: '10px 20px', borderBottom: '1px solid #e5e5ea', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Eye size={14} color="#8e8e93" />
-        <span style={{ fontSize: 13, color: '#8e8e93' }}>View only · Shared by Sage Asian Japanese Language School</span>
-      </div>
-
-      <div style={{ padding: '16px' }}>
-        {student.categories.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
-            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><FileText size={48} strokeWidth={1} /></div>
-            <p>No exam records yet.</p>
-          </div>
-        )}
-
-        {student.categories.map(cat => {
-          const items = cat.items || [];
-          const avg = items.length
-            ? Math.round(items.reduce((s, i) => s + ((i.score / i.totalScore) * 100), 0) / items.length)
-            : null;
-          return (
-            <div key={cat._id} style={{ marginBottom: 20 }}>
-              {/* Category header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1c1c1e' }}><Folder size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{cat.name}</h2>
-                {avg !== null && (
-                  <span style={{
-                    background: avg >= 60 ? '#e8f5e9' : '#ffebee',
-                    color: avg >= 60 ? '#2e7d32' : '#c62828',
-                    fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20,
-                  }}>avg {avg}%</span>
-                )}
-              </div>
-
-              {items.length === 0 && (
-                <p style={{ fontSize: 13, color: '#8e8e93', padding: '10px 0' }}>No exams yet.</p>
-              )}
-
-              {items.map(item => {
-                const pct = Math.round((item.score / item.totalScore) * 100);
-                const pass = pct >= 60;
-                const imgs = (item.images || []).map(resolveImg).filter(Boolean);
-                return (
-                  <div key={item._id} style={{
-                    background: '#fff', borderRadius: 14, padding: '14px 16px',
-                    marginBottom: 10, boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: imgs.length ? 12 : 0 }}>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1c1c1e' }}>{item.name}</p>
-                        {item.date && <p style={{ margin: '3px 0 0', fontSize: 12, color: '#8e8e93' }}>📅 {item.date}</p>}
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                        <div style={{
-                          fontSize: 20, fontWeight: 800,
-                          color: pass ? '#2e7d32' : '#c62828',
-                        }}>{item.score}<span style={{ fontSize: 13, fontWeight: 500, color: '#8e8e93' }}>/{item.totalScore}</span></div>
-                        <div style={{
-                          fontSize: 12, fontWeight: 700,
-                          background: pass ? '#e8f5e9' : '#ffebee',
-                          color: pass ? '#2e7d32' : '#c62828',
-                          padding: '2px 8px', borderRadius: 12, marginTop: 2,
-                        }}>{pct}%</div>
-                      </div>
-                    </div>
-
-                    {/* Exam paper thumbnails */}
-                    {imgs.length > 0 && (
-                      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                        {imgs.map((src, i) => (
-                          <img
-                            key={i}
-                            src={src}
-                            alt={`Page ${i + 1}`}
-                            onClick={() => setImageViewer({ images: imgs, index: i })}
-                            style={{
-                              width: 80, height: 100, objectFit: 'cover',
-                              borderRadius: 8, flexShrink: 0,
-                              border: '1px solid #e5e5ea', cursor: 'zoom-in',
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Footer */}
-      <div style={{ textAlign: 'center', padding: '20px', color: '#c7c7cc', fontSize: 12 }}>
-        <img src="data:image/png;base64,iVBORw0KGgo=" alt="" style={{ display: 'none' }} />
-        <BookOpen size={13} style={{ marginRight: 6, verticalAlign: "middle" }} />Sage Asian Japanese Language School<br />
-        This link expires on {formatDate(expiry)}
-      </div>
-
-      {imageViewer && (
-        <ImageViewer
-          images={imageViewer.images}
-          startIndex={imageViewer.index}
-          onClose={() => setImageViewer(null)}
-        />
-      )}
-    </div>
-  );
-}
-
 function App() {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -3544,13 +2256,6 @@ function App() {
   const [selectedExam, setSelectedExam] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
-  // ── Move-student-to-another-batch feature ──
-  const [showMoveModal, setShowMoveModal] = useState(false);
-  const [moveTargetBatchId, setMoveTargetBatchId] = useState('');
-  const [moving, setMoving] = useState(false);
-  const [allBatchesForMove, setAllBatchesForMove] = useState([]); // ALL batches across every teacher (global)
-  const [moveTeacherMap, setMoveTeacherMap] = useState({});       // teacherId -> teacher name (for labelling)
-  const [loadingMoveBatches, setLoadingMoveBatches] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [newName, setNewName] = useState('');
   const [newExamName, setNewExamName] = useState('');
@@ -3573,21 +2278,11 @@ function App() {
   const [printQRs, setPrintQRs] = useState(null);
   const [pendingDeepLink, setPendingDeepLink] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
-  const [showQRScanner, setShowQRScanner] = useState(false);
-  const [showQuickAddExam, setShowQuickAddExam] = useState(false);
   const [scanningExamId, setScanningExamId] = useState(null);
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
   const [resolvedImages, setResolvedImages] = useState({}); // imageId -> base64
   const imageCache = useRef({}); // in-memory cache
   const [selectedCategory, setSelectedCategory] = useState(null);
-  // ── Exam reorder (long-press drag-and-drop) ───────────────────────────────
-  const [reorderMode, setReorderMode] = useState(false);
-  const [dragItems, setDragItems] = useState([]);
-  const [draggingIdx, setDraggingIdx] = useState(null);
-  const [dragOverIdx, setDragOverIdx] = useState(null);
-  const longPressTimer = useRef(null);
-  const dragStartY = useRef(null);
-  const itemRefs = useRef([]);
   const [evaluations, setEvaluations] = useState([]); // per-student evaluations
   const [selectedEvaluation, setSelectedEvaluation] = useState(null);
   const [evalTitle, setEvalTitle] = useState('');
@@ -3610,15 +2305,9 @@ function App() {
   const PULL_THRESHOLD = 80;
   const [showSettings, setShowSettings] = useState(false);
   const [showProgressChart, setShowProgressChart] = useState(false);
-  const [globalSearch, setGlobalSearch] = useState('');
   const [progressChartStudent, setProgressChartStudent] = useState(null);
-  const [showParentQR, setShowParentQR] = useState(false); // parent QR popup
-  const [parentQRStudent, setParentQRStudent] = useState(null);
-  const [parentViewToken, setParentViewToken] = useState(null); // token from URL for parent view
-  const [parentViewData, setParentViewData] = useState(null); // { student, batch, expiresAt }
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
   const [isViewer, setIsViewer] = useState(() => ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(safeLocalGet(ROLE_KEY)));
-  const [isKazumi, setIsKazumi] = useState(() => safeLocalGet(ROLE_KEY) === 'kazumi');
   const [isStudentView, setIsStudentView] = useState(false);
   const [qrPasswordPrompt, setQrPasswordPrompt] = useState(null); // { batchId, studentId } — pending QR scan awaiting password
   const [qrPassInput, setQrPassInput] = useState('');
@@ -3628,53 +2317,26 @@ function App() {
     return s ? JSON.parse(s) : null;
   });
 
-  // ── Smart push notifications (teachers + admin only) ──────────────────────
-  usePushNotifications(isLoggedIn, isViewer);
-
   const fileInputRef = useRef(null);
   const studentPhotoInputRef = useRef(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-
-    // ── Parent view via token ─────────────────────────────────────────────
-    const token = params.get('view');
-    if (token) {
-      setParentViewToken(token);
-      // Fetch token data from server
-      fetch(`${API}/parent-token/${token}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.valid) setParentViewData(data);
-          else setParentViewData({ expired: true });
-        })
-        .catch(() => setParentViewData({ expired: true }));
-      return; // don't proceed with normal auth flow
-    }
-
     const batchId = params.get('batch');
     const studentId = params.get('student');
     const isPhgicScan = params.get('phgic') === '1';
     if (batchId && studentId) {
       if (isPhgicScan) {
-        // QR scan — if already logged in (any role), go straight in with their existing role
-        const alreadyLoggedIn = safeLocalGet(AUTH_KEY) === 'true';
-        if (alreadyLoggedIn) {
-          const role = safeLocalGet(ROLE_KEY);
-          const viewerRoles = ['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'];
-          const asViewer = viewerRoles.includes(role);
+        // QR scan — require password before granting access
+        const alreadyAuthed = safeLocalGet(AUTH_KEY) === 'true' && safeLocalGet(ROLE_KEY) === 'viewer';
+        if (alreadyAuthed) {
+          // Already verified this session, let them in
           setIsLoggedIn(true);
-          setIsViewer(asViewer);
-          setIsKazumi(role === 'kazumi');
+          setIsViewer(true);
           setPendingDeepLink({ batchId, studentId });
-          if (asViewer) fetchBatches(null);
-          else {
-            const teacher = safeLocalGet(TEACHER_KEY);
-            if (teacher) fetchBatches(JSON.parse(teacher)._id);
-            else fetchBatches(null);
-          }
+          fetchBatches(null);
         } else {
-          // Not logged in — show password prompt, store pending link
+          // Show password prompt, store pending link
           setQrPasswordPrompt({ batchId, studentId });
         }
       } else {
@@ -3711,40 +2373,6 @@ function App() {
     }
   }, []);
 
-  // ── SESSION VALIDATION ──────────────────────────────────────────────────────
-  // On load, confirm the stored token is still valid with the server. If the
-  // password was changed (token rotated) or the token is missing/expired, the
-  // session is cleared and the user is sent back to the login screen.
-  useEffect(() => {
-    const isAuth = safeLocalGet(AUTH_KEY) === 'true';
-    if (!isAuth) return;
-    const token = safeLocalGet(TOKEN_KEY);
-    const forceLogout = () => {
-      safeLocalRemove(AUTH_KEY);
-      safeLocalRemove(ROLE_KEY);
-      safeLocalRemove(TOKEN_KEY);
-      safeLocalRemove(TEACHER_KEY);
-      setIsLoggedIn(false);
-      setIsViewer(false);
-      setIsKazumi(false);
-      setBatches([]);
-    };
-    // Legacy session created before server auth existed → require fresh login
-    if (!token) { forceLogout(); return; }
-    fetch(`${API}/auth/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    })
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('invalid'))))
-      .then(d => {
-        if (!d.valid) { forceLogout(); return; }
-        if (d.role) safeLocalSet(ROLE_KEY, d.role); // keep role authoritative from server
-      })
-      .catch(() => forceLogout());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     applyDarkMode(darkMode);
     try { localStorage.setItem('sage_dark', darkMode); } catch {}
@@ -3766,7 +2394,6 @@ function App() {
       // Sort by most recently created first (MongoDB _id contains timestamp)
       data.sort((a, b) => (b._id > a._id ? 1 : -1));
       setBatches(data);
-      return data; // allow callers to .then(batches => ...)
       // Fetch all teachers to resolve signatures
       try {
         const tRes = await fetch(`${API}/teachers/with-signatures`);
@@ -3786,7 +2413,7 @@ function App() {
 
   useEffect(() => {
     if (!pendingDeepLink || batches.length === 0) return;
-    const { batchId, studentId, openQuickAdd } = pendingDeepLink;
+    const { batchId, studentId } = pendingDeepLink;
     const batch = batches.find(b => b._id === batchId);
     if (!batch) return;
     const student = batch.students.find(s => s._id === studentId);
@@ -3795,8 +2422,6 @@ function App() {
     setSelectedStudent(student);
     setView('categories');
     setPendingDeepLink(null);
-    // If triggered from QR scan, open Quick Add Exam modal
-    if (openQuickAdd) setTimeout(() => setShowQuickAddExam(true), 150);
   }, [pendingDeepLink, batches]);
 
   const updateBatchInState = (updatedBatch) => {
@@ -3908,7 +2533,7 @@ function App() {
         setView('batches'); setSelectedStudent(null); setSelectedBatch(null);
       } else { setView('students'); setSelectedStudent(null); }
     }
-    else if (view === 'students') { setView('batches'); setSelectedBatch(null); setGlobalSearch(''); }
+    else if (view === 'students') { setView('batches'); setSelectedBatch(null); }
   };
 
   const openModal = (type) => {
@@ -3936,38 +2561,18 @@ function App() {
     setNewName(''); setNewExamName(''); setNewScore(''); setNewTotalScore(''); setNewStudentPhoto(null); setNewStudentStatus('Regular'); setNewCompanyName(''); setNewKumiai(''); setNewNameJa(''); setNewExamDate(''); setNewScholarship('no'); setNewScholarshipType('');
   };
 
-  // Upload student photo to Cloudinary via server, returns updated batch.
-  // This keeps MongoDB lean — only the Cloudinary URL is stored, not raw base64.
-  const uploadStudentPhoto = async (batchId, studentId, base64Photo) => {
-    const res = await fetch(`${API}/batches/${batchId}/students/${studentId}/photo`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ photo: base64Photo })
-    });
-    if (!res.ok) throw new Error('Photo upload failed');
-    return res.json();
-  };
-
-  // Returns true if the photo value is a newly picked local file (base64),
-  // as opposed to an already-uploaded Cloudinary URL from a previous save.
-  const isNewPhoto = (photo) => photo && photo.startsWith('data:');
-
   const updateStudent = async () => {
     if (!newName || !editingStudent) return;
     setSaving(true);
     try {
-      // Step 1: save name/status/etc. — photo handled separately below
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${editingStudent._id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
+        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
       });
-      let updatedBatch = await res.json();
-      // Step 2: only upload if user picked a NEW photo (base64) — skip if it's already a Cloudinary URL
-      if (isNewPhoto(newStudentPhoto)) {
-        updatedBatch = await uploadStudentPhoto(selectedBatch._id, editingStudent._id, newStudentPhoto);
-      }
+      const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       closeModal();
-    } catch (err) { alert('Error updating student: ' + (err.message || '')); }
+    } catch { alert('Error updating student.'); }
     setSaving(false);
   };
 
@@ -3990,22 +2595,14 @@ function App() {
     if (!newName || !selectedBatch) return;
     setSaving(true);
     try {
-      // Step 1: create student without photo first (gets an _id back)
       const res = await fetch(`${API}/batches/${selectedBatch._id}/students`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
+        body: JSON.stringify({ name: newName, photo: newStudentPhoto, status: newStudentStatus, companyName: newCompanyName, kumiai: newKumiai, scholarship: newScholarship, scholarshipType: newScholarship === 'yes' ? newScholarshipType : '' })
       });
-      let updatedBatch = await res.json();
-      // Step 2: if a new photo was picked, upload to Cloudinary now that we have a studentId
-      if (isNewPhoto(newStudentPhoto)) {
-        const newStudent = updatedBatch.students[updatedBatch.students.length - 1];
-        if (newStudent?._id) {
-          updatedBatch = await uploadStudentPhoto(selectedBatch._id, newStudent._id, newStudentPhoto);
-        }
-      }
+      const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
       closeModal();
-    } catch (err) { alert('Error saving student: ' + (err.message || '')); }
+    } catch { alert('Error saving student.'); }
     setSaving(false);
   };
 
@@ -4071,66 +2668,6 @@ function App() {
       const updatedBatch = await res.json();
       updateBatchInState(updatedBatch);
     } catch { alert('Error deleting student.'); }
-  };
-
-  // Open the move modal and load EVERY batch (all teachers), not just the current teacher's
-  const openMoveModal = async () => {
-    setMoveTargetBatchId('');
-    setShowMoveModal(true);
-    setLoadingMoveBatches(true);
-    try {
-      const [bRes, tRes] = await Promise.all([
-        fetch(`${API}/batches`),   // no teacherId → global list of all batches
-        fetch(`${API}/teachers`),
-      ]);
-      const bData = await bRes.json();
-      setAllBatchesForMove(Array.isArray(bData) ? bData : []);
-      try {
-        const tData = await tRes.json();
-        const map = {};
-        (Array.isArray(tData) ? tData : []).forEach(tc => { map[tc._id] = tc.name; });
-        setMoveTeacherMap(map);
-      } catch {}
-    } catch {
-      // Fallback: at least show whatever is already loaded for this teacher
-      setAllBatchesForMove(batches);
-    } finally {
-      setLoadingMoveBatches(false);
-    }
-  };
-
-  const moveStudent = async () => {
-    if (!moveTargetBatchId) { alert('Please pick a destination batch first.'); return; }
-    if (moveTargetBatchId === selectedBatch._id) { alert('Student is already in this batch.'); return; }
-    const target = batches.find(b => b._id === moveTargetBatchId);
-    if (!window.confirm(`Move ${selectedStudent.name} (with all records, exams, and images) to "${target?.name || 'the selected batch'}"?`)) return;
-    setMoving(true);
-    try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/move`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetBatchId: moveTargetBatchId })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) { alert('Error: ' + (data.error || 'Could not move student.')); return; }
-      // Replace BOTH affected batches in local state
-      setBatches(prev => prev.map(b =>
-        b._id === data.sourceBatch._id ? data.sourceBatch
-          : b._id === data.targetBatch._id ? data.targetBatch
-            : b
-      ));
-      // Keep viewing the source batch's student list (student is gone from here now)
-      setSelectedBatch(data.sourceBatch);
-      setSelectedStudent(null);
-      setShowMoveModal(false);
-      setMoveTargetBatchId('');
-      setView('students');
-      alert(`✅ ${data.targetBatch.students.find(s => s._id === selectedStudent._id)?.name || 'Student'} moved to "${data.targetBatch.name}".`);
-    } catch (e) {
-      alert('Failed: ' + e.message);
-    } finally {
-      setMoving(false);
-    }
   };
 
   const toggleStudentStatus = async (student, e) => {
@@ -4364,62 +2901,9 @@ function App() {
     }
     e.target.value = '';
   };
-  const handleQRResult = (url) => {
-    setShowQRScanner(false);
-    try {
-      const u = new URL(url);
-      const batchId   = u.searchParams.get('batch');
-      const studentId = u.searchParams.get('student');
-      const isPhgic   = u.searchParams.get('phgic') === '1';
-      if (batchId && studentId && isPhgic) {
-        const batch = batches.find(b => b._id === batchId);
-        if (batch) {
-          const student = batch.students.find(s => s._id === studentId);
-          if (student) {
-            setSelectedBatch(batch);
-            setSelectedStudent(student);
-            setView('categories');
-            // Open Quick Add Exam modal after navigation
-            setTimeout(() => setShowQuickAddExam(true), 150);
-            return;
-          }
-        }
-        // Batch not loaded yet — deeplink flow, modal opens after load
-        setPendingDeepLink({ batchId, studentId, openQuickAdd: true });
-        fetchBatches(isViewer ? null : (safeLocalGet(TEACHER_KEY) ? JSON.parse(safeLocalGet(TEACHER_KEY))._id : null));
-      }
-    } catch { alert('Invalid QR code.'); }
-  };
-
   const openScanner = (examId) => {
     setScanningExamId(examId);
     setShowScanner(true);
-  };
-
-  const handleQuickAddExamSave = async ({ category, examNameEn, examNameJa, score, totalScore, date }) => {
-    if (!selectedStudent || !selectedBatch || !category) return;
-    try {
-      const res = await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${category._id}/items`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: examNameEn, name_ja: examNameJa, score, totalScore, date })
-      });
-      const newItem = await res.json();
-      const updatedCat = { ...category, items: [...(category.items || []), newItem] };
-      const updatedStudent = {
-        ...selectedStudent,
-        categories: selectedStudent.categories.map(c => c._id === category._id ? updatedCat : c)
-      };
-      setSelectedStudent(updatedStudent);
-      setBatches(prev => prev.map(b => b._id === selectedBatch._id ? {
-        ...b, students: b.students.map(s => s._id === selectedStudent._id ? updatedStudent : s)
-      } : b));
-      setShowQuickAddExam(false);
-      // Navigate directly to the new exam — ready to scan
-      setSelectedCategory(updatedCat);
-      setSelectedExam(newItem);
-      resolveExamImages(newItem);
-      setView('examDetail');
-    } catch { alert('Error saving exam.'); }
   };
 
   const handleScanCapture = async (imageDataOrArray) => {
@@ -4505,39 +2989,13 @@ function App() {
       : selectedBatch.students;
     const results = await Promise.all(
       studentsToGenerate.map(async (student) => {
-        const url = `${window.location.origin}/open.html?phgic=1&batch=${selectedBatch._id}&student=${student._id}`;
+        const url = `${window.location.origin}${window.location.pathname}?phgic=1&batch=${selectedBatch._id}&student=${student._id}`;
         const dataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2 });
         return { name: student.name, photo: student.photo, dataUrl };
       })
     );
     setPrintQRs(results);
   };
-
-  // ── Parent view (token-based, no login) ─────────────────────────────────
-  if (parentViewToken) {
-    if (!parentViewData) return (
-      <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#8B0000', animation: `dotPulse 1.1s ease-in-out ${i*0.18}s infinite` }} />)}
-        </div>
-        <p style={{ color: '#8e8e93', fontSize: 14 }}>Loading student record...</p>
-        <style>{`@keyframes dotPulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }`}</style>
-      </div>
-    );
-    if (parentViewData.expired) return (
-      <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', padding: '40px 24px', textAlign: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
-        <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center', color: '#8e8e93' }}><Lock size={72} strokeWidth={1.5} /></div>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1c1c1e', margin: '0 0 10px' }}>Link Expired</h1>
-        <p style={{ fontSize: 15, color: '#8e8e93', margin: 0, lineHeight: 1.6 }}>
-          This QR code has expired or is no longer valid.<br />Please ask the teacher to generate a new one.
-        </p>
-        <div style={{ marginTop: 32, padding: '14px 20px', background: '#fff', borderRadius: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', fontSize: 13, color: '#8e8e93', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <BookOpen size={14} /> Sage Asian Japanese Language School
-        </div>
-      </div>
-    );
-    return <ParentView data={parentViewData} token={parentViewToken} />;
-  }
 
   if (showSplash) return (
     <SplashScreen onDone={() => setShowSplash(false)} />
@@ -4555,36 +3013,9 @@ function App() {
   );
 
   // QR scan password prompt — show before anything else if pending
-  // QR admin gate — verify the admin password against the server (no password in the client)
-  const submitQrPassword = async () => {
-    try {
-      const res = await fetch(`${API}/auth/check-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'admin', password: qrPassInput }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok || !data.token) {
-        setQrPassError('Incorrect password. Please try again.');
-        return;
-      }
-      safeLocalSet(AUTH_KEY, 'true');
-      safeLocalSet(ROLE_KEY, 'admin');
-      safeLocalSet(TOKEN_KEY, data.token);
-      setIsLoggedIn(true);
-      setIsViewer(false);
-      setPendingDeepLink(qrPasswordPrompt);
-      setQrPasswordPrompt(null);
-      setQrPassInput('');
-      fetchBatches(null);
-    } catch (e) {
-      setQrPassError('Cannot reach the server. Please try again.');
-    }
-  };
-
   if (qrPasswordPrompt) return (
     <div style={{ minHeight: '100vh', background: '#f2f2f7', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', color: '#8B0000' }}><Lock size={56} strokeWidth={1.5} /></div>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>🔒</div>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1c1c1e', marginBottom: 6, textAlign: 'center' }}>Access Required</h2>
       <p style={{ fontSize: 14, color: '#8e8e93', marginBottom: 28, textAlign: 'center' }}>Enter the password to view this student's record.</p>
       <div style={{ width: '100%', maxWidth: 340, background: '#fff', borderRadius: 16, padding: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
@@ -4593,7 +3024,20 @@ function App() {
           value={qrPassInput}
           onChange={e => { setQrPassInput(e.target.value); setQrPassError(''); }}
           onKeyDown={e => {
-            if (e.key === 'Enter') submitQrPassword();
+            if (e.key === 'Enter') {
+              if (qrPassInput === PHGIC_PASS) {
+                safeLocalSet(AUTH_KEY, 'true');
+                safeLocalSet(ROLE_KEY, 'viewer');
+                setIsLoggedIn(true);
+                setIsViewer(true);
+                setPendingDeepLink(qrPasswordPrompt);
+                setQrPasswordPrompt(null);
+                setQrPassInput('');
+                fetchBatches(null);
+              } else {
+                setQrPassError('Incorrect password. Please try again.');
+              }
+            }
           }}
           placeholder="Enter password"
           autoFocus
@@ -4601,7 +3045,20 @@ function App() {
         />
         {qrPassError && <p style={{ color: '#ff3b30', fontSize: 13, margin: '0 0 10px', textAlign: 'center' }}>{qrPassError}</p>}
         <button
-          onClick={submitQrPassword}
+          onClick={() => {
+            if (qrPassInput === PHGIC_PASS) {
+              safeLocalSet(AUTH_KEY, 'true');
+              safeLocalSet(ROLE_KEY, 'viewer');
+              setIsLoggedIn(true);
+              setIsViewer(true);
+              setPendingDeepLink(qrPasswordPrompt);
+              setQrPasswordPrompt(null);
+              setQrPassInput('');
+              fetchBatches(null);
+            } else {
+              setQrPassError('Incorrect password. Please try again.');
+            }
+          }}
           style={{ width: '100%', background: '#8B0000', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
           View Record
         </button>
@@ -4614,32 +3071,19 @@ function App() {
     <LoginScreen onLogin={(role) => {
       setIsLoggedIn(true);
       setIsViewer(['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role));
-      setIsKazumi(role === 'kazumi');
-      // kazumi sees teacher select then fetches that teacher's batches
       if (['viewer','setouchi','wbc','gyoumusuishin','greenservices','sulop'].includes(role)) fetchBatches(null);
-      else if (role !== 'kazumi') {
+      else {
         const teacher = safeLocalGet(TEACHER_KEY);
         if (teacher) fetchBatches(JSON.parse(teacher)._id);
       }
-      // kazumi: wait for TeacherSelect, batches fetched after teacher picked
     }} />
   );
 
-  if ((!isViewer || isKazumi) && !selectedTeacher) return (
-    <TeacherSelect onSelect={(t, pendingStudent, pendingBatch) => {
+  if (!isViewer && !selectedTeacher) return (
+    <TeacherSelect onSelect={(t) => {
       safeLocalSet(TEACHER_KEY, JSON.stringify(t));
       setSelectedTeacher(t);
-      if (pendingStudent && pendingBatch) {
-        fetchBatches(t._id).then(loadedBatches => {
-          const freshBatch = (loadedBatches || []).find(b => b._id === pendingBatch._id) || pendingBatch;
-          const freshStudent = freshBatch.students?.find(s => s._id === pendingStudent._id) || pendingStudent;
-          setSelectedBatch(freshBatch);
-          setSelectedStudent(freshStudent);
-          setView('categories');
-        });
-      } else {
-        fetchBatches(t._id);
-      }
+      fetchBatches(t._id);
     }} />
   );
 
@@ -4678,9 +3122,9 @@ function App() {
       const students = selectedCompany.students.filter(s => !s.isArchived).slice().sort((a, b) => a.name.localeCompare(b.name));
       return (
         <>
-          <button className="back-btn" onClick={() => setSelectedCompany(null)}><ArrowLeft size={18} /></button>
+          <button className="back-btn" onClick={() => setSelectedCompany(null)}>←</button>
           <div className="header-with-back">
-            <h1 className="title"><Building2 size={22} style={{ marginRight: 8, verticalAlign: "middle" }} />{selectedCompany.name}</h1>
+            <h1 className="title">🏢 {selectedCompany.name}</h1>
           </div>
           <h2 className="section-title">{students.length} Student{students.length !== 1 ? 's' : ''}</h2>
           {students.map(student => (
@@ -4689,10 +3133,8 @@ function App() {
             <div className="card-content">
               <div className="student-card-left">
                 {student.photo
-                  ? <img src={student.photo} alt={student.name} className="student-avatar"
-                      onClick={(e) => { e.stopPropagation(); setImageViewer({ images: [student.photo], index: 0 }); }}
-                      style={{ cursor: 'pointer' }} />
-                  : <span className="student-avatar-icon"><User size={22} /></span>
+                  ? <img src={student.photo} alt={student.name} className="student-avatar" />
+                  : <span className="student-avatar-icon">👤</span>
                 }
                 <div>
                   <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
@@ -4708,7 +3150,7 @@ function App() {
                     fontWeight: 600, cursor: 'pointer', flexShrink: 0
                   }}
                 >
-                  <TrendingUp size={14} style={{ marginRight: 5, verticalAlign: "middle" }} />Progress
+                  📈 Progress
                 </button>
                 <span style={{ color: '#c7c7cc', fontSize: 20 }}>›</span>
               </div>
@@ -4731,7 +3173,7 @@ function App() {
             </div>
             <div className="top-row-actions">
               <span className="badge-view-only">{t('viewOnly')}</span>
-              <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TOKEN_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
+              <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); setIsLoggedIn(false); setIsViewer(false); setBatches([]); }} className="btn-logout">
                 {t('logout')}
               </button>
             </div>
@@ -4745,7 +3187,7 @@ function App() {
 
         {groupKeys.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93' }}>
-            <div style={{ marginBottom: 10 }}><Users size={40} strokeWidth={1.2} /></div>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>👥</div>
             <p>{t('noStudentsFound')}</p>
           </div>
         )}
@@ -4757,7 +3199,7 @@ function App() {
               onClick={() => setSelectedCompany({ name: groupKey, students })}>
               <div className="card-content">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 12, background: 'rgba(139,0,0,0.08)', flexShrink: 0 }}><Building2 size={26} color="#8B0000" /></span>
+                  <span style={{ fontSize: 32 }}>🏢</span>
                   <div>
                     <h2 className="card-title">{groupKey}</h2>
                     <p className="card-subtitle">{students.length} {t('studentPlural')}</p>
@@ -4773,47 +3215,23 @@ function App() {
   };
 
 
-  const renderBatches = () => {
-    // ── Global search logic ───────────────────────────────────────────────
-    const query = globalSearch.trim().toLowerCase();
-    const searchResults = query.length >= 1 ? (() => {
-      const results = [];
-      batches.forEach(batch => {
-        batch.students
-          .filter(s => !s.isArchived)
-          .filter(s => isViewer ? s.status === 'Selected' : true)
-          .forEach(s => {
-            const nameMatch   = s.name?.toLowerCase().includes(query);
-            const compMatch   = s.companyName?.toLowerCase().includes(query);
-            const kumiaiMatch = s.kumiai?.toLowerCase().includes(query);
-            const batchMatch  = batch.name?.toLowerCase().includes(query);
-            if (nameMatch || compMatch || kumiaiMatch || batchMatch) {
-              results.push({ student: s, batch });
-            }
-          });
-      });
-      return results.slice().sort((a, b) => a.student.name.localeCompare(b.student.name));
-    })() : null;
-
-    return (
+  const renderBatches = () => (
     <>
       <div className="sticky-header">
       <div className="header-banner">
         <div className="top-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {((!isViewer && !isKazumi) || isKazumi) && selectedTeacher?.photo && (
+            {!isViewer && selectedTeacher?.photo && (
               <img src={selectedTeacher.photo} alt={selectedTeacher.name}
                 style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
             )}
-            {((!isViewer && !isKazumi) || isKazumi) && !selectedTeacher?.photo && (
-              <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
+            {!isViewer && !selectedTeacher?.photo && (
+              <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji}</span>
             )}
             <div>
-              <p className="logged-in-label">ログイン中</p>
+              <p className="logged-in-label">{t('loggedInAs')}</p>
               <h1 className={`title${isViewer && safeLocalGet(ROLE_KEY) !== 'viewer' ? ' kumiai-title' : ''}`}>
-                {isKazumi
-                  ? (selectedTeacher?.name || 'Ogawa Sensei')
-                  : isViewer
+                {isViewer
                   ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI TECH COOPERATIVE ASSOCIATION'
                     : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WORLD BUSINESS COOPERATIVE'
                     : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMU SUISHIN COOPERATIVE ASSOCIATION'
@@ -4826,232 +3244,47 @@ function App() {
           </div>
           <div className="top-row-actions">
             {isViewer && <span className="badge-view-only">{t('viewOnly')}</span>}
-            {isKazumi && <span className="badge-view-only">View Only</span>}
-            {(!isViewer && !isKazumi) || isKazumi ? (
-              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">切替</button>
-            ) : null}
+            {!isViewer && (
+              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">{t('switch')}</button>
+            )}
             <button onClick={() => setDarkMode(d => !d)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Toggle Dark Mode">
-                {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+                {darkMode ? '☀️' : '🌙'}
               </button>
-            {(safeLocalGet(ROLE_KEY) === 'admin' || isKazumi) && (
+            {safeLocalGet(ROLE_KEY) === 'admin' && (
               <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
-                <Settings size={16} />
+                ⚙️
               </button>
             )}
-            <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TOKEN_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
+            <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
               {t('logout')}
             </button>
           </div>
         </div>
-
-        {/* ── Search bar ── */}
-        <div style={{ padding: '10px 16px 14px', position: 'relative' }}>
-          <div style={{ position: 'relative' }}>
-            <span style={{
-              position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-              pointerEvents: 'none', opacity: 0.55,
-            }}><Search size={16} /></span>
-            <input
-              type="text"
-              value={globalSearch}
-              onChange={e => setGlobalSearch(e.target.value)}
-              placeholder="Search students, company, batch..."
-              className="search-input"
-              style={{
-                width: '100%', boxSizing: 'border-box',
-                padding: '10px 36px 10px 38px',
-                borderRadius: 12, border: 'none',
-                background: 'rgba(255,255,255,0.18)',
-                color: '#fff', fontSize: 15,
-                outline: 'none',
-              }}
-            />
-            {globalSearch && (
-              <button
-                onClick={() => setGlobalSearch('')}
-                style={{
-                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                  background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff',
-                  borderRadius: '50%', width: 20, height: 20, fontSize: 12,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  lineHeight: 1, padding: 0,
-                }}
-              ><X size={14} /></button>
-            )}
-          </div>
-        </div>
-
       </div>{/* end header-banner */}
       </div>{/* end sticky-header */}
-
-      {/* ── Smart Reminders (teacher/admin only) ── */}
-      {!isViewer && !isKazumi && (
-        <SmartReminders
-          batches={batches}
-          onNavigate={(batch, student) => {
-            setGlobalSearch('');
-            setSelectedBatch(batch);
-            goToCategories(student);
-          }}
-        />
-      )}
-
-      {/* ── Search results ── */}
-      {searchResults !== null ? (
-        <>
-          <h2 className="section-title">
-            {searchResults.length === 0
-              ? 'No students found'
-              : `${searchResults.length} student${searchResults.length !== 1 ? 's' : ''} found`}
-          </h2>
-          {searchResults.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-tertiary)' }}>
-              <div style={{ marginBottom: 12 }}><Search size={44} strokeWidth={1.2} /></div>
-              <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>No results for "{globalSearch}"</p>
-              <p style={{ fontSize: 13, marginTop: 6, color: 'var(--text-tertiary)' }}>Try searching by name, company, or batch</p>
+      <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
+      {(isViewer
+        ? batches.filter(b => safeLocalGet(ROLE_KEY) === 'sulop'
+            ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
+            : b.students.some(s => s.status === 'Selected'))
+        : batches).map(batch => (
+        <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
+          <div className="card-content">
+            <div>
+              <h2 className="card-title">🎌 {displayName(batch)}</h2>
+              <p className="card-subtitle">
+                {isViewer
+                  ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
+                  : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
+              </p>
             </div>
-          ) : (
-            searchResults.map(({ student, batch }) => {
-              // Highlight matching text
-              const highlight = (text) => {
-                if (!text || !query) return text;
-                const idx = text.toLowerCase().indexOf(query);
-                if (idx === -1) return text;
-                return (
-                  <>
-                    {text.slice(0, idx)}
-                    <mark style={{ background: '#fff3cd', color: '#856404', borderRadius: 3, padding: '0 2px' }}>
-                      {text.slice(idx, idx + query.length)}
-                    </mark>
-                    {text.slice(idx + query.length)}
-                  </>
-                );
-              };
-              return (
-                <div
-                  key={`${batch._id}-${student._id}`}
-                  className="card student-card clickable"
-                  onClick={() => {
-                    setGlobalSearch('');
-                    setSelectedBatch(batch);
-                    goToCategories(student);
-                  }}
-                >
-                  <div className="card-content">
-                    <div className="student-card-left">
-                      {student.photo
-                        ? <img src={student.photo} alt={student.name} className="student-avatar" />
-                        : <span className="student-avatar-icon"><User size={22} /></span>
-                      }
-                      <div>
-                        <h3 className="card-title" style={{ margin: 0 }}>
-                          {highlight(student.name)}
-                        </h3>
-                        <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
-                          <BookOpen size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{highlight(batch.name)}
-                        </p>
-                        {student.companyName && (
-                          <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
-                            <Building2 size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{highlight(student.companyName)}
-                          </p>
-                        )}
-                        {student.kumiai && (
-                          <span style={{
-                            display: 'inline-block', marginTop: 4,
-                            background: '#fff3cd', color: '#856404',
-                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                          }}>
-                            {highlight(student.kumiai)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span style={{ color: '#c7c7cc', fontSize: 20, flexShrink: 0 }}>›</span>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </>
-      ) : (
-        <>
-          {/* ── Normal batch list ── */}
-          <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
-          {(isViewer
-            ? batches.filter(b => !b.isHiddenFromViewer && (safeLocalGet(ROLE_KEY) === 'sulop'
-                ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
-                : b.students.some(s => s.status === 'Selected')))
-            : batches).map(batch => (
-            <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
-              <div className="card-content">
-                <div>
-                  <h2 className="card-title"><BookOpen size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{displayName(batch)}</h2>
-                  <p className="card-subtitle">
-                    {isViewer
-                      ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
-                      : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
-                  </p>
-                </div>
-                {!isViewer && !isKazumi && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
-                    <button
-                      title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        try {
-                          const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
-                          const data = await res.json();
-                          console.log('toggle-hide response:', res.status, data);
-                          if (data.success) {
-                            setBatches(prev => prev.map(b =>
-                              b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
-                            ));
-                          } else {
-                            alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
-                          }
-                        } catch(err) {
-                          alert('Toggle error: ' + err.message);
-                        }
-                      }}
-                      style={{
-                        background: batch.isHiddenFromViewer ? 'rgba(255,149,0,0.12)' : 'rgba(0,0,0,0.05)',
-                        border: 'none', borderRadius: 8,
-                        padding: '5px 9px', cursor: 'pointer',
-                        fontSize: 11, fontWeight: 700,
-                        color: batch.isHiddenFromViewer ? '#e67e00' : 'var(--text-tertiary)',
-                        display: 'flex', alignItems: 'center', gap: 4,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {batch.isHiddenFromViewer
-                        ? <><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg> Hidden</>
-                        : <><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Visible</>
-                      }
-                    </button>
-                    <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-          {!isViewer && !isKazumi && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
-          <button
-            onClick={() => setShowQRScanner(true)}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              width: 'calc(100% - 32px)', margin: '0 16px 16px',
-              padding: '14px', borderRadius: 14, border: '2px dashed #8B0000',
-              background: 'rgba(139,0,0,0.06)', color: '#8B0000',
-              fontSize: 15, fontWeight: 700, cursor: 'pointer',
-            }}
-          >
-            <span style={{ }}><Camera size={20} /></span> Scan Student QR Code
-          </button>
-        </>
-      )}
+            {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}>✕</button>}
+          </div>
+        </div>
+      ))}
+      {!isViewer && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
     </>
-    );
-  };
+  );
 
   const renderStudents = () => {
     const role = safeLocalGet(ROLE_KEY);
@@ -5066,7 +3299,7 @@ function App() {
     return (
     <>
       <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
+        <button className="back-btn" onClick={goBack}>←</button>
         <div className="header-with-back">
           <h1 className="title">{displayName(selectedBatch)}</h1>
         </div>
@@ -5077,16 +3310,14 @@ function App() {
           <div className="card-content">
             <div className="student-card-left">
               {student.photo
-                ? <img src={student.photo} alt={student.name} className="student-avatar"
-                    onClick={(e) => { e.stopPropagation(); setImageViewer({ images: [student.photo], index: 0 }); }}
-                    style={{ cursor: 'pointer' }} />
-                : <span className="student-avatar-icon"><User size={22} /></span>
+                ? <img src={student.photo} alt={student.name} className="student-avatar" />
+                : <span className="student-avatar-icon">👤</span>
               }
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <h3 className="card-title" style={{ margin: 0 }}>{student.name}</h3>
                   <span
-                    onClick={!isViewer && !isKazumi ? (e) => toggleStudentStatus(student, e) : undefined}
+                    onClick={!isViewer ? (e) => toggleStudentStatus(student, e) : undefined}
                     style={{
                       background: student.status === 'Selected' ? '#007AFF' : '#e5e5ea',
                       color: student.status === 'Selected' ? '#fff' : '#6e6e73',
@@ -5115,185 +3346,113 @@ function App() {
                 <p className="card-subtitle">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
               </div>
             </div>
-            {!isViewer && !isKazumi && (
+            {!isViewer && (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }} onClick={(e) => openEditStudent(student, e)}><MoreHorizontal size={13} /></button>
-                <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}><X size={14} /></button>
+                <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }} onClick={(e) => openEditStudent(student, e)}>✎</button>
+                <button className="delete-btn-icon" onClick={(e) => deleteStudent(student._id, e)}>✕</button>
               </div>
             )}
           </div>
         </div>
       ))}
-      {!isViewer && !isKazumi && <button className="add-button" onClick={() => openModal('student')}>{t('addStudent')}</button>}
-      {selectedBatch.students.length > 0 && !isViewer && !isKazumi && (
+      {!isViewer && <button className="add-button" onClick={() => openModal('student')}>{t('addStudent')}</button>}
+      {selectedBatch.students.length > 0 && (
         <button className="print-qr-button" onClick={generateBatchQRs}>{t('printQrCodes')}</button>
       )}
     </>
     );
   };
 
-  const renderCategories = () => {
-    /* ── compute progress stats for the mini card ── */
-    const allExamsFlat = (selectedStudent.categories || []).flatMap(cat =>
-      (cat.items || []).filter(it => it.score != null && it.totalScore).map(it => ({
-        pct: Math.round((it.score / it.totalScore) * 100),
-        date: it.date ? new Date(it.date) : null,
-      }))
-    ).sort((a, b) => (a.date || 0) - (b.date || 0));
-    const n = allExamsFlat.length;
-    const avg = n > 0 ? Math.round(allExamsFlat.reduce((s, e) => s + e.pct, 0) / n) : null;
-    const win = Math.min(3, Math.floor(n / 2));
-    const recentTrend = n >= 2
-      ? Math.round(allExamsFlat.slice(-win).reduce((s, e) => s + e.pct, 0) / win) -
-        Math.round(allExamsFlat.slice(-(win * 2), -win).reduce((s, e) => s + e.pct, 0) / win)
-      : null;
-    let streak = 0;
-    for (let i = n - 1; i > 0; i--) { if (allExamsFlat[i].pct > allExamsFlat[i-1].pct) streak++; else break; }
-
-    return (
+  const renderCategories = () => (
     <>
       <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
+        <button className="back-btn" onClick={goBack}>←</button>
       </div>
-
-      {/* ── Student Profile Card ── */}
       <div className="student-profile-header">
-        {selectedStudent.photo
-          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
-              onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
-              style={{ cursor: 'pointer' }} />
-          : <span className="student-profile-icon"><User size={22} /></span>
-        }
-        <h1 className="student-profile-name">{selectedStudent.name}</h1>
+  {selectedStudent.photo
+    ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+    : <span className="student-profile-icon">👤</span>
+  }
+  <h1 className="student-profile-name">{selectedStudent.name}</h1>
+  {!isViewer && (
+    <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+      <button
+        onClick={async () => {
+          if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: 'transparent', color: '#8B2020', border: '1.5px solid #8B2020', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >{t('archiveImages')}</button>
 
-        {/* ── Admin Quick Actions ── */}
-        {!isViewer && !isKazumi && (
-          <>
-            <p className="profile-action-label">Quick Actions</p>
-            <div className="profile-icon-grid">
-              <button className="profile-icon-btn" onClick={() => setShowQuickAddExam(true)}>
-                <Plus size={20} color="#34C759" />
-                <span>Quick Add</span>
-              </button>
-              <button className="profile-icon-btn" onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}>
-                <KeyRound size={20} color="#5856D6" />
-                <span>Parent QR</span>
-              </button>
-              <button className="profile-icon-btn" onClick={async () => {
-                if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
-                try {
-                  const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-                  const data = await res.json();
-                  if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
-                  else alert('Error: ' + (data.error || 'Unknown'));
-                } catch (e) { alert('Failed: ' + e.message); }
-              }}>
-                <Layers size={20} color="#8e8e93" />
-                <span>Archive Imgs</span>
-              </button>
-              <button className="profile-icon-btn" onClick={async () => {
-                if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
-                try {
-                  const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-                  const data = await res.json();
-                  if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
-                  else alert('Error: ' + (data.error || 'Unknown'));
-                } catch (e) { alert('Failed: ' + e.message); }
-              }}>
-                <RefreshCw size={20} color="#007AFF" />
-                <span>Restore Imgs</span>
-              </button>
-            </div>
+      <button
+        onClick={async () => {
+          if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
+          try {
+            const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
+            else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: 'transparent', color: '#007AFF', border: '1.5px solid #007AFF', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >{t('restoreImages')}</button>
 
-            <p className="profile-action-label" style={{ marginTop: 10 }}>Student Status</p>
-            <div className="profile-danger-row">
-              <button
-                className="profile-danger-btn"
-                style={{ color: '#007AFF' }}
-                onClick={openMoveModal}
-              >
-                <ArrowRightLeft size={15} />
-                Move to Batch
-              </button>
-              <button className="profile-danger-btn" onClick={() => toggleArchiveStudent(selectedStudent)}>
-                {selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}
-              </button>
-              <button className="profile-danger-btn profile-danger-btn--red" onClick={async () => {
-                if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
-                if (!window.confirm(`Are you sure? This is irreversible.`)) return;
-                try {
-                  const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
-                  const data = await res.json();
-                  if (data.success) {
-                    alert(`${selectedStudent.name} permanently deleted.`);
-                    // ✅ Remove student from local batches state immediately (fixes SmartReminders + search)
-                    const deletedStudentId = selectedStudent._id;
-                    const deletedBatchId = selectedBatch._id;
-                    setBatches(prev => prev.map(b =>
-                      b._id === deletedBatchId
-                        ? { ...b, students: b.students.filter(s => s._id !== deletedStudentId) }
-                        : b
-                    ));
-                    // ✅ Clear this student's dismissed reminders from localStorage
-                    try {
-                      const dismissed = JSON.parse(localStorage.getItem('sage_dismissed_reminders') || '[]');
-                      const cleaned = dismissed.filter(id => !id.includes(deletedStudentId));
-                      localStorage.setItem('sage_dismissed_reminders', JSON.stringify(cleaned));
-                    } catch {}
-                    goBack();
-                  }
-                  else alert('Error: ' + (data.error || 'Unknown'));
-                } catch (e) { alert('Failed: ' + e.message); }
-              }}>
-                <Trash2 size={15} />
-                {t('deleteStudent')}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+      <button
+        onClick={() => toggleArchiveStudent(selectedStudent)}
+        style={{
+          background: selectedStudent.isArchived ? 'transparent' : '#555',
+          color: selectedStudent.isArchived ? '#555' : '#fff',
+          border: '1.5px solid #555',
+          borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer'
+        }}
+      >{selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}</button>
 
-      {/* ── Progress Chart Card (visible to ALL roles) ── */}
-      <div className="progress-summary-card" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}>
-        <div className="progress-summary-top">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <TrendingUp size={16} color="#8B0000" />
-            <span className="progress-summary-title">{t('progressChart')}</span>
-          </div>
-          <span className="progress-summary-link">View full →</span>
-        </div>
-        {n === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>No exam data yet</p>
-        ) : (
-          <>
-            <div className="progress-summary-stats">
-              <div>
-                <p className="progress-stat-label">Avg score</p>
-                <p className="progress-stat-value">{avg}%</p>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                {recentTrend !== null && (
-                  <span className={`progress-trend-pill ${recentTrend >= 0 ? 'progress-trend-pill--up' : 'progress-trend-pill--down'}`}>
-                    {recentTrend >= 0 ? '↑' : '↓'} {Math.abs(recentTrend)}% trend
-                  </span>
-                )}
-                <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                  {n} exam{n !== 1 ? 's' : ''}{streak > 1 ? ` · 🔥 ${streak}-streak` : ''}
-                </p>
-              </div>
-            </div>
-            <div className="progress-bar-track">
-              <div className="progress-bar-fill" style={{ width: `${Math.min(avg, 100)}%` }} />
-            </div>
-          </>
-        )}
-      </div>
+      <button
+        onClick={async () => {
+          if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
+          if (!window.confirm(`Are you sure? This is irreversible.`)) return;
+          try {
+            const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+              alert(`🗑️ ${selectedStudent.name} permanently deleted.`);
+              goBack();
+            } else alert('Error: ' + (data.error || 'Unknown'));
+          } catch (e) { alert('Failed: ' + e.message); }
+        }}
+        style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, padding: '7px 14px', cursor: 'pointer' }}
+      >{t('deleteStudent')}</button>
+    </div>
+  )}
+</div>
+{/* Progress Chart Button - Kumiai/Viewer only */}
+{isViewer && (
+  <button
+    onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}
+    style={{
+      width: '100%', background: 'linear-gradient(135deg, #8B0000, #c0392b)',
+      color: '#fff', border: 'none', borderRadius: 12,
+      padding: '14px 20px', fontSize: 15, fontWeight: 700,
+      cursor: 'pointer', marginBottom: 16,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      boxShadow: '0 2px 8px rgba(139,0,0,0.25)'
+    }}
+  >
+    <span style={{ fontSize: 20 }}>📈</span>
+    {t('viewProgressChart')}
+  </button>
+)}
 
       {/* ── Exam Categories Box ── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('examCategoriesTitle')}</h2>
-          {!isViewer && !isKazumi && (
+          {!isViewer && (
             <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
@@ -5303,15 +3462,15 @@ function App() {
             <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
               <div className="card-content">
                 <div>
-                  <h3 className="card-title"><Folder size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{displayName(cat)}</h3>
+                  <h3 className="card-title">📁 {displayName(cat)}</h3>
                   <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="exam-right">
-                  {!isViewer && !isKazumi && (
+                  {!isViewer && (
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
-                        onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
-                      <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}><X size={14} /></button>
+                        onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}>✎</button>
+                      <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}>✕</button>
                     </div>
                   )}
                 </div>
@@ -5325,7 +3484,7 @@ function App() {
       <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('evaluationsTitle')}</h2>
-          {!isViewer && !isKazumi && (
+          {!isViewer && (
             <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
           )}
         </div>
@@ -5334,20 +3493,17 @@ function App() {
         </button>
       </div>
     </>
-    );
-  };
+  );
 
   const renderEvaluations = () => (
     <>
       <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
+        <button className="back-btn" onClick={goBack}>←</button>
       </div>
       <div className="student-profile-header">
         {selectedStudent.photo
-          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
-              onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
-              style={{ cursor: 'pointer' }} />
-          : <span className="student-profile-icon"><User size={22} /></span>
+          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar" />
+          : <span className="student-profile-icon">👤</span>
         }
         <h1 className="student-profile-name">{selectedStudent.name}</h1>
       </div>
@@ -5358,15 +3514,15 @@ function App() {
           <div key={ev._id} className="card exam-card clickable" onClick={() => goToEvaluationDetail(ev)}>
             <div className="card-content">
               <div>
-                <h3 className="card-title"><FileText size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{ev.ordinal} Evaluation — {ev.title}</h3>
+                <h3 className="card-title">📋 {ev.ordinal} Evaluation — {ev.title}</h3>
                 <p className="card-subtitle">📅 {ev.date}</p>
               </div>
-              {!isViewer && !isKazumi && <button className="delete-btn-icon" onClick={(e) => deleteEvaluation(ev._id, e)}><X size={14} /></button>}
+              {!isViewer && <button className="delete-btn-icon" onClick={(e) => deleteEvaluation(ev._id, e)}>✕</button>}
             </div>
           </div>
         ))
       }
-      {!isViewer && !isKazumi && (
+      {!isViewer && (
         <button className="add-button" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>{t('addEvaluation')}</button>
       )}
     </>
@@ -5409,7 +3565,7 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1 }}>
             {[...Array(11)].map((_, i) => (
-              <button key={i} onClick={() => !isViewer && !isKazumi && setEvalFields(f => ({ ...f, [key]: i }))}
+              <button key={i} onClick={() => !isViewer && setEvalFields(f => ({ ...f, [key]: i }))}
                 style={{
                   width: 36, height: 36, borderRadius: 8, border: 'none', cursor: isViewer ? 'default' : 'pointer',
                   fontWeight: 700, fontSize: 13,
@@ -5481,8 +3637,8 @@ function App() {
                     fontSize: 14, lineHeight: 1.6, color: '#1a1a2e',
                     whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                   }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#007AFF', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4, letterSpacing: 0.5 }}>
-                      <Flag size={11} /> 日本語訳 {translating && '…'}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#007AFF', display: 'block', marginBottom: 4, letterSpacing: 0.5 }}>
+                      🇯🇵 日本語訳 {translating && '…'}
                     </span>
                     {translating
                       ? <span style={{ color: '#8e8e93', fontStyle: 'italic' }}>Translating...</span>
@@ -5500,7 +3656,7 @@ function App() {
                           padding: '6px 14px', fontSize: 13, fontWeight: 700,
                           cursor: 'pointer',
                         }}>
-                        <Check size={13} style={{ marginRight: 5, verticalAlign: 'middle' }} />Use Japanese
+                        ✓ Use Japanese
                       </button>
                     )}
                   </div>
@@ -5511,7 +3667,7 @@ function App() {
             <input
               type="text"
               value={value}
-              onChange={(e) => !isViewer && !isKazumi && setEvalFields(f => ({ ...f, [key]: e.target.value }))}
+              onChange={(e) => !isViewer && setEvalFields(f => ({ ...f, [key]: e.target.value }))}
               readOnly={isViewer}
               placeholder={placeholder}
               lang="ja"
@@ -5530,7 +3686,7 @@ function App() {
     return (
       <>
         <div className="sticky-header sticky-header--back">
-          <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
+          <button className="back-btn" onClick={goBack}>←</button>
         </div>
 
         {/* Hero banner */}
@@ -5544,14 +3700,14 @@ function App() {
             <div className="eval-student-badge">
               {selectedStudent?.photo
                 ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="eval-student-avatar" />
-                : <span className="eval-student-icon"><User size={22} /></span>
+                : <span className="eval-student-icon">👤</span>
               }
               <p className="eval-student-name">{selectedStudent?.name}</p>
             </div>
           </div>
           {selectedStudent?.companyName && (
             <div className="eval-company-chip">
-              <Building2 size={12} style={{ marginRight: 5, verticalAlign: 'middle' }} />{selectedStudent.companyName}
+              🏢 {selectedStudent.companyName}
             </div>
           )}
         </div>
@@ -5559,73 +3715,13 @@ function App() {
         {/* Skills Rating */}
         <div className="section-box">
           <div className="section-box-header">
-            <span className="section-box-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Target size={14} /> Skills Rating</span>
+            <span className="section-box-title">🎯 Skills Rating</span>
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>Score 0 – 10</span>
           </div>
           {ratingField('reading',   'READING',   '読むこと')}
           {ratingField('listening', 'LISTENING', '聞くこと')}
           {ratingField('speaking',  'SPEAKING',  '話すこと')}
         </div>
-
-        {/* Comparison vs Previous Evaluation */}
-        {(() => {
-          const currentIdx = evaluations.findIndex(ev => ev._id === selectedEvaluation?._id);
-          if (currentIdx <= 0) return null; // no previous eval to compare
-          const prevEval = evaluations[currentIdx - 1];
-          const prevFields = prevEval?.fields || {};
-          const skills = [
-            { key: 'reading',   label: 'READING',   jp: '読むこと' },
-            { key: 'listening', label: 'LISTENING', jp: '聞くこと' },
-            { key: 'speaking',  label: 'SPEAKING',  jp: '話すこと' },
-          ];
-          const hasPrevData = skills.some(s => prevFields[s.key] != null);
-          if (!hasPrevData) return null;
-          return (
-            <div className="section-box">
-              <div className="section-box-header">
-                <span className="section-box-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <TrendingUp size={14} /> vs Previous Evaluation
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>
-                  {prevEval.ordinal} Eval
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {skills.map(({ key, label, jp }) => {
-                  const curr = evalFields[key];
-                  const prev = prevFields[key];
-                  const diff = (curr != null && prev != null) ? curr - prev : null;
-                  const diffColor = diff > 0 ? '#34C759' : diff < 0 ? '#FF3B30' : '#8e8e93';
-                  const DiffIcon = diff > 0 ? TrendingUp : diff < 0 ? TrendingDown : Minus;
-                  return (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{label}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 5 }}>{jp}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 120, justifyContent: 'flex-end' }}>
-                        <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-                          {prev ?? '—'} → {curr ?? '—'}
-                        </span>
-                        {diff !== null && (
-                          <span style={{
-                            display: 'flex', alignItems: 'center', gap: 3,
-                            background: diff > 0 ? '#e8f9ed' : diff < 0 ? '#fff0ef' : '#f2f2f7',
-                            color: diffColor, borderRadius: 8,
-                            padding: '3px 9px', fontSize: 12, fontWeight: 700,
-                          }}>
-                            <DiffIcon size={12} />
-                            {diff > 0 ? `+${diff}` : diff === 0 ? '±0' : diff}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
 
         {/* Lesson Details */}
         <div className="section-box">
@@ -5650,45 +3746,6 @@ function App() {
             <span className="section-box-title">💬 Remarks</span>
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>備考</span>
           </div>
-          {!isViewer && !isKazumi && (
-            <div style={{ marginBottom: 12 }}>
-              <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)' }}>
-                Quick Templates
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {[
-                  { en: 'Excellent progress', jp: '非常に上手です' },
-                  { en: 'Good effort', jp: 'よく頑張りました' },
-                  { en: 'Needs more practice', jp: 'もっと練習が必要です' },
-                  { en: 'Great attitude', jp: '積極的な姿勢が良いです' },
-                  { en: 'Improving steadily', jp: '着実に上達しています' },
-                  { en: 'Needs to review vocabulary', jp: '語彙の復習が必要です' },
-                ].map(({ en, jp }) => (
-                  <button
-                    key={en}
-                    onClick={() => {
-                      const current = evalFields.remarks || '';
-                      const append = current ? `${current}\n${jp}` : jp;
-                      setEvalFields(f => ({ ...f, remarks: append }));
-                      translateRemarks(append);
-                    }}
-                    style={{
-                      background: 'var(--bg-card2, #f2f2f7)',
-                      border: '1px solid var(--border-color, #e5e5ea)',
-                      borderRadius: 20, padding: '5px 12px',
-                      fontSize: 12, fontWeight: 500,
-                      color: 'var(--text-primary, #3a3a3c)',
-                      cursor: 'pointer', lineHeight: 1.4,
-                      transition: 'background 0.15s',
-                    }}
-                    title={jp}
-                  >
-                    {en}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           {textField('remarks', null, null, 'コメントを入力してください...')}
         </div>
 
@@ -5717,7 +3774,7 @@ function App() {
           );
         })()}
 
-        {!isViewer && !isKazumi && (
+        {!isViewer && (
           <button onClick={saveEvaluationFields} disabled={evalSaving} className="btn-primary" style={{ marginBottom: 24, opacity: evalSaving ? 0.7 : 1, cursor: evalSaving ? 'not-allowed' : 'pointer' }}>
             {evalSaving ? t('saving') : t('saveEvaluation')}
           </button>
@@ -5726,171 +3783,31 @@ function App() {
     );
   };
 
-  // ── Exam drag-and-drop reorder logic ─────────────────────────────────────
-  const enterReorderMode = () => {
-    setDragItems([...(selectedCategory?.items || [])]);
-    setReorderMode(true);
-  };
-  const exitReorderMode = () => {
-    setReorderMode(false);
-    setDraggingIdx(null);
-    setDragOverIdx(null);
-    dragStartY.current = null;
-  };
-  const saveReorder = async () => {
-    try {
-      const orderedIds = dragItems.map(i => i._id);
-      await fetch(`${API}/batches/${selectedBatch._id}/students/${selectedStudent._id}/categories/${selectedCategory._id}/items/reorder`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderedIds }),
-      });
-      const updatedCat = { ...selectedCategory, items: dragItems };
-      const updatedStudent = {
-        ...selectedStudent,
-        categories: selectedStudent.categories.map(c => c._id === selectedCategory._id ? updatedCat : c),
-      };
-      setSelectedCategory(updatedCat);
-      setSelectedStudent(updatedStudent);
-      setSelectedBatch(prev => ({
-        ...prev,
-        students: prev.students.map(s => s._id === updatedStudent._id ? updatedStudent : s),
-      }));
-      setBatches(prev => prev.map(b => b._id === selectedBatch._id
-        ? { ...b, students: b.students.map(s => s._id === updatedStudent._id ? updatedStudent : s) }
-        : b
-      ));
-    } catch (err) { console.error('Reorder failed:', err); }
-    exitReorderMode();
-  };
-
-  // Touch handlers for drag-and-drop
-  const handleDragTouchStart = (e, idx) => {
-    dragStartY.current = e.touches[0].clientY;
-    setDraggingIdx(idx);
-  };
-  const handleDragTouchMove = (e) => {
-    if (draggingIdx === null) return;
-    e.preventDefault();
-    const y = e.touches[0].clientY;
-    // Find which item we're hovering over based on DOM positions
-    let overIdx = draggingIdx;
-    itemRefs.current.forEach((el, i) => {
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      if (y >= rect.top && y <= rect.bottom) overIdx = i;
-    });
-    if (overIdx !== dragOverIdx) setDragOverIdx(overIdx);
-    if (overIdx !== draggingIdx) {
-      setDragItems(prev => {
-        const next = [...prev];
-        const [moved] = next.splice(draggingIdx, 1);
-        next.splice(overIdx, 0, moved);
-        return next;
-      });
-      setDraggingIdx(overIdx);
-    }
-  };
-  const handleDragTouchEnd = () => {
-    setDragOverIdx(null);
-  };
-
-  const renderExamItems = () => {
-    const displayItems = reorderMode ? dragItems : (selectedCategory?.items || []);
-    return (
+  const renderExamItems = () => (
     <>
       <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={reorderMode ? exitReorderMode : goBack}>
-          {reorderMode ? <X size={18} /> : <ArrowLeft size={18} />}
-        </button>
+        <button className="back-btn" onClick={goBack}>←</button>
         <div className="header-with-back">
-          <h1 className="title"><Folder size={16} style={{ marginRight: 8, verticalAlign: "middle" }} />{displayName(selectedCategory)}</h1>
+          <h1 className="title">📁 {displayName(selectedCategory)}</h1>
         </div>
-        {/* Reorder mode: show Done button in header */}
-        {reorderMode && (
-          <button
-            onClick={saveReorder}
-            style={{
-              marginLeft: 'auto', marginRight: 8,
-              background: '#8B0000', color: '#fff',
-              border: 'none', borderRadius: 10, padding: '6px 16px',
-              fontWeight: 700, fontSize: 14, cursor: 'pointer',
-            }}
-          >Done</button>
-        )}
       </div>
-
-      {/* Reorder mode banner */}
-      {reorderMode && (
-        <div style={{
-          background: 'linear-gradient(135deg, #8B0000, #c0392b)',
-          color: '#fff', textAlign: 'center', padding: '10px 16px',
-          fontSize: 14, fontWeight: 600, letterSpacing: 0.3,
-        }}>
-          ☰ Hold and drag to reorder exams
-        </div>
-      )}
-
       <h2 className="section-title">{t('exams')}</h2>
-      {displayItems.length === 0 ? (
+      {(selectedCategory?.items || []).length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><FileText size={40} strokeWidth={1.2} /></div>
+          <div className="empty-state-icon">📝</div>
           <p className="empty-state-text">{t('noExamsYet')}</p>
           <p className="empty-state-sub">{t('addExamHint')}</p>
         </div>
       ) : (
-        <div
-          className="exam-list"
-          onTouchMove={reorderMode ? handleDragTouchMove : undefined}
-          onTouchEnd={reorderMode ? handleDragTouchEnd : undefined}
-        >
-          {displayItems.map((item, idx) => {
+        <div className="exam-list">
+          {(selectedCategory?.items || []).map((item, idx) => {
             const score = item.score ?? 0;
             const total = item.totalScore ?? 100;
             const pct = Math.round((score / total) * 100);
-            const color = pct >= 60 ? 'var(--green)' : 'var(--red)';
-            const bg   = pct >= 60 ? 'var(--green-soft)' : 'var(--red-soft)';
-            const isDragging = reorderMode && draggingIdx === idx;
-            const isOver = reorderMode && dragOverIdx === idx && draggingIdx !== idx;
+            const color = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+            const bg   = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
             return (
-              <div
-                key={item._id}
-                ref={el => itemRefs.current[idx] = el}
-                className="exam-list-card clickable"
-                onClick={reorderMode ? undefined : () => goToExamDetail(item)}
-                onTouchStart={reorderMode ? (e) => handleDragTouchStart(e, idx) : undefined}
-                style={{
-                  transition: reorderMode ? 'transform 0.15s, box-shadow 0.15s, opacity 0.15s' : undefined,
-                  opacity: isDragging ? 0.5 : 1,
-                  transform: isOver ? 'scaleY(1.04)' : isDragging ? 'scale(1.03)' : 'none',
-                  boxShadow: isDragging ? '0 8px 24px rgba(139,0,0,0.25)' : undefined,
-                  borderLeft: isOver ? '3px solid #8B0000' : undefined,
-                  cursor: reorderMode ? 'grab' : 'pointer',
-                  userSelect: 'none',
-                  touchAction: reorderMode ? 'none' : undefined,
-                }}
-                // Long press on normal mode to enter reorder
-                onTouchStartCapture={!isViewer && !isKazumi && !reorderMode ? (() => {
-                  const handler = () => {
-                    clearTimeout(longPressTimer.current);
-                    longPressTimer.current = setTimeout(() => {
-                      if (navigator.vibrate) navigator.vibrate(40);
-                      enterReorderMode();
-                    }, 500);
-                  };
-                  return handler;
-                })() : undefined}
-                onTouchEndCapture={!isViewer && !isKazumi && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
-                onTouchMoveCapture={!isViewer && !isKazumi && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
-              >
-                {/* Drag handle — visible only in reorder mode */}
-                {reorderMode && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    width: 32, flexShrink: 0, color: '#8B0000', fontSize: 20, fontWeight: 700,
-                    cursor: 'grab',
-                  }}>☰</div>
-                )}
+              <div key={item._id} className="exam-list-card clickable" onClick={() => goToExamDetail(item)}>
                 {/* Score badge */}
                 <div className="exam-score-badge" style={{ background: bg, color }}>
                   <span className="exam-score-num">{score}</span>
@@ -5901,35 +3818,28 @@ function App() {
                   <p className="exam-list-name">{displayName(item)}</p>
                   <p className="exam-list-meta">{item.date}</p>
                   {item.images?.length > 0 && (
-                    <span className="exam-photo-chip"><Camera size={12} style={{ marginRight: 3, verticalAlign: "middle" }} />{item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
+                    <span className="exam-photo-chip">📷 {item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
                   )}
                 </div>
-                {/* Pct pill + action buttons (hidden in reorder mode) */}
-                {!reorderMode && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-                    <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
-                    {!isViewer && !isKazumi && (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
-                          onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
-                        <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}><X size={14} /></button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {/* In reorder mode, just show % */}
-                {reorderMode && (
-                  <span className="exam-pct-pill" style={{ background: bg, color, flexShrink: 0 }}>{pct}%</span>
-                )}
+                {/* Pct pill */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                  <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
+                  {!isViewer && (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
+                        onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}>✎</button>
+                      <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}>✕</button>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
       )}
-      {!isViewer && !isKazumi && !reorderMode && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
+      {!isViewer && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
     </>
-    );
-  };
+  );
 
   const renderExamDetail = () => {
     const rawImages = selectedExam.images?.length > 0
@@ -5952,13 +3862,13 @@ function App() {
     const score = selectedExam.score ?? 0;
     const total = selectedExam.totalScore ?? 100;
     const pct = Math.round((score / total) * 100);
-    const pctColor = pct >= 60 ? 'var(--green)' : 'var(--red)';
-    const pctBg    = pct >= 60 ? 'var(--green-soft)' : 'var(--red-soft)';
+    const pctColor = pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : 'var(--red)';
+    const pctBg    = pct >= 80 ? 'var(--green-soft)' : pct >= 60 ? 'var(--amber-soft)' : 'var(--red-soft)';
 
     return (
       <>
         <div className="sticky-header sticky-header--back">
-          <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
+          <button className="back-btn" onClick={goBack}>←</button>
         </div>
 
         {/* Hero score card */}
@@ -5975,13 +3885,13 @@ function App() {
         </div>
 
         {/* Action buttons */}
-        {!isViewer && !isKazumi && (
+        {!isViewer && (
           <div className="exam-action-row">
             <button className="exam-action-btn scan" onClick={() => openScanner(selectedExam._id)}>
-              <Camera size={16} style={{ marginRight: 6 }} />{t('scanPage')}
+              <span>📷</span> {t('scanPage')}
             </button>
             <button className="exam-action-btn upload" onClick={() => triggerFileInput(selectedExam._id)}>
-              <Image size={16} style={{ marginRight: 6 }} />{t('upload')}
+              <span>🖼️</span> {t('upload')}
             </button>
           </div>
         )}
@@ -5993,7 +3903,7 @@ function App() {
 
         {rawImages.length === 0 ? (
           <div className="exam-empty-pages">
-            <div style={{ marginBottom: 14 }}><File size={52} strokeWidth={1.2} color='#8e8e93' /></div>
+            <div style={{ fontSize: 52, marginBottom: 14 }}>📄</div>
             <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>{t('noPagesYet')}</p>
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>{t('scanOrUpload')}</p>
           </div>
@@ -6007,11 +3917,11 @@ function App() {
                   <div className="exam-page-num-pill">Page {idx + 1}</div>
 
                   {/* Delete button */}
-                  {!isViewer && !isKazumi && (
+                  {!isViewer && (
                     <button
                       className="exam-page-delete"
                       onClick={(e) => { e.stopPropagation(); deleteImagePage(selectedExam._id, idx); }}
-                    ><X size={14} /></button>
+                    >✕</button>
                   )}
 
                   {/* Image */}
@@ -6024,7 +3934,7 @@ function App() {
                     />
                   ) : (
                     <div className="exam-page-loading">
-                      <Loader size={22} color="#8e8e93" style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>⏳</span>
                       <p>{t('loading')}</p>
                     </div>
                   )}
@@ -6041,7 +3951,7 @@ function App() {
 
         <div style={{ height: 16 }} />
 
-        {!isViewer && !isKazumi && (
+        {!isViewer && (
           <button className="btn-danger" style={{ width: '100%', marginTop: 8 }}
             onClick={(e) => deleteExam(selectedExam._id, e)}>
             {t('deleteExam')}
@@ -6086,7 +3996,7 @@ function App() {
             <div className="form-group">
               <label>{t('categoryName')}</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('categoryPlaceholder')} />
-              <label style={{ marginTop: 10, display: 'block' }}><Flag size={11} style={{ marginRight: 5, verticalAlign: "middle" }} />日本語名（任意）</label>
+              <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
               <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：漢字、文法、語彙" />
             </div>
           ) : modalType === 'exam' || modalType === 'editExam' ? (
@@ -6094,7 +4004,7 @@ function App() {
               <div className="form-group">
                 <label>{t('examName')}</label>
                 <input type="text" value={newExamName} onChange={(e) => setNewExamName(e.target.value)} placeholder={t('examNamePlaceholder')} />
-                <label style={{ marginTop: 10, display: 'block' }}><Flag size={11} style={{ marginRight: 5, verticalAlign: "middle" }} />日本語名（任意）</label>
+                <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
                 <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：小テスト１、中間試験、期末試験" />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
@@ -6257,7 +4167,7 @@ function App() {
                 <div className="student-photo-upload" onClick={() => studentPhotoInputRef.current.click()}>
                   {newStudentPhoto
                     ? <img src={newStudentPhoto} alt="Preview" className="student-photo-preview" />
-                    : <><span className="upload-icon" style={{ fontSize: 28 }}><User size={22} /></span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>{t('tapToUploadPhoto')}</p></>
+                    : <><span className="upload-icon" style={{ fontSize: 28 }}>👤</span><p style={{ margin: 0, fontSize: 13, color: '#8E8E93' }}>{t('tapToUploadPhoto')}</p></>
                   }
                 </div>
                 <input
@@ -6279,7 +4189,7 @@ function App() {
             <div className="form-group">
               <label>{t('name')}</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('batchNamePlaceholder')} />
-              <label style={{ marginTop: 10, display: 'block' }}><Flag size={11} style={{ marginRight: 5, verticalAlign: "middle" }} />日本語名（任意）</label>
+              <label style={{ marginTop: 10, display: 'block' }}>🇯🇵 日本語名（任意）</label>
               <input type="text" value={newNameJa} onChange={(e) => setNewNameJa(e.target.value)} placeholder="例：N5 土曜日 14:00" />
             </div>
           )}
@@ -6288,60 +4198,6 @@ function App() {
             <button className="btn-primary" disabled={saving} style={{ flex: 2 }}
               onClick={modalType === 'evaluation' ? createEvaluation : modalType === 'batch' ? saveBatch : modalType === 'editStudent' ? updateStudent : modalType === 'student' ? saveStudent : modalType === 'editCategory' ? updateCategory : modalType === 'editExam' ? updateExamItem : modalType === 'category' ? saveCategory : saveExamItem}>
               {saving ? t('saving') : t('save')}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ── MOVE STUDENT TO ANOTHER BATCH — modal ──
-  const renderMoveModal = () => {
-    if (!showMoveModal || !selectedStudent || !selectedBatch) return null;
-    // GLOBAL: every batch across all teachers, minus the one the student is currently in
-    const sourceList = allBatchesForMove.length ? allBatchesForMove : batches;
-    const destinations = sourceList.filter(b => b._id !== selectedBatch._id);
-    return (
-      <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !moving) setShowMoveModal(false); }}>
-        <div className="modal-sheet">
-          <div className="modal-handle" />
-          <h2 className="modal-title">Move Student to Another Batch</h2>
-          <p style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 14px' }}>
-            <strong>{selectedStudent.name}</strong> will be moved out of <strong>{selectedBatch.name}</strong> together with all records — photo, categories, exams, scores, images, and evaluations. You can move to any batch, including other teachers' batches.
-          </p>
-          {loadingMoveBatches ? (
-            <p style={{ fontSize: 14, color: '#8e8e93' }}>Loading batches…</p>
-          ) : destinations.length === 0 ? (
-            <p style={{ fontSize: 14, color: '#8e8e93' }}>No other batch is available. Create another batch first.</p>
-          ) : (
-            <div className="form-group">
-              <label>Destination batch</label>
-              <select
-                value={moveTargetBatchId}
-                onChange={(e) => setMoveTargetBatchId(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}
-              >
-                <option value="">— Select a batch —</option>
-                {destinations.map(b => {
-                  const teacherName = b.teacherId ? moveTeacherMap[b.teacherId] : null;
-                  return (
-                    <option key={b._id} value={b._id}>
-                      {b.name}{b.name_ja ? ` (${b.name_ja})` : ''}{teacherName ? ` — ${teacherName}` : ''} · {b.students?.length || 0} student(s)
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            <button className="btn-secondary" onClick={() => setShowMoveModal(false)} disabled={moving} style={{ flex: 1 }}>{t('cancel')}</button>
-            <button
-              className="btn-primary"
-              disabled={moving || loadingMoveBatches || !moveTargetBatchId || destinations.length === 0}
-              style={{ flex: 2 }}
-              onClick={moveStudent}
-            >
-              {moving ? 'Moving…' : 'Move Student'}
             </button>
           </div>
         </div>
@@ -6369,7 +4225,7 @@ function App() {
         <div class="qr-card">
           ${item.photo
             ? `<img src="${item.photo}" class="avatar" />`
-            : `<div class="avatar-placeholder"><svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg></div>`}
+            : `<div class="avatar-placeholder">👤</div>`}
           <img src="${item.dataUrl}" class="qr" />
           <p class="name">${item.name}</p>
           <p class="batch">${selectedBatch.name}</p>
@@ -6514,7 +4370,7 @@ function App() {
             <div key={i} className="qr-card-print">
               {item.photo
                 ? <img src={item.photo} alt={item.name} className="qr-print-avatar" />
-                : <span className="qr-print-icon"><User size={22} /></span>
+                : <span className="qr-print-icon">👤</span>
               }
               <img src={item.dataUrl} alt="QR" className="qr-print-code" />
               <p className="qr-print-name">{item.name}</p>
@@ -6707,9 +4563,6 @@ function App() {
       })()}
       <style>{`
         @keyframes ptr-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .search-input::placeholder { color: rgba(255,255,255,0.55) !important; }
-        .search-input:focus { outline: none; background: rgba(255,255,255,0.25) !important; }
       `}</style>
       {view === 'batches' && (['setouchi','wbc','gyoumusuishin','greenservices'].includes(safeLocalGet(ROLE_KEY)) ? renderCompanyGroups() : renderBatches())}
       {view === 'students' && renderStudents()}
@@ -6719,23 +4572,7 @@ function App() {
       {view === 'examItems' && renderExamItems()}
       {view === 'examDetail' && renderExamDetail()}
       {renderModal()}
-      {renderMoveModal()}
       {renderPrintQRs()}
-      {showQuickAddExam && selectedStudent && (
-        <QuickAddExamModal
-          student={selectedStudent}
-          categories={selectedStudent?.categories || []}
-          onSave={handleQuickAddExamSave}
-          onClose={() => setShowQuickAddExam(false)}
-        />
-      )}
-
-      {showQRScanner && (
-        <QRScanner
-          onResult={handleQRResult}
-          onClose={() => setShowQRScanner(false)}
-        />
-      )}
       {showScanner && (
         <DocumentScanner
           bulkMode={true}
@@ -6762,14 +4599,6 @@ function App() {
           student={progressChartStudent}
           batch={selectedBatch}
           onClose={() => { setShowProgressChart(false); setProgressChartStudent(null); }}
-        />
-      )}
-      {showParentQR && parentQRStudent && (
-        <ParentQRPopup
-          student={parentQRStudent}
-          batch={selectedBatch}
-          teacher={selectedTeacher}
-          onClose={() => { setShowParentQR(false); setParentQRStudent(null); }}
         />
       )}
     </div>
