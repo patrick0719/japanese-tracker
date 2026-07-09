@@ -9,7 +9,7 @@ import {
   Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
   Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
   Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
-  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine
+  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -3537,6 +3537,9 @@ function ParentView({ data, token }) {
 
 function App() {
   const [batches, setBatches] = useState([]);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [batchFilterTab, setBatchFilterTab] = useState('all');
+  const [batchSort, setBatchSort] = useState('name');
   const [loading, setLoading] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [cloudName, setCloudName] = useState('');
@@ -4801,52 +4804,60 @@ function App() {
     <>
       <div className="sticky-header">
       <div className="header-banner">
-        <div className="top-row">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {((!isViewer && !isKazumi) || isKazumi) && selectedTeacher?.photo && (
-              <span className="avatar-wrap"><img src={selectedTeacher.photo} alt={selectedTeacher.name} /></span>
-            )}
-            {((!isViewer && !isKazumi) || isKazumi) && !selectedTeacher?.photo && (
-              <span className="avatar-wrap" style={{ fontSize: 24 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
-            )}
-            <div>
-              <p className="logged-in-label">ログイン中</p>
-              <h1 className={`title${isViewer && safeLocalGet(ROLE_KEY) !== 'viewer' ? ' kumiai-title' : ''}`}>
-                {isKazumi
-                  ? (selectedTeacher?.name || 'Ogawa Sensei')
-                  : isViewer
-                  ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI TECH COOPERATIVE ASSOCIATION'
-                    : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WORLD BUSINESS COOPERATIVE'
-                    : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMU SUISHIN COOPERATIVE ASSOCIATION'
-                    : safeLocalGet(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
-                    : safeLocalGet(ROLE_KEY) === 'sulop' ? 'SULOP'
-                    : 'PHGIC')
-                  : selectedTeacher?.name}
-              </h1>
-            </div>
+        <div className="bh-greeting-row">
+          <div>
+            <p className="bh-greeting-title">
+              {isKazumi
+                ? `Hello, ${selectedTeacher?.name || 'Ogawa Sensei'}`
+                : isViewer
+                ? (safeLocalGet(ROLE_KEY) === 'setouchi' ? 'SETOUCHI TECH COOPERATIVE'
+                  : safeLocalGet(ROLE_KEY) === 'wbc' ? 'WORLD BUSINESS COOPERATIVE'
+                  : safeLocalGet(ROLE_KEY) === 'gyoumusuishin' ? 'GYOUMU SUISHIN COOPERATIVE'
+                  : safeLocalGet(ROLE_KEY) === 'greenservices' ? 'GREEN SERVICES'
+                  : safeLocalGet(ROLE_KEY) === 'sulop' ? 'SULOP'
+                  : 'PHGIC')
+                : `Hello, ${selectedTeacher?.name || ''}`}
+            </p>
+            <p className="bh-greeting-sub">
+              {isViewer ? t('viewOnly') : isKazumi ? 'View Only' : 'Welcome back to SAGE Bulacan'}
+            </p>
           </div>
-          <div className="top-row-actions">
-            {isViewer && <span className="badge-view-only">{t('viewOnly')}</span>}
-            {isKazumi && <span className="badge-view-only">View Only</span>}
-            {(!isViewer && !isKazumi) || isKazumi ? (
-              <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">切替</button>
-            ) : null}
-            <button onClick={() => setDarkMode(d => !d)} className="btn-switch" title="Toggle Dark Mode">
-                {darkMode ? <Sun size={16} /> : <Moon size={16} />}
-              </button>
-            {(safeLocalGet(ROLE_KEY) === 'admin' || isKazumi) && (
-              <button onClick={() => setShowSettings(true)} className="btn-switch" title="Settings">
-                <Settings size={16} />
-              </button>
-            )}
-            <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TOKEN_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }} className="btn-logout">
-              {t('logout')}
+
+          <div style={{ position: 'relative' }}>
+            <button className="bh-avatar-btn" onClick={() => setHeaderMenuOpen(o => !o)}>
+              {selectedTeacher?.photo
+                ? <span className="avatar-wrap"><img src={selectedTeacher.photo} alt={selectedTeacher.name} /></span>
+                : <span className="avatar-wrap" style={{ fontSize: 22 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
+              }
             </button>
+            {headerMenuOpen && (
+              <>
+                <div className="tc-menu-backdrop" onClick={() => setHeaderMenuOpen(false)} />
+                <div className="tc-menu-dropdown" style={{ right: 0 }}>
+                  {((!isViewer && !isKazumi) || isKazumi) && (
+                    <button className="tc-menu-item" onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }}>
+                      <ArrowRightLeft size={14} /> Switch teacher
+                    </button>
+                  )}
+                  <button className="tc-menu-item" onClick={() => { setDarkMode(d => !d); setHeaderMenuOpen(false); }}>
+                    {darkMode ? <Sun size={14} /> : <Moon size={14} />} {darkMode ? 'Light mode' : 'Dark mode'}
+                  </button>
+                  {(safeLocalGet(ROLE_KEY) === 'admin' || isKazumi) && (
+                    <button className="tc-menu-item" onClick={() => { setShowSettings(true); setHeaderMenuOpen(false); }}>
+                      <Settings size={14} /> Settings
+                    </button>
+                  )}
+                  <button className="tc-menu-item tc-menu-item--danger" onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(ROLE_KEY); safeLocalRemove(TOKEN_KEY); safeLocalRemove(TEACHER_KEY); setIsLoggedIn(false); setIsViewer(false); setSelectedTeacher(null); setBatches([]); }}>
+                    <X size={14} /> {t('logout')}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* ── Search bar ── */}
-        <div style={{ padding: '10px 16px 14px', position: 'relative' }}>
+        {/* ── Search bar + sort ── */}
+        <div className="bh-search-row">
           <div className="bh-search-wrap">
             <Search size={16} className="bh-search-icon" />
             <input
@@ -4860,6 +4871,13 @@ function App() {
               <button onClick={() => setGlobalSearch('')} className="bh-search-clear"><X size={14} /></button>
             )}
           </div>
+          <button
+            className="bh-sort-btn"
+            title="Sort batches"
+            onClick={() => setBatchSort(s => s === 'name' ? 'count' : 'name')}
+          >
+            <SlidersHorizontal size={17} />
+          </button>
         </div>
 
       </div>{/* end header-banner */}
@@ -4956,54 +4974,104 @@ function App() {
         <>
           {/* ── Normal batch list ── */}
           <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
-          {(isViewer
-            ? batches.filter(b => !b.isHiddenFromViewer && (safeLocalGet(ROLE_KEY) === 'sulop'
-                ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
-                : b.students.some(s => s.status === 'Selected')))
-            : batches).map(batch => (
-            <div key={batch._id} className="bh-card">
-              <button className="bh-card-main" onClick={() => goToStudents(batch)}>
-                <span className="bh-card-icon"><BookOpen size={19} /></span>
-                <div className="bh-card-text">
-                  <h2 className="bh-card-title">{displayName(batch)}</h2>
-                  <p className="bh-card-sub">
-                    {isViewer
-                      ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
-                      : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
-                  </p>
-                </div>
-              </button>
-              {!isViewer && !isKazumi && (
-                <div className="bh-card-actions">
-                  <button
-                    title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
-                    className={`bh-visibility-pill${batch.isHiddenFromViewer ? ' bh-visibility-pill--hidden' : ''}`}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
-                        const data = await res.json();
-                        console.log('toggle-hide response:', res.status, data);
-                        if (data.success) {
-                          setBatches(prev => prev.map(b =>
-                            b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
-                          ));
-                        } else {
-                          alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
-                        }
-                      } catch(err) {
-                        alert('Toggle error: ' + err.message);
-                      }
-                    }}
-                  >
-                    {batch.isHiddenFromViewer ? <EyeOff size={12} /> : <Eye size={12} />}
-                    {batch.isHiddenFromViewer ? 'Hidden' : 'Visible'}
-                  </button>
-                  <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>
-                </div>
-              )}
+
+          {!isViewer && !isKazumi && (
+            <div className="bh-chip-row">
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'visible', label: 'Visible' },
+                { key: 'hidden', label: 'Hidden' },
+              ].map(chip => (
+                <button
+                  key={chip.key}
+                  className={`bh-chip${batchFilterTab === chip.key ? ' bh-chip--active' : ''}`}
+                  onClick={() => setBatchFilterTab(chip.key)}
+                >
+                  {chip.label}
+                </button>
+              ))}
             </div>
-          ))}
+          )}
+
+          {(() => {
+            const baseBatches = isViewer
+              ? batches.filter(b => !b.isHiddenFromViewer && (safeLocalGet(ROLE_KEY) === 'sulop'
+                  ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
+                  : b.students.some(s => s.status === 'Selected')))
+              : batches;
+            const filtered = (!isViewer && !isKazumi)
+              ? baseBatches.filter(b => batchFilterTab === 'all' ? true : batchFilterTab === 'visible' ? !b.isHiddenFromViewer : b.isHiddenFromViewer)
+              : baseBatches;
+            const sorted = filtered.slice().sort((a, b) => {
+              if (batchSort === 'count') {
+                return b.students.filter(s => !s.isArchived).length - a.students.filter(s => !s.isArchived).length;
+              }
+              return displayName(a).localeCompare(displayName(b));
+            });
+
+            if (sorted.length === 0) {
+              return (
+                <div className="tc-empty-mini" style={{ padding: '30px 16px' }}>
+                  No batches in this filter yet.
+                </div>
+              );
+            }
+
+            return sorted.map(batch => {
+              const studentCount = isViewer
+                ? batch.students.filter(s => !s.isArchived && s.status === 'Selected').length
+                : batch.students.filter(s => !s.isArchived).length;
+              return (
+                <div key={batch._id} className="bh-hero-card">
+                  <div className="bh-hero-top">
+                    <BookOpen size={56} className="bh-hero-icon-bg" />
+                    {!isViewer && !isKazumi && (
+                      <button
+                        className="bh-hero-badge bh-hero-badge--left"
+                        title="Delete batch"
+                        onClick={(e) => deleteBatch(batch._id, e)}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                    {!isViewer && !isKazumi && (
+                      <button
+                        className={`bh-hero-badge bh-hero-badge--right${batch.isHiddenFromViewer ? ' bh-hero-badge--hidden' : ''}`}
+                        title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
+                            const data = await res.json();
+                            if (data.success) {
+                              setBatches(prev => prev.map(b =>
+                                b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
+                              ));
+                            } else {
+                              alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
+                            }
+                          } catch(err) {
+                            alert('Toggle error: ' + err.message);
+                          }
+                        }}
+                      >
+                        {batch.isHiddenFromViewer ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    )}
+                    <div className="bh-hero-info">
+                      <p className="bh-hero-name">{displayName(batch)}</p>
+                      <p className="bh-hero-sub">{studentCount} student{studentCount !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+                  <button className="bh-hero-footer" onClick={() => goToStudents(batch)}>
+                    <span className="bh-hero-footer-label">See students</span>
+                    <span className="bh-hero-arrow"><ChevronRight size={17} /></span>
+                  </button>
+                </div>
+              );
+            });
+          })()}
+
           <div className="bh-bottom-spacer" />
           <div className="bh-bottom-bar">
             {!isViewer && !isKazumi && (
