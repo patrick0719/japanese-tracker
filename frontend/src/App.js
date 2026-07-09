@@ -9,7 +9,7 @@ import {
   Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
   Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
   Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
-  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal
+  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal, MoreVertical
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -4893,12 +4893,36 @@ function App() {
             </p>
           </div>
 
+          <span className="avatar-wrap" style={{ flexShrink: 0 }}>
+            {selectedTeacher?.photo
+              ? <img src={selectedTeacher.photo} alt={selectedTeacher.name} />
+              : <span style={{ fontSize: 22 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
+            }
+          </span>
+        </div>
+
+        {/* ── Search bar + menu ── */}
+        <div className="bh-search-row">
+          <div className="bh-search-wrap">
+            <Search size={16} className="bh-search-icon" />
+            <input
+              type="text"
+              value={globalSearch}
+              onChange={e => setGlobalSearch(e.target.value)}
+              placeholder="Search students, company, batch..."
+              className="bh-search-input"
+            />
+            {globalSearch && (
+              <button onClick={() => setGlobalSearch('')} className="bh-search-clear"><X size={14} /></button>
+            )}
+          </div>
           <div style={{ position: 'relative' }}>
-            <button className="bh-avatar-btn" onClick={() => setHeaderMenuOpen(o => !o)}>
-              {selectedTeacher?.photo
-                ? <span className="avatar-wrap"><img src={selectedTeacher.photo} alt={selectedTeacher.name} /></span>
-                : <span className="avatar-wrap" style={{ fontSize: 22 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
-              }
+            <button
+              className="bh-sort-btn"
+              title="Menu"
+              onClick={() => setHeaderMenuOpen(o => !o)}
+            >
+              <MoreVertical size={18} />
             </button>
             {headerMenuOpen && (
               <>
@@ -4924,30 +4948,6 @@ function App() {
               </>
             )}
           </div>
-        </div>
-
-        {/* ── Search bar + sort ── */}
-        <div className="bh-search-row">
-          <div className="bh-search-wrap">
-            <Search size={16} className="bh-search-icon" />
-            <input
-              type="text"
-              value={globalSearch}
-              onChange={e => setGlobalSearch(e.target.value)}
-              placeholder="Search students, company, batch..."
-              className="bh-search-input"
-            />
-            {globalSearch && (
-              <button onClick={() => setGlobalSearch('')} className="bh-search-clear"><X size={14} /></button>
-            )}
-          </div>
-          <button
-            className="bh-sort-btn"
-            title="Sort batches"
-            onClick={() => setBatchSort(s => s === 'name' ? 'count' : 'name')}
-          >
-            <SlidersHorizontal size={17} />
-          </button>
         </div>
 
       </div>{/* end header-banner */}
