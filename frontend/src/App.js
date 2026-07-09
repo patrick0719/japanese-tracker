@@ -3070,8 +3070,6 @@ function LoginScreen({ onLogin }) {
 
   return (
     <div className="sk-login-screen">
-      <div className="sk-login-glow sk-login-glow--1" />
-      <div className="sk-login-glow sk-login-glow--2" />
       <div className="sk-login-card">
         <img src={LOGO_DATA_URL} alt="Sage Asian" className="sk-login-logo" />
         <div className="sk-wordmark">
@@ -3150,8 +3148,7 @@ function SplashScreen({ onDone }) {
       opacity: phase === 'exit' ? 0 : 1,
       transition: phase === 'exit' ? 'opacity 0.55s ease-in-out' : 'none',
     }}>
-      <div className="sk-splash-glow sk-splash-glow--1" />
-      <div className="sk-splash-glow sk-splash-glow--2" />
+
 
       <div className="sk-splash-card">
         <img
