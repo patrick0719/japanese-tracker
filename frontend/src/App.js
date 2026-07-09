@@ -4804,11 +4804,10 @@ function App() {
         <div className="top-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {((!isViewer && !isKazumi) || isKazumi) && selectedTeacher?.photo && (
-              <img src={selectedTeacher.photo} alt={selectedTeacher.name}
-                style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
+              <span className="avatar-wrap"><img src={selectedTeacher.photo} alt={selectedTeacher.name} /></span>
             )}
             {((!isViewer && !isKazumi) || isKazumi) && !selectedTeacher?.photo && (
-              <span style={{ fontSize: 38 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
+              <span className="avatar-wrap" style={{ fontSize: 24 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
             )}
             <div>
               <p className="logged-in-label">ログイン中</p>
@@ -4832,11 +4831,11 @@ function App() {
             {(!isViewer && !isKazumi) || isKazumi ? (
               <button onClick={() => { safeLocalRemove(TEACHER_KEY); setSelectedTeacher(null); setBatches([]); }} className="btn-switch">切替</button>
             ) : null}
-            <button onClick={() => setDarkMode(d => !d)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Toggle Dark Mode">
+            <button onClick={() => setDarkMode(d => !d)} className="btn-switch" title="Toggle Dark Mode">
                 {darkMode ? <Sun size={16} /> : <Moon size={16} />}
               </button>
             {(safeLocalGet(ROLE_KEY) === 'admin' || isKazumi) && (
-              <button onClick={() => setShowSettings(true)} className="btn-switch" style={{ background: 'rgba(255,255,255,0.15)' }} title="Settings">
+              <button onClick={() => setShowSettings(true)} className="btn-switch" title="Settings">
                 <Settings size={16} />
               </button>
             )}
@@ -5005,10 +5004,17 @@ function App() {
               )}
             </div>
           ))}
-          {!isViewer && !isKazumi && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
-          <button onClick={() => setShowQRScanner(true)} className="bh-scan-btn">
-            <Camera size={20} /> Scan Student QR Code
-          </button>
+          <div className="bh-bottom-spacer" />
+          <div className="bh-bottom-bar">
+            {!isViewer && !isKazumi && (
+              <button className="bh-bottom-btn" onClick={() => openModal('batch')}>
+                <Plus size={17} /> {t('addNewBatch')}
+              </button>
+            )}
+            <button className="bh-bottom-btn bh-bottom-btn--accent" onClick={() => setShowQRScanner(true)}>
+              <Camera size={17} /> Scan QR
+            </button>
+          </div>
         </>
       )}
     </>
