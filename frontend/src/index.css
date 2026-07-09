@@ -673,7 +673,7 @@
 
    /* ═══════════════════════════════════════════════════════
       SUMI INK — modern Login & Splash screens (isolated "sk-" namespace,
-      does not touch shared .login-*/.form-group/.btn-primary classes used elsewhere)
+      does not touch shared login, form-group, or btn-primary classes used elsewhere)
       ═══════════════════════════════════════════════════════ */
 
    /* ── LOGIN v2 ────────────────────────────────────────── */
