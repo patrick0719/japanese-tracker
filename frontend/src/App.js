@@ -3610,6 +3610,7 @@ function App() {
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [batchFilterTab, setBatchFilterTab] = useState('all');
   const [batchSort, setBatchSort] = useState('name');
+  const [profileTab, setProfileTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [cloudName, setCloudName] = useState('');
@@ -3952,6 +3953,7 @@ function App() {
     // Always resolve the freshest student from selectedBatch so categories/exams are current
     const freshStudent = selectedBatch?.students.find(s => s._id === student._id) || student;
     setSelectedStudent(freshStudent);
+    setProfileTab('profile');
     setView('categories');
   };
   const goToExamItems = (cat) => { setSelectedCategory(cat); setView('examItems'); };
@@ -5267,181 +5269,204 @@ function App() {
         <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
       </div>
 
-      {/* ── Student Profile Card ── */}
-      <div className="student-profile-header">
-        {selectedStudent.photo
-          ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
-              onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
-              style={{ cursor: 'pointer' }} />
-          : <span className="student-profile-icon"><User size={22} /></span>
-        }
-        <h1 className="student-profile-name">{selectedStudent.name}</h1>
+      {/* ══════════════ TAB: PROFILE ══════════════ */}
+      {profileTab === 'profile' && (
+        <div className="student-profile-header">
+          {selectedStudent.photo
+            ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
+                onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
+                style={{ cursor: 'pointer' }} />
+            : <span className="student-profile-icon"><User size={22} /></span>
+          }
+          <h1 className="student-profile-name">{selectedStudent.name}</h1>
 
-        {/* ── Admin Quick Actions ── */}
-        {!isViewer && !isKazumi && (
-          <>
-            <p className="profile-action-label">Quick Actions</p>
-            <div className="profile-icon-grid">
-              <button className="profile-icon-btn" onClick={() => setShowQuickAddExam(true)}>
-                <span className="profile-icon-circle profile-icon-circle--green"><Plus size={18} /></span>
-                <span>Quick Add</span>
-              </button>
-              <button className="profile-icon-btn" onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}>
-                <span className="profile-icon-circle profile-icon-circle--purple"><KeyRound size={18} /></span>
-                <span>Parent QR</span>
-              </button>
-              <button className="profile-icon-btn" onClick={async () => {
-                if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
-                try {
-                  const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-                  const data = await res.json();
-                  if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
-                  else alert('Error: ' + (data.error || 'Unknown'));
-                } catch (e) { alert('Failed: ' + e.message); }
-              }}>
-                <span className="profile-icon-circle profile-icon-circle--gray"><Layers size={18} /></span>
-                <span>Archive Imgs</span>
-              </button>
-              <button className="profile-icon-btn" onClick={async () => {
-                if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
-                try {
-                  const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
-                  const data = await res.json();
-                  if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
-                  else alert('Error: ' + (data.error || 'Unknown'));
-                } catch (e) { alert('Failed: ' + e.message); }
-              }}>
-                <span className="profile-icon-circle profile-icon-circle--blue"><RefreshCw size={18} /></span>
-                <span>Restore Imgs</span>
-              </button>
+          {/* ── Admin Quick Actions ── */}
+          {!isViewer && !isKazumi && (
+            <>
+              <p className="profile-action-label">Quick Actions</p>
+              <div className="profile-icon-grid">
+                <button className="profile-icon-btn" onClick={() => setShowQuickAddExam(true)}>
+                  <span className="profile-icon-circle profile-icon-circle--green"><Plus size={18} /></span>
+                  <span>Quick Add</span>
+                </button>
+                <button className="profile-icon-btn" onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}>
+                  <span className="profile-icon-circle profile-icon-circle--purple"><KeyRound size={18} /></span>
+                  <span>Parent QR</span>
+                </button>
+                <button className="profile-icon-btn" onClick={async () => {
+                  if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
+                  try {
+                    const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.success) alert(`✅ Archived! ${data.migrated} image(s) moved, ${data.skipped} skipped.`);
+                    else alert('Error: ' + (data.error || 'Unknown'));
+                  } catch (e) { alert('Failed: ' + e.message); }
+                }}>
+                  <span className="profile-icon-circle profile-icon-circle--gray"><Layers size={18} /></span>
+                  <span>Archive Imgs</span>
+                </button>
+                <button className="profile-icon-btn" onClick={async () => {
+                  if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
+                  try {
+                    const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.success) alert(`✅ Restored! ${data.migrated} image(s) moved back, ${data.skipped} skipped.`);
+                    else alert('Error: ' + (data.error || 'Unknown'));
+                  } catch (e) { alert('Failed: ' + e.message); }
+                }}>
+                  <span className="profile-icon-circle profile-icon-circle--blue"><RefreshCw size={18} /></span>
+                  <span>Restore Imgs</span>
+                </button>
+              </div>
+
+              <p className="profile-action-label" style={{ marginTop: 10 }}>Student Status</p>
+              <div className="profile-danger-row">
+                <button
+                  className="profile-danger-btn"
+                  style={{ color: '#007AFF' }}
+                  onClick={openMoveModal}
+                >
+                  <ArrowRightLeft size={15} />
+                  Move to Batch
+                </button>
+                <button className="profile-danger-btn" onClick={() => toggleArchiveStudent(selectedStudent)}>
+                  {selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}
+                </button>
+                <button className="profile-danger-btn profile-danger-btn--red" onClick={async () => {
+                  if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
+                  if (!window.confirm(`Are you sure? This is irreversible.`)) return;
+                  try {
+                    const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
+                    const data = await res.json();
+                    if (data.success) {
+                      alert(`${selectedStudent.name} permanently deleted.`);
+                      const deletedStudentId = selectedStudent._id;
+                      const deletedBatchId = selectedBatch._id;
+                      setBatches(prev => prev.map(b =>
+                        b._id === deletedBatchId
+                          ? { ...b, students: b.students.filter(s => s._id !== deletedStudentId) }
+                          : b
+                      ));
+                      try {
+                        const dismissed = JSON.parse(localStorage.getItem('sage_dismissed_reminders') || '[]');
+                        const cleaned = dismissed.filter(id => !id.includes(deletedStudentId));
+                        localStorage.setItem('sage_dismissed_reminders', JSON.stringify(cleaned));
+                      } catch {}
+                      goBack();
+                    }
+                    else alert('Error: ' + (data.error || 'Unknown'));
+                  } catch (e) { alert('Failed: ' + e.message); }
+                }}>
+                  <Trash2 size={15} />
+                  {t('deleteStudent')}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════ TAB: PROGRESS ══════════════ */}
+      {profileTab === 'progress' && (
+        <div className="progress-summary-card" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}>
+          <div className="progress-summary-top">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <TrendingUp size={16} color="var(--brand)" />
+              <span className="progress-summary-title">{t('progressChart')}</span>
             </div>
-
-            <p className="profile-action-label" style={{ marginTop: 10 }}>Student Status</p>
-            <div className="profile-danger-row">
-              <button
-                className="profile-danger-btn"
-                style={{ color: '#007AFF' }}
-                onClick={openMoveModal}
-              >
-                <ArrowRightLeft size={15} />
-                Move to Batch
-              </button>
-              <button className="profile-danger-btn" onClick={() => toggleArchiveStudent(selectedStudent)}>
-                {selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}
-              </button>
-              <button className="profile-danger-btn profile-danger-btn--red" onClick={async () => {
-                if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
-                if (!window.confirm(`Are you sure? This is irreversible.`)) return;
-                try {
-                  const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
-                  const data = await res.json();
-                  if (data.success) {
-                    alert(`${selectedStudent.name} permanently deleted.`);
-                    // ✅ Remove student from local batches state immediately (fixes SmartReminders + search)
-                    const deletedStudentId = selectedStudent._id;
-                    const deletedBatchId = selectedBatch._id;
-                    setBatches(prev => prev.map(b =>
-                      b._id === deletedBatchId
-                        ? { ...b, students: b.students.filter(s => s._id !== deletedStudentId) }
-                        : b
-                    ));
-                    // ✅ Clear this student's dismissed reminders from localStorage
-                    try {
-                      const dismissed = JSON.parse(localStorage.getItem('sage_dismissed_reminders') || '[]');
-                      const cleaned = dismissed.filter(id => !id.includes(deletedStudentId));
-                      localStorage.setItem('sage_dismissed_reminders', JSON.stringify(cleaned));
-                    } catch {}
-                    goBack();
-                  }
-                  else alert('Error: ' + (data.error || 'Unknown'));
-                } catch (e) { alert('Failed: ' + e.message); }
-              }}>
-                <Trash2 size={15} />
-                {t('deleteStudent')}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ── Progress Chart Card (visible to ALL roles) ── */}
-      <div className="progress-summary-card" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}>
-        <div className="progress-summary-top">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <TrendingUp size={16} color="var(--brand)" />
-            <span className="progress-summary-title">{t('progressChart')}</span>
+            <span className="progress-summary-link">View full →</span>
           </div>
-          <span className="progress-summary-link">View full →</span>
-        </div>
-        {n === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>No exam data yet</p>
-        ) : (
-          <>
-            <div className="progress-summary-stats">
-              <div>
-                <p className="progress-stat-label">Avg score</p>
-                <p className="progress-stat-value">{avg}%</p>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                {recentTrend !== null && (
-                  <span className={`progress-trend-pill ${recentTrend >= 0 ? 'progress-trend-pill--up' : 'progress-trend-pill--down'}`}>
-                    {recentTrend >= 0 ? '↑' : '↓'} {Math.abs(recentTrend)}% trend
-                  </span>
-                )}
-                <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                  {n} exam{n !== 1 ? 's' : ''}{streak > 1 ? ` · 🔥 ${streak}-streak` : ''}
-                </p>
-              </div>
-            </div>
-            <div className="progress-bar-track">
-              <div className="progress-bar-fill" style={{ width: `${Math.min(avg, 100)}%` }} />
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ── Exam Categories Box ── */}
-      <div className="section-box">
-        <div className="section-box-header">
-          <h2 className="section-box-title">{t('examCategoriesTitle')}</h2>
-          {!isViewer && !isKazumi && (
-            <button onClick={() => openModal('category')} className="section-box-add">+ Add</button>
-          )}
-        </div>
-        {(selectedStudent.categories || []).length === 0
-          ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0, textAlign: 'center', padding: '12px 0' }}>{t('noExamCategories')}</p>
-          : (selectedStudent.categories || []).map(cat => (
-            <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
-              <div className="card-content">
+          {n === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>No exam data yet</p>
+          ) : (
+            <>
+              <div className="progress-summary-stats">
                 <div>
-                  <h3 className="card-title"><Folder size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{displayName(cat)}</h3>
-                  <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
+                  <p className="progress-stat-label">Avg score</p>
+                  <p className="progress-stat-value">{avg}%</p>
                 </div>
-                <div className="exam-right">
-                  {!isViewer && !isKazumi && (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
-                        onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
-                      <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}><X size={14} /></button>
-                    </div>
+                <div style={{ textAlign: 'right' }}>
+                  {recentTrend !== null && (
+                    <span className={`progress-trend-pill ${recentTrend >= 0 ? 'progress-trend-pill--up' : 'progress-trend-pill--down'}`}>
+                      {recentTrend >= 0 ? '↑' : '↓'} {Math.abs(recentTrend)}% trend
+                    </span>
                   )}
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                    {n} exam{n !== 1 ? 's' : ''}{streak > 1 ? ` · 🔥 ${streak}-streak` : ''}
+                  </p>
                 </div>
               </div>
-            </div>
-          ))
-        }
-      </div>
-
-      {/* ── Evaluations Box ── */}
-      <div className="section-box">
-        <div className="section-box-header">
-          <h2 className="section-box-title">{t('evaluationsTitle')}</h2>
-          {!isViewer && !isKazumi && (
-            <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} className="section-box-add" style={{ background: 'var(--green)', boxShadow: '0 3px 10px rgba(16,185,129,0.3)' }}>+ Add</button>
+              <div className="progress-bar-track">
+                <div className="progress-bar-fill" style={{ width: `${Math.min(avg, 100)}%` }} />
+              </div>
+            </>
           )}
         </div>
-        <button onClick={goToEvaluations} style={{ width: '100%', background: 'var(--surface2)', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 500 }}>
-          {t('viewAllEvaluations')}
+      )}
+
+      {/* ══════════════ TAB: EXAMS ══════════════ */}
+      {profileTab === 'exams' && (
+        <div className="section-box">
+          <div className="section-box-header">
+            <h2 className="section-box-title">{t('examCategoriesTitle')}</h2>
+            {!isViewer && !isKazumi && (
+              <button onClick={() => openModal('category')} className="section-box-add">+ Add</button>
+            )}
+          </div>
+          {(selectedStudent.categories || []).length === 0
+            ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0, textAlign: 'center', padding: '12px 0' }}>{t('noExamCategories')}</p>
+            : (selectedStudent.categories || []).map(cat => (
+              <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
+                <div className="card-content">
+                  <div>
+                    <h3 className="card-title"><Folder size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{displayName(cat)}</h3>
+                    <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="exam-right">
+                    {!isViewer && !isKazumi && (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
+                          onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
+                        <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}><X size={14} /></button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      )}
+
+      {/* ══════════════ TAB: EVALUATIONS ══════════════ */}
+      {profileTab === 'evaluations' && (
+        <div className="section-box">
+          <div className="section-box-header">
+            <h2 className="section-box-title">{t('evaluationsTitle')}</h2>
+            {!isViewer && !isKazumi && (
+              <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} className="section-box-add" style={{ background: 'var(--green)', boxShadow: '0 3px 10px rgba(16,185,129,0.3)' }}>+ Add</button>
+            )}
+          </div>
+          <button onClick={goToEvaluations} style={{ width: '100%', background: 'var(--surface2)', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 500 }}>
+            {t('viewAllEvaluations')}
+          </button>
+        </div>
+      )}
+
+      {/* ══════════════ BOTTOM DOCK ══════════════ */}
+      <div className="sp-bottom-spacer" />
+      <div className="sp-dock">
+        <button className={`sp-dock-btn${profileTab === 'profile' ? ' sp-dock-btn--active' : ''}`} onClick={() => setProfileTab('profile')} title="Profile">
+          <User size={19} />
+        </button>
+        <button className={`sp-dock-btn${profileTab === 'progress' ? ' sp-dock-btn--active' : ''}`} onClick={() => setProfileTab('progress')} title="Progress">
+          <TrendingUp size={19} />
+        </button>
+        <button className={`sp-dock-btn${profileTab === 'exams' ? ' sp-dock-btn--active' : ''}`} onClick={() => setProfileTab('exams')} title="Exam Categories">
+          <Folder size={19} />
+        </button>
+        <button className={`sp-dock-btn${profileTab === 'evaluations' ? ' sp-dock-btn--active' : ''}`} onClick={() => setProfileTab('evaluations')} title="Evaluations">
+          <FileText size={19} />
         </button>
       </div>
     </>

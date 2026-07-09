@@ -2075,3 +2075,21 @@
   border-radius: 99px;
   transition: width 0.4s cubic-bezier(0.34,1.56,0.64,1);
 }
+
+/* ── Student Profile bottom dock (tab navigation) ── */
+.sp-bottom-spacer { height: 86px; }
+.sp-dock {
+  position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 60;
+  max-width: 468px; margin: 0 auto;
+  display: flex; justify-content: space-around; align-items: center;
+  background: var(--sk-ink, #17181c); border-radius: 999px;
+  padding: 9px; box-shadow: 0 14px 36px rgba(0,0,0,0.28);
+}
+.sp-dock-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 46px; height: 46px; border-radius: 50%; border: none;
+  background: transparent; color: rgba(255,255,255,0.55); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sp-dock-btn:hover { color: #fff; }
+.sp-dock-btn--active { background: #fff; color: var(--sk-ink, #17181c); }
