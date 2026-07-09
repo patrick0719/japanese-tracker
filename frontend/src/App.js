@@ -4848,37 +4848,17 @@ function App() {
 
         {/* ── Search bar ── */}
         <div style={{ padding: '10px 16px 14px', position: 'relative' }}>
-          <div style={{ position: 'relative' }}>
-            <span style={{
-              position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-              pointerEvents: 'none', opacity: 0.55,
-            }}><Search size={16} /></span>
+          <div className="bh-search-wrap">
+            <Search size={16} className="bh-search-icon" />
             <input
               type="text"
               value={globalSearch}
               onChange={e => setGlobalSearch(e.target.value)}
               placeholder="Search students, company, batch..."
-              className="search-input"
-              style={{
-                width: '100%', boxSizing: 'border-box',
-                padding: '10px 36px 10px 38px',
-                borderRadius: 12, border: 'none',
-                background: 'rgba(255,255,255,0.18)',
-                color: '#fff', fontSize: 15,
-                outline: 'none',
-              }}
+              className="bh-search-input"
             />
             {globalSearch && (
-              <button
-                onClick={() => setGlobalSearch('')}
-                style={{
-                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                  background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff',
-                  borderRadius: '50%', width: 20, height: 20, fontSize: 12,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  lineHeight: 1, padding: 0,
-                }}
-              ><X size={14} /></button>
+              <button onClick={() => setGlobalSearch('')} className="bh-search-clear"><X size={14} /></button>
             )}
           </div>
         </div>
@@ -4932,44 +4912,42 @@ function App() {
               return (
                 <div
                   key={`${batch._id}-${student._id}`}
-                  className="card student-card clickable"
+                  className="bh-student-row"
                   onClick={() => {
                     setGlobalSearch('');
                     setSelectedBatch(batch);
                     goToCategories(student);
                   }}
                 >
-                  <div className="card-content">
-                    <div className="student-card-left">
-                      {student.photo
-                        ? <img src={student.photo} alt={student.name} className="student-avatar" />
-                        : <span className="student-avatar-icon"><User size={22} /></span>
-                      }
-                      <div>
-                        <h3 className="card-title" style={{ margin: 0 }}>
-                          {highlight(student.name)}
-                        </h3>
-                        <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
-                          <BookOpen size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{highlight(batch.name)}
-                        </p>
-                        {student.companyName && (
-                          <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
-                            <Building2 size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{highlight(student.companyName)}
-                          </p>
-                        )}
-                        {student.kumiai && (
-                          <span style={{
-                            display: 'inline-block', marginTop: 4,
-                            background: '#fff3cd', color: '#856404',
-                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                          }}>
-                            {highlight(student.kumiai)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span style={{ color: '#c7c7cc', fontSize: 20, flexShrink: 0 }}>›</span>
+                  <div className="bh-student-avatar">
+                    {student.photo
+                      ? <img src={student.photo} alt={student.name} />
+                      : <span className="student-avatar-icon"><User size={22} /></span>
+                    }
                   </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <h3 className="card-title" style={{ margin: 0 }}>
+                      {highlight(student.name)}
+                    </h3>
+                    <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
+                      <BookOpen size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{highlight(batch.name)}
+                    </p>
+                    {student.companyName && (
+                      <p className="card-subtitle" style={{ margin: '2px 0 0' }}>
+                        <Building2 size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{highlight(student.companyName)}
+                      </p>
+                    )}
+                    {student.kumiai && (
+                      <span style={{
+                        display: 'inline-block', marginTop: 4,
+                        background: '#fff3cd', color: '#856404',
+                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                      }}>
+                        {highlight(student.kumiai)}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 18, flexShrink: 0 }}>›</span>
                 </div>
               );
             })
@@ -4984,70 +4962,52 @@ function App() {
                 ? b.students.some(s => !s.isArchived && s.scholarship === 'yes' && s.scholarshipType === 'Sulop')
                 : b.students.some(s => s.status === 'Selected')))
             : batches).map(batch => (
-            <div key={batch._id} className="card clickable" onClick={() => goToStudents(batch)}>
-              <div className="card-content">
-                <div>
-                  <h2 className="card-title"><BookOpen size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{displayName(batch)}</h2>
-                  <p className="card-subtitle">
+            <div key={batch._id} className="bh-card">
+              <button className="bh-card-main" onClick={() => goToStudents(batch)}>
+                <span className="bh-card-icon"><BookOpen size={19} /></span>
+                <div className="bh-card-text">
+                  <h2 className="bh-card-title">{displayName(batch)}</h2>
+                  <p className="bh-card-sub">
                     {isViewer
                       ? `${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length} selected student${batch.students.filter(s => !s.isArchived && s.status === 'Selected').length !== 1 ? 's' : ''}`
                       : `${batch.students.filter(s => !s.isArchived).length} student${batch.students.filter(s => !s.isArchived).length !== 1 ? 's' : ''}`}
                   </p>
                 </div>
-                {!isViewer && !isKazumi && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
-                    <button
-                      title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        try {
-                          const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
-                          const data = await res.json();
-                          console.log('toggle-hide response:', res.status, data);
-                          if (data.success) {
-                            setBatches(prev => prev.map(b =>
-                              b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
-                            ));
-                          } else {
-                            alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
-                          }
-                        } catch(err) {
-                          alert('Toggle error: ' + err.message);
+              </button>
+              {!isViewer && !isKazumi && (
+                <div className="bh-card-actions">
+                  <button
+                    title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
+                    className={`bh-visibility-pill${batch.isHiddenFromViewer ? ' bh-visibility-pill--hidden' : ''}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
+                        const data = await res.json();
+                        console.log('toggle-hide response:', res.status, data);
+                        if (data.success) {
+                          setBatches(prev => prev.map(b =>
+                            b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
+                          ));
+                        } else {
+                          alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
                         }
-                      }}
-                      style={{
-                        background: batch.isHiddenFromViewer ? 'rgba(255,149,0,0.12)' : 'rgba(0,0,0,0.05)',
-                        border: 'none', borderRadius: 8,
-                        padding: '5px 9px', cursor: 'pointer',
-                        fontSize: 11, fontWeight: 700,
-                        color: batch.isHiddenFromViewer ? '#e67e00' : 'var(--text-tertiary)',
-                        display: 'flex', alignItems: 'center', gap: 4,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {batch.isHiddenFromViewer
-                        ? <><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg> Hidden</>
-                        : <><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Visible</>
+                      } catch(err) {
+                        alert('Toggle error: ' + err.message);
                       }
-                    </button>
-                    <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>
-                  </div>
-                )}
-              </div>
+                    }}
+                  >
+                    {batch.isHiddenFromViewer ? <EyeOff size={12} /> : <Eye size={12} />}
+                    {batch.isHiddenFromViewer ? 'Hidden' : 'Visible'}
+                  </button>
+                  <button className="delete-btn-icon" onClick={(e) => deleteBatch(batch._id, e)}><X size={14} /></button>
+                </div>
+              )}
             </div>
           ))}
           {!isViewer && !isKazumi && <button className="add-button" onClick={() => openModal('batch')}>{t('addNewBatch')}</button>}
-          <button
-            onClick={() => setShowQRScanner(true)}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              width: 'calc(100% - 32px)', margin: '0 16px 16px',
-              padding: '14px', borderRadius: 14, border: '2px dashed #8B0000',
-              background: 'rgba(139,0,0,0.06)', color: '#8B0000',
-              fontSize: 15, fontWeight: 700, cursor: 'pointer',
-            }}
-          >
-            <span style={{ }}><Camera size={20} /></span> Scan Student QR Code
+          <button onClick={() => setShowQRScanner(true)} className="bh-scan-btn">
+            <Camera size={20} /> Scan Student QR Code
           </button>
         </>
       )}
