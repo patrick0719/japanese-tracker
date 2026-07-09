@@ -12,6 +12,15 @@
      --brand-light:    #e05555;
      --brand-soft:     #fff0f0;
      --brand-glow:     rgba(155, 0, 0, 0.22);
+
+     /* ── SUMI INK — modern login/splash palette ─────────── */
+     --sk-ink:         #17181c;
+     --sk-ink-2:       #24252b;
+     --sk-terracotta:  #c1502e;
+     --sk-terracotta-2:#a63f22;
+     --sk-terracotta-soft: #fdece3;
+     --sk-cream:       #faf6f0;
+     --sk-cream-2:     #f3ede3;
    
      --dark:           #111117;
      --dark-2:         #1c1c24;
@@ -661,6 +670,113 @@
    .password-wrapper { position: relative; }
    .password-wrapper input { padding-right: 46px; }
    .password-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 17px; color: var(--text-tertiary); padding: 4px; }
+
+   /* ═══════════════════════════════════════════════════════
+      SUMI INK — modern Login & Splash screens (isolated "sk-" namespace,
+      does not touch shared .login-*/.form-group/.btn-primary classes used elsewhere)
+      ═══════════════════════════════════════════════════════ */
+
+   /* ── LOGIN v2 ────────────────────────────────────────── */
+   .sk-login-screen {
+     position: fixed; inset: 0; z-index: 99999;
+     background: var(--sk-cream);
+     display: flex; align-items: center; justify-content: center;
+     padding: 28px; overflow: hidden;
+   }
+   .sk-login-glow {
+     position: absolute; border-radius: 50%; pointer-events: none; filter: blur(2px);
+   }
+   .sk-login-glow--1 {
+     top: -120px; right: -100px; width: 320px; height: 320px;
+     background: radial-gradient(circle, rgba(193,80,46,0.20) 0%, transparent 72%);
+   }
+   .sk-login-glow--2 {
+     bottom: -140px; left: -90px; width: 300px; height: 300px;
+     background: radial-gradient(circle, rgba(23,24,28,0.10) 0%, transparent 72%);
+   }
+   .sk-login-card {
+     position: relative; z-index: 1; width: 100%; max-width: 380px;
+     background: #ffffff; border-radius: 28px;
+     padding: 40px 28px 32px;
+     box-shadow: 0 24px 60px rgba(23,24,28,0.10), 0 4px 14px rgba(23,24,28,0.06);
+     display: flex; flex-direction: column; align-items: center;
+     animation: skCardIn 0.5s cubic-bezier(0.22,1,0.36,1);
+   }
+   @keyframes skCardIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+   .sk-login-logo { width: 68px; height: 68px; object-fit: contain; border-radius: 18px; margin-bottom: 18px; }
+   .sk-login-title {
+     font-family: var(--font-display); font-size: 23px; font-weight: 800;
+     color: var(--sk-ink); letter-spacing: -0.02em; margin-bottom: 6px; text-align: center;
+   }
+   .sk-login-subtitle {
+     font-size: 13.5px; color: var(--text-secondary); margin-bottom: 28px; text-align: center;
+   }
+   .sk-form-group { width: 100%; margin-bottom: 16px; }
+   .sk-label {
+     display: block; font-size: 11px; font-weight: 700; color: var(--text-tertiary);
+     margin-bottom: 7px; letter-spacing: 0.05em; text-transform: uppercase;
+   }
+   .sk-input {
+     display: block; width: 100%; padding: 14px 18px;
+     font-family: var(--font); font-size: 15px; color: var(--sk-ink);
+     background: var(--sk-cream-2); border: 1.5px solid transparent;
+     border-radius: 999px; outline: none; -webkit-appearance: none;
+     transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+   }
+   .sk-input:focus {
+     border-color: var(--sk-terracotta); background: #fff;
+     box-shadow: 0 0 0 4px var(--sk-terracotta-soft);
+   }
+   .sk-input::placeholder { color: var(--text-tertiary); }
+   .sk-password-wrapper { position: relative; }
+   .sk-password-wrapper .sk-input { padding-right: 48px; }
+   .sk-password-toggle {
+     position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+     width: 32px; height: 32px; border-radius: 50%; border: none; cursor: pointer;
+     background: var(--sk-cream); color: var(--text-secondary);
+     display: flex; align-items: center; justify-content: center;
+     transition: background 0.15s ease, color 0.15s ease;
+   }
+   .sk-password-toggle:hover { background: var(--sk-terracotta-soft); color: var(--sk-terracotta); }
+   .sk-error-text {
+     width: 100%; font-size: 13px; color: var(--red); text-align: center;
+     margin: 2px 0 14px; font-weight: 600;
+   }
+   .sk-btn-primary {
+     width: 100%; padding: 16px; margin-top: 6px;
+     background: var(--sk-ink); color: #fff; border: none;
+     border-radius: 999px; font-family: var(--font-display); font-size: 15.5px; font-weight: 700;
+     letter-spacing: -0.01em; cursor: pointer;
+     box-shadow: 0 10px 26px rgba(23,24,28,0.28);
+     transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+   }
+   .sk-btn-primary:hover { background: var(--sk-ink-2); transform: translateY(-1px); box-shadow: 0 14px 32px rgba(23,24,28,0.34); }
+   .sk-btn-primary:active { transform: scale(0.98); }
+
+   /* ── SPLASH v2 ───────────────────────────────────────── */
+   .sk-splash {
+     position: fixed; inset: 0; z-index: 99999;
+     background: var(--sk-cream);
+     display: flex; flex-direction: column; align-items: center; justify-content: center;
+     overflow: hidden;
+   }
+   .sk-splash-glow { position: absolute; border-radius: 50%; pointer-events: none; }
+   .sk-splash-glow--1 { top: -140px; left: -100px; width: 360px; height: 360px; background: radial-gradient(circle, rgba(193,80,46,0.18) 0%, transparent 72%); }
+   .sk-splash-glow--2 { bottom: -160px; right: -120px; width: 340px; height: 340px; background: radial-gradient(circle, rgba(23,24,28,0.10) 0%, transparent 72%); }
+   .sk-splash-card {
+     position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center;
+   }
+   .sk-splash-logo { width: 128px; height: 128px; object-fit: contain; border-radius: 30px; box-shadow: 0 20px 50px rgba(23,24,28,0.16); }
+   .sk-splash-tagline {
+     margin-top: 18px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary);
+     letter-spacing: 0.03em; text-align: center; transition: opacity 0.4s ease;
+   }
+   .sk-splash-dots { position: relative; z-index: 1; margin-top: 36px; display: flex; gap: 9px; transition: opacity 0.35s ease; }
+   .sk-splash-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sk-terracotta); }
+   @keyframes skDotPulse {
+     0%, 100% { opacity: 0.25; transform: scale(0.8); }
+     50%      { opacity: 1;    transform: scale(1.25); }
+   }
    
    /* ── EMOJI PICKER ────────────────────────────────────── */
    .emoji-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
@@ -1385,6 +1501,29 @@
 }
 
 /* ── FIX #8: Login tagline (class added in App.js) ── */
+/* ── SUMI INK dark mode ──────────────────────────────── */
+[data-theme="dark"] .sk-login-screen,
+[data-theme="dark"] .sk-splash {
+  background: var(--dark);
+}
+[data-theme="dark"] .sk-login-card {
+  background: var(--dark-2);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.45), 0 0 0 1px var(--dark-border);
+}
+[data-theme="dark"] .sk-login-title { color: var(--text-on-dark); }
+[data-theme="dark"] .sk-login-subtitle,
+[data-theme="dark"] .sk-splash-tagline { color: var(--text-on-dark-2); }
+[data-theme="dark"] .sk-input {
+  background: var(--dark-3); color: var(--text-on-dark);
+}
+[data-theme="dark"] .sk-input:focus {
+  background: var(--dark-3); border-color: var(--sk-terracotta);
+  box-shadow: 0 0 0 4px rgba(193,80,46,0.25);
+}
+[data-theme="dark"] .sk-password-toggle { background: var(--dark-3); color: var(--text-on-dark-2); }
+[data-theme="dark"] .sk-btn-primary { background: var(--sk-terracotta); box-shadow: 0 10px 26px rgba(193,80,46,0.35); }
+[data-theme="dark"] .sk-btn-primary:hover { background: var(--sk-terracotta-2); }
+
 [data-theme="dark"] .login-tagline {
   color: rgba(240,240,248,0.35);
 }

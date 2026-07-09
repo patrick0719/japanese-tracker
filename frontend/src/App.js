@@ -3069,38 +3069,53 @@ function LoginScreen({ onLogin }) {
   };
 
   return (
-    <div className="login-screen">
-      <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" style={{ marginBottom: 32 }} />
-      <div className="login-card">
-        <h2 className="login-title">{t('welcomeBack')}</h2>
-        <div className="form-group">
-          <label>{t('username')}</label>
+    <div className="sk-login-screen">
+      <div className="sk-login-glow sk-login-glow--1" />
+      <div className="sk-login-glow sk-login-glow--2" />
+      <div className="sk-login-card">
+        <img src={LOGO_DATA_URL} alt="Sage Asian" className="sk-login-logo" />
+        <h2 className="sk-login-title">{t('welcomeBack')}</h2>
+        <p className="sk-login-subtitle">Sign in to continue to SAGE Bulacan</p>
+
+        <div className="sk-form-group">
+          <label className="sk-label">{t('username')}</label>
           <input
             type="text"
+            className="sk-input"
             value={username}
             onChange={e => { setUsername(e.target.value); setError(''); }}
             onKeyDown={e => e.key === 'Enter' && passwordRef.current?.focus()}
             placeholder="Enter username"
           />
         </div>
-        <div className="form-group">
-          <label>{t('password')}</label>
-          <div className="password-wrapper">
+        <div className="sk-form-group">
+          <label className="sk-label">{t('password')}</label>
+          <div className="sk-password-wrapper">
             <input
               ref={passwordRef}
               type={showPass ? 'text' : 'password'}
+              className="sk-input"
               value={password}
               onChange={e => { setPassword(e.target.value); setError(''); }}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
               placeholder="Enter password"
             />
-            <button onClick={() => setShowPass(p => !p)} className="password-toggle">
-              {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+            <button onClick={() => setShowPass(p => !p)} className="sk-password-toggle" type="button">
+              {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
           </div>
         </div>
-        {error && <p className="error-text">{error}</p>}
-        <button onClick={handleLogin} disabled={loading} className="btn-primary" style={{ marginTop: 8, opacity: loading ? 0.7 : 1 }}>{loading ? '…' : t('login')}</button>
+
+        {error && <p className="sk-error-text">{error}</p>}
+
+        <button
+          onClick={handleLogin}
+          disabled={loading}
+          className="sk-btn-primary"
+          style={{ opacity: loading ? 0.7 : 1 }}
+        >
+          {loading ? '…' : t('login')}
+        </button>
       </div>
     </div>
   );
@@ -3121,57 +3136,48 @@ function SplashScreen({ onDone }) {
   }, []);
 
   const logoStyle = {
-    enter: { opacity: 0, transform: 'scale(0.80)' },
-    hold:  { opacity: 1, transform: 'scale(1)' },
-    exit:  { opacity: 0, transform: 'scale(1.07)' },
+    enter: { opacity: 0, transform: 'scale(0.80) translateY(6px)' },
+    hold:  { opacity: 1, transform: 'scale(1) translateY(0)' },
+    exit:  { opacity: 0, transform: 'scale(1.06) translateY(-4px)' },
   }[phase];
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0,
-      background: '#fff',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      zIndex: 99999,
+    <div className="sk-splash" style={{
       opacity: phase === 'exit' ? 0 : 1,
       transition: phase === 'exit' ? 'opacity 0.55s ease-in-out' : 'none',
     }}>
-      <img
-        src={LOGO_DATA_URL}
-        alt="Sage Asian"
-        style={{
-          width: '62%',
-          maxWidth: 300,
-          objectFit: 'contain',
-          opacity: logoStyle.opacity,
-          transform: logoStyle.transform,
-          transition: phase === 'enter'
-            ? 'opacity 0.8s cubic-bezier(0.22,1,0.36,1), transform 0.8s cubic-bezier(0.22,1,0.36,1)'
-            : phase === 'exit'
-            ? 'opacity 0.45s ease-in, transform 0.45s ease-in'
-            : 'none',
-        }}
-      />
-      <div style={{
-        marginTop: 40,
-        display: 'flex', gap: 9,
-        opacity: phase === 'hold' ? 1 : 0,
-        transition: 'opacity 0.35s ease',
-      }}>
+      <div className="sk-splash-glow sk-splash-glow--1" />
+      <div className="sk-splash-glow sk-splash-glow--2" />
+
+      <div className="sk-splash-card">
+        <img
+          src={LOGO_DATA_URL}
+          alt="Sage Asian"
+          className="sk-splash-logo"
+          style={{
+            opacity: logoStyle.opacity,
+            transform: logoStyle.transform,
+            transition: phase === 'enter'
+              ? 'opacity 0.8s cubic-bezier(0.22,1,0.36,1), transform 0.8s cubic-bezier(0.22,1,0.36,1)'
+              : phase === 'exit'
+              ? 'opacity 0.45s ease-in, transform 0.45s ease-in'
+              : 'none',
+          }}
+        />
+        <p className="sk-splash-tagline" style={{ opacity: phase === 'hold' ? 1 : 0 }}>
+          Student Assessment &amp; Grade Evaluation
+        </p>
+      </div>
+
+      <div className="sk-splash-dots" style={{ opacity: phase === 'hold' ? 1 : 0 }}>
         {[0, 1, 2].map(i => (
-          <div key={i} style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: '#8B0000',
-            animation: phase === 'hold' ? `dotPulse 1.1s ease-in-out ${i * 0.18}s infinite` : 'none',
-          }} />
+          <div
+            key={i}
+            className="sk-splash-dot"
+            style={{ animation: phase === 'hold' ? `skDotPulse 1.1s ease-in-out ${i * 0.18}s infinite` : 'none' }}
+          />
         ))}
       </div>
-      <style>{`
-        @keyframes dotPulse {
-          0%, 100% { opacity: 0.2; transform: scale(0.8); }
-          50% { opacity: 1; transform: scale(1.25); }
-        }
-      `}</style>
     </div>
   );
 }
