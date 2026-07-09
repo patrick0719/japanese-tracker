@@ -5283,11 +5283,11 @@ function App() {
             <p className="profile-action-label">Quick Actions</p>
             <div className="profile-icon-grid">
               <button className="profile-icon-btn" onClick={() => setShowQuickAddExam(true)}>
-                <Plus size={20} color="#34C759" />
+                <span className="profile-icon-circle profile-icon-circle--green"><Plus size={18} /></span>
                 <span>Quick Add</span>
               </button>
               <button className="profile-icon-btn" onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}>
-                <KeyRound size={20} color="#5856D6" />
+                <span className="profile-icon-circle profile-icon-circle--purple"><KeyRound size={18} /></span>
                 <span>Parent QR</span>
               </button>
               <button className="profile-icon-btn" onClick={async () => {
@@ -5299,7 +5299,7 @@ function App() {
                   else alert('Error: ' + (data.error || 'Unknown'));
                 } catch (e) { alert('Failed: ' + e.message); }
               }}>
-                <Layers size={20} color="#8e8e93" />
+                <span className="profile-icon-circle profile-icon-circle--gray"><Layers size={18} /></span>
                 <span>Archive Imgs</span>
               </button>
               <button className="profile-icon-btn" onClick={async () => {
@@ -5311,7 +5311,7 @@ function App() {
                   else alert('Error: ' + (data.error || 'Unknown'));
                 } catch (e) { alert('Failed: ' + e.message); }
               }}>
-                <RefreshCw size={20} color="#007AFF" />
+                <span className="profile-icon-circle profile-icon-circle--blue"><RefreshCw size={18} /></span>
                 <span>Restore Imgs</span>
               </button>
             </div>
@@ -5368,7 +5368,7 @@ function App() {
       <div className="progress-summary-card" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}>
         <div className="progress-summary-top">
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <TrendingUp size={16} color="#8B0000" />
+            <TrendingUp size={16} color="var(--brand)" />
             <span className="progress-summary-title">{t('progressChart')}</span>
           </div>
           <span className="progress-summary-link">View full →</span>
@@ -5401,15 +5401,15 @@ function App() {
       </div>
 
       {/* ── Exam Categories Box ── */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('examCategoriesTitle')}</h2>
+      <div className="section-box">
+        <div className="section-box-header">
+          <h2 className="section-box-title">{t('examCategoriesTitle')}</h2>
           {!isViewer && !isKazumi && (
-            <button onClick={() => openModal('category')} style={{ background: '#007AFF', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
+            <button onClick={() => openModal('category')} className="section-box-add">+ Add</button>
           )}
         </div>
         {(selectedStudent.categories || []).length === 0
-          ? <p style={{ fontSize: 13, color: '#8e8e93', margin: 0, textAlign: 'center', padding: '12px 0' }}>{t('noExamCategories')}</p>
+          ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0, textAlign: 'center', padding: '12px 0' }}>{t('noExamCategories')}</p>
           : (selectedStudent.categories || []).map(cat => (
             <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
               <div className="card-content">
@@ -5433,14 +5433,14 @@ function App() {
       </div>
 
       {/* ── Evaluations Box ── */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #e5e5ea', padding: '16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#3a3a3c', margin: 0 }}>{t('evaluationsTitle')}</h2>
+      <div className="section-box">
+        <div className="section-box-header">
+          <h2 className="section-box-title">{t('evaluationsTitle')}</h2>
           {!isViewer && !isKazumi && (
-            <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} style={{ background: '#34C759', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, padding: '5px 12px', cursor: 'pointer' }}>+ Add</button>
+            <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} className="section-box-add" style={{ background: 'var(--green)', boxShadow: '0 3px 10px rgba(16,185,129,0.3)' }}>+ Add</button>
           )}
         </div>
-        <button onClick={goToEvaluations} style={{ width: '100%', background: '#f2f2f7', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: '#3a3a3c', cursor: 'pointer', fontWeight: 500 }}>
+        <button onClick={goToEvaluations} style={{ width: '100%', background: 'var(--surface2)', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 500 }}>
           {t('viewAllEvaluations')}
         </button>
       </div>
