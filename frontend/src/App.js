@@ -9,7 +9,7 @@ import {
   Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
   Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
   Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
-  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft
+  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -2761,6 +2761,7 @@ function TeacherSelect({ onSelect }) {
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
+  const [menuOpenId, setMenuOpenId] = useState(null);
   const [globalQuery, setGlobalQuery] = useState('');
   const [allBatches, setAllBatches] = useState([]);
   const EMOJIS = ['\u{1F469}\u200d\u{1F3EB}','\u{1F468}\u200d\u{1F3EB}','\u{1F469}','\u{1F468}','\u{1F9D1}\u200d\u{1F3EB}'];
@@ -2846,112 +2847,73 @@ function TeacherSelect({ onSelect }) {
   };
 
   return (
-    <div className="teacher-screen">
-      <img src={LOGO_DATA_URL} alt="Sage Asian" className="teacher-logo" />
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('selectTeacher')}</h2>
-      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16 }}>{t('tapNameToContinue')}</p>
+    <div className="tc-screen">
+      <div className="tc-header">
+        <img src={LOGO_DATA_URL} alt="Sage Asian" className="tc-logo" />
+        <h2 className="tc-title">{t('selectTeacher')}</h2>
+        <p className="tc-subtitle">{t('tapNameToContinue')}</p>
+      </div>
 
       {/* ── Global Search Bar ── */}
-      <div style={{ width: '100%', maxWidth: 400, marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }}><Search size={16} /></span>
-            <input
-              type="text"
-              value={globalQuery}
-              onChange={e => setGlobalQuery(e.target.value)}
-              onFocus={refreshAllBatches}
-              placeholder="Search any student across all teachers..."
-              style={{
-                width: '100%', boxSizing: 'border-box',
-                padding: '11px 36px 11px 38px',
-                borderRadius: 12, border: '1.5px solid var(--border-color, #e5e5ea)',
-                background: 'var(--bg-card, #fff)', color: 'var(--text-primary)',
-                fontSize: 15, outline: 'none',
-              }}
-            />
-            {globalQuery && (
-              <button onClick={() => setGlobalQuery('')} style={{
-                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: '50%',
-                width: 22, height: 22, cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}><X size={14} /></button>
-            )}
-          </div>
-          <button
-            onClick={() => { console.log('refresh clicked'); refreshAllBatches(); }}
-            style={{
-              flexShrink: 0, height: 40, borderRadius: 10, padding: '0 12px',
-              border: '1.5px solid var(--border-color, #e5e5ea)',
-              background: refreshing ? '#f0f0ff' : '#fff',
-              cursor: 'pointer', fontSize: 12, fontWeight: 600,
-              color: refreshing ? '#5856d6' : '#888',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {refreshing ? 'Refreshing...' : '↻ Refresh'}
-          </button>
+      <div className="tc-search-row">
+        <div className="tc-search-wrap">
+          <Search size={16} className="tc-search-icon" />
+          <input
+            type="text"
+            className="tc-search-input"
+            value={globalQuery}
+            onChange={e => setGlobalQuery(e.target.value)}
+            onFocus={refreshAllBatches}
+            placeholder="Search any student across all teachers..."
+          />
+          {globalQuery && (
+            <button onClick={() => setGlobalQuery('')} className="tc-search-clear"><X size={14} /></button>
+          )}
         </div>
+        <button onClick={refreshAllBatches} className="tc-refresh-btn" title="Refresh">
+          <RefreshCw size={15} className={refreshing ? 'tc-spin' : ''} />
+        </button>
       </div>
 
       {/* ── Search Results ── */}
       {searchResults !== null && (
-        <div style={{ width: '100%', maxWidth: 400, marginBottom: 16 }}>
-          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 8, fontWeight: 600 }}>
+        <div className="tc-results">
+          <p className="tc-results-count">
             {searchResults.length === 0
               ? `No results for "${globalQuery}"`
               : `${searchResults.length} student${searchResults.length !== 1 ? 's' : ''} found`}
           </p>
           {searchResults.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-tertiary)', fontSize: 14 }}>
-              😕 No students found
-            </div>
+            <div className="tc-empty-mini">No students found</div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="tc-list">
               {searchResults.map(({ student, batch, isHiddenBatch }) => {
-                // Find which teacher owns this batch
                 const teacher = teachers.find(tc => tc._id === batch.teacherId);
                 const isOrphaned = !teacher;
                 return (
                   <button
                     key={student._id}
-                    onClick={() => {
-                      if (!isOrphaned) onSelect(teacher, student, batch);
-                    }}
+                    onClick={() => { if (!isOrphaned) onSelect(teacher, student, batch); }}
                     disabled={isOrphaned}
                     title={isOrphaned ? 'Hindi na ma-access ang student na ito — maaaring na-delete na ang teacher o batch' : undefined}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '10px 14px', borderRadius: 12,
-                      border: `1.5px solid ${isOrphaned ? '#ffcccc' : 'var(--border-color, #e5e5ea)'}`,
-                      background: isOrphaned ? 'rgba(255,0,0,0.04)' : 'var(--bg-card, #fff)',
-                      cursor: isOrphaned ? 'not-allowed' : 'pointer',
-                      textAlign: 'left', width: '100%',
-                      opacity: isOrphaned ? 0.5 : 1,
-                    }}
+                    className={`tc-result-row${isOrphaned ? ' tc-result-row--orphaned' : ''}`}
                   >
-                    <div style={{
-                      width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-                      background: 'var(--accent-light, #f0f0ff)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 18, fontWeight: 700, color: 'var(--accent)',
-                    }}>
+                    <div className="tc-result-avatar">
                       {student.photo
-                        ? <img src={student.photo} alt={student.name} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                        ? <img src={student.photo} alt={student.name} />
                         : student.name?.[0]?.toUpperCase()}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div className="tc-result-info">
+                      <div className="tc-result-name">
                         {student.name}
-                        {isOrphaned && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, background: '#ffcccc', color: '#c0392b', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>Unavailable</span>}
-                        {!isOrphaned && isHiddenBatch && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, background: 'rgba(255,149,0,0.15)', color: '#e67e00', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>Hidden from PHGIC</span>}
+                        {isOrphaned && <span className="tc-badge tc-badge--danger">Unavailable</span>}
+                        {!isOrphaned && isHiddenBatch && <span className="tc-badge tc-badge--warn">Hidden from PHGIC</span>}
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                        <BookOpen size={11} style={{ marginRight: 4, verticalAlign: "middle" }} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : isOrphaned ? ' · Teacher/batch no longer exists' : ''}
+                      <div className="tc-result-meta">
+                        <BookOpen size={11} />{batch.name}{teacher ? ` · ${teacher.emoji || '👩‍🏫'} ${teacher.name}` : isOrphaned ? ' · Teacher/batch no longer exists' : ''}
                       </div>
                     </div>
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: 18 }}>{isOrphaned ? '⚠️' : '›'}</span>
+                    <span className="tc-chevron">{isOrphaned ? '⚠️' : '›'}</span>
                   </button>
                 );
               })}
@@ -2960,69 +2922,98 @@ function TeacherSelect({ onSelect }) {
         </div>
       )}
 
-      <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="tc-list">
         {loadingT && <p className="loading-text">{t('loading')}</p>}
         {teachers.map(teacher => (
-          <div key={teacher._id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => onSelect(teacher)} className="teacher-card">
-              <label onClick={e => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }} title="Tap to change photo">
+          <div key={teacher._id} className="tc-card">
+            <button onClick={() => onSelect(teacher)} className="tc-card-main">
+              <label onClick={e => e.stopPropagation()} className="tc-avatar-label" title="Tap to change photo">
                 {teacher.photo
-                  ? <img src={teacher.photo} alt={teacher.name} className="student-avatar" />
-                  : <span style={{ fontSize: 34, lineHeight: 1 }}>{teacher.emoji}</span>
+                  ? <img src={teacher.photo} alt={teacher.name} className="tc-avatar-photo" />
+                  : <span className="tc-avatar-emoji">{teacher.emoji}</span>
                 }
-                <span style={{ position: 'absolute', bottom: -2, right: -4, background: 'var(--accent)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}><MoreHorizontal size={10} /></span>
+                <span className="tc-avatar-camera"><Camera size={10} /></span>
                 <input type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={e => e.target.files[0] && uploadTeacherPhoto(teacher._id, e.target.files[0])} />
               </label>
-              <span style={{ flex: 1, textAlign: 'left', fontSize: 16, fontWeight: 600 }}>{teacher.name}</span>
-              <span className="chevron">›</span>
-            </button>
-            {deleteId === teacher._id ? (
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => deleteTeacher(teacher._id)} className="btn-danger" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>Delete</button>
-                <button onClick={() => setDeleteId(null)} className="btn-cancel" style={{ flex: 'none', padding: '8px 14px', fontSize: 13 }}>{t('cancel')}</button>
+              <div className="tc-card-text">
+                <span className="tc-card-name">{teacher.name}</span>
+                <span className="tc-card-sub">
+                  {teacher.signature ? <><Check size={11} /> Signature saved</> : 'No signature yet'}
+                </span>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <label title="Upload signature" style={{ cursor: 'pointer', fontSize: 18, padding: '4px 8px', color: teacher.signature ? 'var(--green)' : 'var(--text-tertiary)' }}>
-                  ✍️
-                  <input type="file" accept="image/*" style={{ display: 'none' }}
-                    onChange={e => e.target.files[0] && uploadSignature(teacher._id, e.target.files[0])} />
-                </label>
-                <button onClick={() => setDeleteId(teacher._id)} className="delete-btn-icon"><X size={14} /></button>
+              <span className="tc-chevron">›</span>
+            </button>
+
+            <div className="tc-card-menu-wrap">
+              <button
+                className="tc-menu-btn"
+                onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === teacher._id ? null : teacher._id); }}
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              {menuOpenId === teacher._id && (
+                <>
+                  <div className="tc-menu-backdrop" onClick={() => setMenuOpenId(null)} />
+                  <div className="tc-menu-dropdown">
+                    <label className="tc-menu-item">
+                      <PenLine size={14} /> Upload signature
+                      <input type="file" accept="image/*" style={{ display: 'none' }}
+                        onChange={e => { e.target.files[0] && uploadSignature(teacher._id, e.target.files[0]); setMenuOpenId(null); }} />
+                    </label>
+                    <button className="tc-menu-item tc-menu-item--danger"
+                      onClick={() => { setDeleteId(teacher._id); setMenuOpenId(null); }}>
+                      <Trash2 size={14} /> {t('delete') || 'Delete'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {deleteId === teacher._id && (
+              <div className="tc-delete-confirm-inline">
+                <span>Tanggalin si {teacher.name}?</span>
+                <div className="tc-delete-actions">
+                  <button onClick={() => deleteTeacher(teacher._id)} className="tc-btn-danger-sm">Delete</button>
+                  <button onClick={() => setDeleteId(null)} className="tc-btn-cancel-sm">{t('cancel')}</button>
+                </div>
               </div>
             )}
           </div>
         ))}
+
         {showAdd ? (
-          <div className="login-card" style={{ padding: 16 }}>
-            <p className="section-title" style={{ marginTop: 0 }}>{t('chooseEmoji')}</p>
+          <div className="tc-add-form">
+            <p className="tc-add-form-title">{t('chooseEmoji')}</p>
             <div className="emoji-row" style={{ marginBottom: 14 }}>
               {EMOJIS.map(e => (
                 <button key={e} onClick={() => setNewEmoji(e)} className={`emoji-btn${newEmoji === e ? ' selected' : ''}`}>{e}</button>
               ))}
             </div>
-            <div className="form-group">
-              <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-                placeholder={t('teacherName')} autoFocus />
-            </div>
+            <input
+              type="text" className="sk-input" style={{ marginBottom: 14 }}
+              value={newName} onChange={e => setNewName(e.target.value)}
+              placeholder={t('teacherName')} autoFocus
+            />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={addTeacher} disabled={saving || !newName.trim()} className="btn-primary" style={{ fontSize: 14 }}>
+              <button onClick={addTeacher} disabled={saving || !newName.trim()} className="sk-btn-primary" style={{ fontSize: 14, padding: 12 }}>
                 {saving ? t('saving') : t('addTeacherLabel')}
               </button>
-              <button onClick={() => { setShowAdd(false); setNewName(''); }} className="btn-secondary" style={{ fontSize: 14 }}>{t('cancel')}</button>
+              <button onClick={() => { setShowAdd(false); setNewName(''); }} className="tc-btn-cancel-sm" style={{ flex: 1 }}>{t('cancel')}</button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setShowAdd(true)} className="print-qr-button" style={{ marginTop: 0 }}>
-            {t('addTeacher')}
+          <button onClick={() => setShowAdd(true)} className="tc-add-card">
+            <span className="tc-add-icon">+</span> {t('addTeacher')}
           </button>
         )}
       </div>
+
       <button onClick={() => { safeLocalRemove(AUTH_KEY); safeLocalRemove(TOKEN_KEY); safeLocalRemove(TEACHER_KEY); window.location.reload(); }}
-        className="btn-logout" style={{ marginTop: 36 }}>
+        className="tc-logout-btn">
         {t('logout')}
       </button>
+
       {showProgressChart && progressChartStudent && (
         <ProgressChart
           student={progressChartStudent}
