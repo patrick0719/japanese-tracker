@@ -3535,6 +3535,76 @@ function ParentView({ data, token }) {
   );
 }
 
+const BATCH_THEMES = ['sakura', 'fuji', 'torii', 'lantern'];
+
+function BatchThemeArt({ theme }) {
+  if (theme === 'fuji') {
+    return (
+      <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMid slice" className="bh-theme-svg">
+        <rect width="300" height="140" fill="#fdeef2" />
+        <circle cx="238" cy="30" r="15" fill="#B22222" />
+        <polygon points="55,122 150,24 245,122" fill="#8f1b1b" />
+        <polygon points="118,58 150,24 182,58 166,50 150,38 134,50" fill="#ffffff" />
+        <rect x="0" y="122" width="300" height="18" fill="#F6B7C7" opacity="0.55" />
+      </svg>
+    );
+  }
+  if (theme === 'torii') {
+    return (
+      <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMid slice" className="bh-theme-svg">
+        <rect width="300" height="140" fill="#fdeef2" />
+        <circle cx="48" cy="34" r="16" fill="#B22222" opacity="0.22" />
+        <rect x="92" y="42" width="12" height="86" fill="#B22222" />
+        <rect x="196" y="42" width="12" height="86" fill="#B22222" />
+        <rect x="68" y="30" width="164" height="15" fill="#B22222" />
+        <rect x="68" y="20" width="164" height="8" fill="#8f1b1b" />
+        <rect x="96" y="60" width="108" height="10" fill="#8f1b1b" />
+        <rect x="0" y="128" width="300" height="12" fill="#F6B7C7" opacity="0.5" />
+      </svg>
+    );
+  }
+  if (theme === 'lantern') {
+    return (
+      <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMid slice" className="bh-theme-svg">
+        <rect width="300" height="140" fill="#fdeef2" />
+        <circle cx="150" cy="72" r="52" fill="#F6B7C7" opacity="0.45" />
+        <ellipse cx="150" cy="75" rx="36" ry="42" fill="#B22222" />
+        <rect x="139" y="28" width="22" height="9" fill="#8f1b1b" />
+        <rect x="139" y="115" width="22" height="9" fill="#8f1b1b" />
+        <line x1="150" y1="12" x2="150" y2="28" stroke="#8f1b1b" strokeWidth="3" />
+        <line x1="150" y1="124" x2="150" y2="136" stroke="#8f1b1b" strokeWidth="3" />
+        <line x1="122" y1="42" x2="122" y2="108" stroke="#8f1b1b" strokeWidth="1.5" opacity="0.4" />
+        <line x1="178" y1="42" x2="178" y2="108" stroke="#8f1b1b" strokeWidth="1.5" opacity="0.4" />
+      </svg>
+    );
+  }
+  // sakura (default)
+  return (
+    <svg viewBox="0 0 300 140" preserveAspectRatio="xMidYMid slice" className="bh-theme-svg">
+      <rect width="300" height="140" fill="#fdeef2" />
+      <line x1="10" y1="20" x2="140" y2="80" stroke="#8a5a4a" strokeWidth="4" />
+      {[[40, 34], [90, 58], [135, 78], [70, 46]].map(([cx, cy], i) => (
+        <g key={i}>
+          {[0, 72, 144, 216, 288].map(angle => (
+            <ellipse
+              key={angle}
+              cx={cx + 9 * Math.cos((angle * Math.PI) / 180)}
+              cy={cy + 9 * Math.sin((angle * Math.PI) / 180)}
+              rx="7" ry="4.5"
+              transform={`rotate(${angle} ${cx + 9 * Math.cos((angle * Math.PI) / 180)} ${cy + 9 * Math.sin((angle * Math.PI) / 180)})`}
+              fill="#F6B7C7"
+            />
+          ))}
+          <circle cx={cx} cy={cy} r="3" fill="#fff3c4" />
+        </g>
+      ))}
+      <circle cx="240" cy="100" r="3" fill="#F6B7C7" />
+      <circle cx="260" cy="30" r="2.5" fill="#F6B7C7" />
+      <circle cx="200" cy="115" r="2" fill="#F6B7C7" />
+    </svg>
+  );
+}
+
 function App() {
   const [batches, setBatches] = useState([]);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -5017,59 +5087,64 @@ function App() {
               );
             }
 
-            return sorted.map(batch => {
-              const studentCount = isViewer
-                ? batch.students.filter(s => !s.isArchived && s.status === 'Selected').length
-                : batch.students.filter(s => !s.isArchived).length;
-              return (
-                <div key={batch._id} className="bh-hero-card">
-                  <div className="bh-hero-top">
-                    <BookOpen size={56} className="bh-hero-icon-bg" />
-                    {!isViewer && !isKazumi && (
-                      <button
-                        className="bh-hero-badge bh-hero-badge--left"
-                        title="Delete batch"
-                        onClick={(e) => deleteBatch(batch._id, e)}
-                      >
-                        <X size={14} />
+            return (
+              <div className="bh-carousel">
+                {sorted.map((batch, idx) => {
+                  const studentCount = isViewer
+                    ? batch.students.filter(s => !s.isArchived && s.status === 'Selected').length
+                    : batch.students.filter(s => !s.isArchived).length;
+                  const theme = BATCH_THEMES[idx % BATCH_THEMES.length];
+                  return (
+                    <div key={batch._id} className="bh-hero-card bh-carousel-item">
+                      <div className="bh-hero-top">
+                        <BatchThemeArt theme={theme} />
+                        {!isViewer && !isKazumi && (
+                          <button
+                            className="bh-hero-badge bh-hero-badge--left"
+                            title="Delete batch"
+                            onClick={(e) => deleteBatch(batch._id, e)}
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                        {!isViewer && !isKazumi && (
+                          <button
+                            className={`bh-hero-badge bh-hero-badge--right${batch.isHiddenFromViewer ? ' bh-hero-badge--hidden' : ''}`}
+                            title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  setBatches(prev => prev.map(b =>
+                                    b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
+                                  ));
+                                } else {
+                                  alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
+                                }
+                              } catch(err) {
+                                alert('Toggle error: ' + err.message);
+                              }
+                            }}
+                          >
+                            {batch.isHiddenFromViewer ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        )}
+                        <div className="bh-hero-info">
+                          <p className="bh-hero-name">{displayName(batch)}</p>
+                          <p className="bh-hero-sub">{studentCount} student{studentCount !== 1 ? 's' : ''}</p>
+                        </div>
+                      </div>
+                      <button className="bh-hero-footer" onClick={() => goToStudents(batch)}>
+                        <span className="bh-hero-footer-label">See students</span>
+                        <span className="bh-hero-arrow"><ChevronRight size={17} /></span>
                       </button>
-                    )}
-                    {!isViewer && !isKazumi && (
-                      <button
-                        className={`bh-hero-badge bh-hero-badge--right${batch.isHiddenFromViewer ? ' bh-hero-badge--hidden' : ''}`}
-                        title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
-                            const data = await res.json();
-                            if (data.success) {
-                              setBatches(prev => prev.map(b =>
-                                b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
-                              ));
-                            } else {
-                              alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
-                            }
-                          } catch(err) {
-                            alert('Toggle error: ' + err.message);
-                          }
-                        }}
-                      >
-                        {batch.isHiddenFromViewer ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    )}
-                    <div className="bh-hero-info">
-                      <p className="bh-hero-name">{displayName(batch)}</p>
-                      <p className="bh-hero-sub">{studentCount} student{studentCount !== 1 ? 's' : ''}</p>
                     </div>
-                  </div>
-                  <button className="bh-hero-footer" onClick={() => goToStudents(batch)}>
-                    <span className="bh-hero-footer-label">See students</span>
-                    <span className="bh-hero-arrow"><ChevronRight size={17} /></span>
-                  </button>
-                </div>
-              );
-            });
+                  );
+                })}
+              </div>
+            );
           })()}
 
           <div className="bh-bottom-spacer" />

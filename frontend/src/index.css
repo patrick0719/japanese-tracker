@@ -587,16 +587,25 @@
    }
    .bh-chip--active { background: var(--sk-ink, #17181c); color: #fff; border-color: var(--sk-ink, #17181c); }
 
-   /* ── Hero-style batch cards ── */
+   /* ── Hero-style batch cards (carousel) ── */
+   .bh-carousel {
+     display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory;
+     padding: 2px 4px 16px; margin: 0 -4px; scrollbar-width: none;
+   }
+   .bh-carousel::-webkit-scrollbar { display: none; }
+   .bh-carousel-item { flex: 0 0 82%; scroll-snap-align: center; margin-bottom: 0 !important; }
+   @media (min-width: 480px) { .bh-carousel-item { flex-basis: 62%; } }
    .bh-hero-card {
      position: relative; border-radius: 22px; overflow: hidden;
      background: var(--surface); border: 1px solid var(--border);
      margin-bottom: 14px; box-shadow: var(--shadow-sm);
    }
    .bh-hero-top {
-     position: relative; height: 128px; background: var(--brand);
+     position: relative; height: 128px;
      display: flex; align-items: center; justify-content: center;
+     overflow: hidden;
    }
+   .bh-theme-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
    .bh-hero-icon-bg { color: rgba(255,255,255,0.28); }
    .bh-hero-badge {
      position: absolute; top: 10px; width: 30px; height: 30px; border-radius: 50%;
