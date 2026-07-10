@@ -2092,4 +2092,34 @@
   transition: background 0.15s ease, color 0.15s ease;
 }
 .sp-dock-btn:hover { color: #fff; }
-.sp-dock-btn--active { background: #fff; color: var(--sk-ink, #17181c); }
+.sp-dock-btn--active { background: var(--brand); color: #fff; }
+
+/* ── Sticky mini avatar (persistent name header) ── */
+.sp-mini-avatar {
+  width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; cursor: pointer;
+}
+.sp-mini-avatar--icon {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); color: var(--brand); cursor: default;
+}
+
+/* ── Tab content card (unified frame for Profile/Progress/Exams/Evaluations) ── */
+.sp-tab-card {
+  background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px;
+  padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sp-tab-card-header { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.sp-tab-card-icon {
+  width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
+  background: var(--brand-soft); color: var(--brand);
+  display: flex; align-items: center; justify-content: center;
+}
+.sp-tab-card-title { font-family: var(--font-display); font-size: 15px; font-weight: 800; color: var(--text-primary); flex: 1; }
+.sp-tab-card-link { font-size: 12px; font-weight: 700; color: var(--brand); }
+.sp-tab-card-add {
+  background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  font-family: var(--font); font-size: 12px; font-weight: 700; padding: 5px 12px; cursor: pointer;
+  box-shadow: 0 3px 10px rgba(59,130,246,0.3); transition: all 0.14s ease;
+}
+.sp-tab-card-add:hover { background: #2563eb; transform: translateY(-1px); }

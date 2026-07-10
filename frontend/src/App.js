@@ -5267,23 +5267,26 @@ function App() {
     <>
       <div className="sticky-header sticky-header--back">
         <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
+        <div className="header-with-back" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {selectedStudent.photo
+            ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="sp-mini-avatar"
+                onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })} />
+            : <span className="sp-mini-avatar sp-mini-avatar--icon"><User size={16} /></span>
+          }
+          <h1 className="title">{selectedStudent.name}</h1>
+        </div>
       </div>
 
       {/* ══════════════ TAB: PROFILE ══════════════ */}
       {profileTab === 'profile' && (
-        <div className="student-profile-header">
-          {selectedStudent.photo
-            ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="student-profile-avatar"
-                onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })}
-                style={{ cursor: 'pointer' }} />
-            : <span className="student-profile-icon"><User size={22} /></span>
-          }
-          <h1 className="student-profile-name">{selectedStudent.name}</h1>
-
+        <div className="sp-tab-card">
+          <div className="sp-tab-card-header">
+            <span className="sp-tab-card-icon"><User size={16} /></span>
+            <span className="sp-tab-card-title">Quick Actions</span>
+          </div>
           {/* ── Admin Quick Actions ── */}
-          {!isViewer && !isKazumi && (
+          {!isViewer && !isKazumi ? (
             <>
-              <p className="profile-action-label">Quick Actions</p>
               <div className="profile-icon-grid">
                 <button className="profile-icon-btn" onClick={() => setShowQuickAddExam(true)}>
                   <span className="profile-icon-circle profile-icon-circle--green"><Plus size={18} /></span>
@@ -5319,7 +5322,7 @@ function App() {
                 </button>
               </div>
 
-              <p className="profile-action-label" style={{ marginTop: 10 }}>Student Status</p>
+              <p className="profile-action-label" style={{ marginTop: 14 }}>Student Status</p>
               <div className="profile-danger-row">
                 <button
                   className="profile-danger-btn"
@@ -5362,19 +5365,19 @@ function App() {
                 </button>
               </div>
             </>
+          ) : (
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0, textAlign: 'center', padding: '12px 0' }}>View-only access</p>
           )}
         </div>
       )}
 
       {/* ══════════════ TAB: PROGRESS ══════════════ */}
       {profileTab === 'progress' && (
-        <div className="progress-summary-card" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}>
-          <div className="progress-summary-top">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <TrendingUp size={16} color="var(--brand)" />
-              <span className="progress-summary-title">{t('progressChart')}</span>
-            </div>
-            <span className="progress-summary-link">View full →</span>
+        <div className="sp-tab-card" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }} style={{ cursor: 'pointer' }}>
+          <div className="sp-tab-card-header">
+            <span className="sp-tab-card-icon"><TrendingUp size={16} /></span>
+            <span className="sp-tab-card-title">{t('progressChart')}</span>
+            <span className="sp-tab-card-link">View full →</span>
           </div>
           {n === 0 ? (
             <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>No exam data yet</p>
@@ -5406,11 +5409,12 @@ function App() {
 
       {/* ══════════════ TAB: EXAMS ══════════════ */}
       {profileTab === 'exams' && (
-        <div className="section-box">
-          <div className="section-box-header">
-            <h2 className="section-box-title">{t('examCategoriesTitle')}</h2>
+        <div className="sp-tab-card">
+          <div className="sp-tab-card-header">
+            <span className="sp-tab-card-icon"><Folder size={16} /></span>
+            <span className="sp-tab-card-title">{t('examCategoriesTitle')}</span>
             {!isViewer && !isKazumi && (
-              <button onClick={() => openModal('category')} className="section-box-add">+ Add</button>
+              <button onClick={() => openModal('category')} className="sp-tab-card-add">+ Add</button>
             )}
           </div>
           {(selectedStudent.categories || []).length === 0
@@ -5440,11 +5444,12 @@ function App() {
 
       {/* ══════════════ TAB: EVALUATIONS ══════════════ */}
       {profileTab === 'evaluations' && (
-        <div className="section-box">
-          <div className="section-box-header">
-            <h2 className="section-box-title">{t('evaluationsTitle')}</h2>
+        <div className="sp-tab-card">
+          <div className="sp-tab-card-header">
+            <span className="sp-tab-card-icon"><FileText size={16} /></span>
+            <span className="sp-tab-card-title">{t('evaluationsTitle')}</span>
             {!isViewer && !isKazumi && (
-              <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} className="section-box-add" style={{ background: 'var(--green)', boxShadow: '0 3px 10px rgba(16,185,129,0.3)' }}>+ Add</button>
+              <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} className="sp-tab-card-add" style={{ background: 'var(--green)', boxShadow: '0 3px 10px rgba(16,185,129,0.3)' }}>+ Add</button>
             )}
           </div>
           <button onClick={goToEvaluations} style={{ width: '100%', background: 'var(--surface2)', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 500 }}>
