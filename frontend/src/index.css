@@ -2095,13 +2095,19 @@
 .sp-dock-btn--active { background: var(--brand); color: #fff; }
 
 /* ── Sticky mini avatar (persistent name header) ── */
+.sticky-header--back { padding-top: 12px; padding-bottom: 12px; }
+.sp-header-info { display: flex; align-items: center; gap: 12px; }
 .sp-mini-avatar {
-  width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; cursor: pointer;
+  width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0; cursor: pointer;
+  border: 2px solid var(--surface); box-shadow: 0 0 0 2px var(--brand-soft);
 }
 .sp-mini-avatar--icon {
   display: flex; align-items: center; justify-content: center;
   background: var(--brand-soft); color: var(--brand); cursor: default;
 }
+.sp-header-name { font-size: 18px !important; font-weight: 800; margin: 0; line-height: 1.2; }
+.sp-header-sub { font-size: 12px; color: var(--text-tertiary); margin: 2px 0 0; font-weight: 500; }
+.sp-tabs-spacer { height: 18px; }
 
 /* ── Tab content card (unified frame for Profile/Progress/Exams/Evaluations) ── */
 .sp-tab-card {

@@ -5267,15 +5267,20 @@ function App() {
     <>
       <div className="sticky-header sticky-header--back">
         <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
-        <div className="header-with-back" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="header-with-back sp-header-info">
           {selectedStudent.photo
             ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="sp-mini-avatar"
                 onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })} />
-            : <span className="sp-mini-avatar sp-mini-avatar--icon"><User size={16} /></span>
+            : <span className="sp-mini-avatar sp-mini-avatar--icon"><User size={20} /></span>
           }
-          <h1 className="title">{selectedStudent.name}</h1>
+          <div style={{ minWidth: 0 }}>
+            <h1 className="title sp-header-name">{selectedStudent.name}</h1>
+            <p className="sp-header-sub">{displayName(selectedBatch)}</p>
+          </div>
         </div>
       </div>
+
+      <div className="sp-tabs-spacer" />
 
       {/* ══════════════ TAB: PROFILE ══════════════ */}
       {profileTab === 'profile' && (
