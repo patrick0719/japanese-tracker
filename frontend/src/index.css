@@ -2194,3 +2194,130 @@
 
 [data-theme="dark"] .st-badge--kumiai { background: rgba(255,193,7,0.15); color: #ffd54f; }
 [data-theme="dark"] .st-badge--company { background: rgba(76,175,80,0.15); color: #81c784; }
+
+/* ═══════════════════════════════════════════════════════
+   BATCHES HOME — Sakura redesign (scoped to this screen only)
+   ═══════════════════════════════════════════════════════ */
+.sakura-page {
+  background: linear-gradient(160deg, #fce8f0 0%, #fdf6f0 50%, #fce8e8 100%);
+  margin: calc(-1 * var(--page-pad)); padding: 0;
+  min-height: 100dvh;
+}
+[data-theme="dark"] .sakura-page { background: linear-gradient(160deg, #2a1218 0%, #1f1416 50%, #241014 100%); }
+
+.sakura-header { padding: 28px var(--page-pad) 4px; }
+.sakura-badge {
+  display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px;
+  background: #1a0a0e; border-radius: 999px; margin-bottom: 16px;
+}
+.sakura-badge-text { font-size: 11px; font-weight: 800; color: #fdf0f4; letter-spacing: 0.05em; }
+.sakura-badge-sub { font-size: 9.5px; color: #f9b8cc; }
+
+.sakura-greeting-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.sakura-greeting-name { font-family: var(--font-display); font-size: 27px; font-weight: 900; color: #0d0508; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+.sakura-greeting-sub { font-size: 13px; color: #b07080; margin: 4px 0 0; }
+[data-theme="dark"] .sakura-greeting-name { color: #fdf0f4; }
+[data-theme="dark"] .sakura-greeting-sub { color: #e0a8bc; }
+
+.sakura-avatar-wrap { position: relative; flex-shrink: 0; margin-top: 2px; }
+.sakura-avatar {
+  width: 50px; height: 50px; border-radius: 16px; overflow: hidden;
+  background: linear-gradient(135deg, #e87090 0%, #c0392b 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 18px; font-weight: 900; color: #fff;
+  box-shadow: 0 4px 18px rgba(200,60,90,0.35);
+}
+.sakura-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sakura-online-dot {
+  position: absolute; bottom: -2px; right: -2px; width: 13px; height: 13px; border-radius: 50%;
+  background: #7ac87a; border: 2px solid #fdf6f2;
+}
+
+.sakura-stats {
+  display: flex; margin: 20px var(--page-pad) 0; border-radius: 18px; overflow: hidden;
+  background: var(--surface); box-shadow: 0 2px 16px rgba(180,80,100,0.10);
+  border: 1px solid rgba(192,57,80,0.10);
+}
+.sakura-stat { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 14px 4px; border-right: 1px solid rgba(192,57,80,0.10); }
+.sakura-stat:last-child { border-right: none; }
+.sakura-stat--highlight { background: linear-gradient(135deg, #fde8ef, #fdf0f5); }
+[data-theme="dark"] .sakura-stat--highlight { background: linear-gradient(135deg, rgba(200,60,90,0.15), rgba(200,60,90,0.08)); }
+.sakura-stat-value { font-family: var(--font-display); font-size: 20px; font-weight: 900; color: #0d0508; }
+[data-theme="dark"] .sakura-stat-value { color: #fdf0f4; }
+.sakura-stat--highlight .sakura-stat-value { color: #c0392b; }
+.sakura-stat-label { font-size: 9.5px; font-weight: 700; color: #c090a0; margin-top: 2px; letter-spacing: 0.02em; }
+
+.sakura-divider { display: flex; align-items: center; gap: 10px; margin: 20px var(--page-pad); }
+.sakura-divider-line { flex: 1; height: 1px; background: linear-gradient(to right, transparent, rgba(220,130,150,0.35), transparent); }
+.sakura-divider-icon { color: #e8a0b8; font-size: 12px; }
+
+.sakura-search-row { display: flex; align-items: center; gap: 8px; margin: 0 var(--page-pad) 18px; }
+.sakura-search-wrap {
+  flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  background: var(--surface); border: 1px solid rgba(192,57,80,0.12); border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(180,80,100,0.08);
+}
+.sakura-search-input { flex: 1; border: none; background: none; outline: none; font-size: 14px; color: var(--text-primary); font-family: var(--font); }
+.sakura-search-input::placeholder { color: #d090a8; }
+.sakura-search-menu-btn {
+  flex-shrink: 0; width: 44px; height: 44px; border-radius: 16px; border: none; cursor: pointer;
+  background: rgba(192,57,80,0.08); color: #c0392b;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.sakura-section-row { display: flex; align-items: center; justify-content: space-between; margin: 0 var(--page-pad) 14px; }
+.sakura-section-title { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.12em; color: #0d0508; }
+[data-theme="dark"] .sakura-section-title { color: #fdf0f4; }
+.sakura-section-count {
+  font-size: 10px; font-weight: 800; background: #1a0a0e; color: #f9b8cc;
+  padding: 2px 9px; border-radius: 999px; margin-left: 8px;
+}
+
+.sakura-chip-row { display: flex; gap: 6px; padding: 5px; margin: 0 var(--page-pad) 20px; background: var(--surface); border: 1px solid rgba(192,57,80,0.12); border-radius: 16px; box-shadow: 0 2px 8px rgba(180,80,100,0.07); }
+.sakura-chip { flex: 1; padding: 9px 6px; border: none; background: none; border-radius: 12px; font-size: 12px; font-weight: 800; color: #b07088; cursor: pointer; transition: all 0.15s ease; }
+.sakura-chip--active { background: #1a0a0e; color: #fdf0f4; box-shadow: 0 3px 12px rgba(10,4,8,0.25); }
+
+.sakura-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 var(--page-pad); }
+.sakura-card {
+  position: relative; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column;
+  min-height: 172px; border: 1px solid rgba(10,4,8,0.10);
+  box-shadow: 0 2px 14px rgba(180,80,100,0.10);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.sakura-card:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(180,80,100,0.22); }
+.sakura-card-top { height: 4px; }
+.sakura-card-body { flex: 1; padding: 13px; display: flex; flex-direction: column; justify-content: space-between; }
+.sakura-card-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.sakura-card-tag { padding: 4px 10px; border-radius: 10px; font-family: var(--font-display); font-size: 11.5px; font-weight: 800; }
+.sakura-card-icons { display: flex; gap: 4px; }
+.sakura-card-icon-btn {
+  width: 26px; height: 26px; border-radius: 9px; border: none; cursor: pointer;
+  background: rgba(255,255,255,0.7); display: flex; align-items: center; justify-content: center;
+  transition: transform 0.15s ease;
+}
+.sakura-card-icon-btn:hover { transform: scale(1.1); }
+.sakura-card-name { font-family: var(--font-display); font-size: 14.5px; font-weight: 900; color: #0d0508; margin: 14px 0 0; line-height: 1.2; }
+.sakura-card-count { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 11px; font-weight: 600; color: #c090a8; }
+.sakura-card-footer {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  padding: 9px 13px; background: rgba(255,255,255,0.5); border-top: 1px solid rgba(10,4,8,0.08);
+  border: none; cursor: pointer;
+}
+.sakura-card-footer-label { font-size: 10.5px; font-weight: 800; }
+.sakura-card-arrow { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+.sakura-bottom-bar {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 60;
+  width: calc(100% - 32px); max-width: calc(var(--page-max) - 32px);
+  display: flex; gap: 10px; padding: 0;
+}
+.sakura-bottom-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px; border-radius: 16px; border: none; cursor: pointer;
+  font-family: var(--font-display); font-size: 13.5px; font-weight: 800;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+.sakura-bottom-btn:hover { opacity: 0.9; }
+.sakura-bottom-btn:active { transform: scale(0.96); }
+.sakura-bottom-btn--dark { background: #1a0a0e; color: #fdf0f4; box-shadow: 0 4px 16px rgba(10,4,8,0.22); }
+.sakura-bottom-btn--accent { background: linear-gradient(135deg, #e87090 0%, #c0392b 100%); color: #fff; box-shadow: 0 6px 20px rgba(192,57,80,0.38); }

@@ -3605,6 +3605,13 @@ function BatchThemeArt({ theme }) {
   );
 }
 
+const SAKURA_CARD_VARIANTS = [
+  { top: '#c0392b', tagBg: '#fcd0ce', tagText: '#8b2020', bg: 'linear-gradient(145deg, #fde8e8 0%, #fff0f0 100%)' },
+  { top: '#c0608a', tagBg: '#f8d0e8', tagText: '#8a3060', bg: 'linear-gradient(145deg, #fce8f4 0%, #fdf0f8 100%)' },
+  { top: '#c0603a', tagBg: '#fcd8c8', tagText: '#8a3820', bg: 'linear-gradient(145deg, #fce8d8 0%, #fff4ee 100%)' },
+  { top: '#d63a6a', tagBg: '#fbd0de', tagText: '#a02050', bg: 'linear-gradient(145deg, #fde8ef 0%, #fdf0f5 100%)' },
+];
+
 function App() {
   const [batches, setBatches] = useState([]);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -4879,13 +4886,20 @@ function App() {
       return results.slice().sort((a, b) => a.student.name.localeCompare(b.student.name));
     })() : null;
 
+    const totalStudents = batches.reduce((sum, b) => sum + b.students.filter(s => !s.isArchived).length, 0);
+    const activeBatches = batches.filter(b => !b.isHiddenFromViewer).length;
+
     return (
-    <>
-      <div className="sticky-header">
-      <div className="header-banner">
-        <div className="bh-greeting-row">
+    <div className="sakura-page">
+      <div className="sakura-header">
+        <div className="sakura-badge">
+          <span style={{ fontSize: 12 }}>🌸</span>
+          <span className="sakura-badge-text">SAGE Bulacan</span>
+          <span className="sakura-badge-sub">Japanese School</span>
+        </div>
+        <div className="sakura-greeting-row">
           <div>
-            <p className="bh-greeting-title">
+            <h1 className="sakura-greeting-name">
               {isKazumi
                 ? `Hello, ${selectedTeacher?.name || 'Ogawa Sensei'}`
                 : isViewer
@@ -4896,42 +4910,21 @@ function App() {
                   : safeLocalGet(ROLE_KEY) === 'sulop' ? 'SULOP'
                   : 'PHGIC')
                 : `Hello, ${selectedTeacher?.name || ''}`}
-            </p>
-            <p className="bh-greeting-sub">
-              {isViewer ? t('viewOnly') : isKazumi ? 'View Only' : 'Welcome back to SAGE Bulacan'}
+            </h1>
+            <p className="sakura-greeting-sub">
+              {isViewer ? t('viewOnly') : isKazumi ? 'View Only' : 'Welcome back to your dashboard'}
             </p>
           </div>
 
-          <span className="avatar-wrap" style={{ flexShrink: 0 }}>
-            {selectedTeacher?.photo
-              ? <img src={selectedTeacher.photo} alt={selectedTeacher.name} />
-              : <span style={{ fontSize: 22 }}>{selectedTeacher?.emoji || '👩‍🏫'}</span>
-            }
-          </span>
-        </div>
-
-        {/* ── Search bar + menu ── */}
-        <div className="bh-search-row">
-          <div className="bh-search-wrap">
-            <Search size={16} className="bh-search-icon" />
-            <input
-              type="text"
-              value={globalSearch}
-              onChange={e => setGlobalSearch(e.target.value)}
-              placeholder="Search students, company, batch..."
-              className="bh-search-input"
-            />
-            {globalSearch && (
-              <button onClick={() => setGlobalSearch('')} className="bh-search-clear"><X size={14} /></button>
-            )}
-          </div>
           <div style={{ position: 'relative' }}>
-            <button
-              className="bh-sort-btn"
-              title="Menu"
-              onClick={() => setHeaderMenuOpen(o => !o)}
-            >
-              <MoreVertical size={18} />
+            <button className="sakura-avatar-wrap" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }} onClick={() => setHeaderMenuOpen(o => !o)}>
+              <span className="sakura-avatar">
+                {selectedTeacher?.photo
+                  ? <img src={selectedTeacher.photo} alt={selectedTeacher.name} />
+                  : (selectedTeacher?.name?.[0] || 'S')
+                }
+              </span>
+              <span className="sakura-online-dot" />
             </button>
             {headerMenuOpen && (
               <>
@@ -4958,9 +4951,46 @@ function App() {
             )}
           </div>
         </div>
+      </div>
 
-      </div>{/* end header-banner */}
-      </div>{/* end sticky-header */}
+      {/* ── Stats strip ── */}
+      <div className="sakura-stats">
+        <div className="sakura-stat">
+          <span className="sakura-stat-value">{batches.length}</span>
+          <span className="sakura-stat-label">BATCHES</span>
+        </div>
+        <div className="sakura-stat sakura-stat--highlight">
+          <span className="sakura-stat-value">{totalStudents}</span>
+          <span className="sakura-stat-label">STUDENTS</span>
+        </div>
+        <div className="sakura-stat">
+          <span className="sakura-stat-value">{activeBatches}</span>
+          <span className="sakura-stat-label">ACTIVE</span>
+        </div>
+      </div>
+
+      <div className="sakura-divider">
+        <span className="sakura-divider-line" />
+        <span className="sakura-divider-icon">✿</span>
+        <span className="sakura-divider-line" />
+      </div>
+
+      {/* ── Search bar + menu ── */}
+      <div className="sakura-search-row">
+        <div className="sakura-search-wrap">
+          <Search size={16} style={{ color: '#d090a8', flexShrink: 0 }} />
+          <input
+            type="text"
+            value={globalSearch}
+            onChange={e => setGlobalSearch(e.target.value)}
+            placeholder="Search students, company, batch..."
+            className="sakura-search-input"
+          />
+          {globalSearch && (
+            <button onClick={() => setGlobalSearch('')} className="bh-search-clear"><X size={14} /></button>
+          )}
+        </div>
+      </div>
 
       {/* ── Smart Reminders (teacher/admin only) ── */}
       {!isViewer && !isKazumi && (
@@ -5052,10 +5082,15 @@ function App() {
       ) : (
         <>
           {/* ── Normal batch list ── */}
-          <h2 className="section-title">{isViewer ? t('allBatches') : t('myBatches')}</h2>
+          <div className="sakura-section-row">
+            <span className="sakura-section-title">
+              {isViewer ? t('allBatches') : t('myBatches')}
+              <span className="sakura-section-count">{batches.length}</span>
+            </span>
+          </div>
 
           {!isViewer && !isKazumi && (
-            <div className="bh-chip-row">
+            <div className="sakura-chip-row">
               {[
                 { key: 'all', label: 'All' },
                 { key: 'visible', label: 'Visible' },
@@ -5063,7 +5098,7 @@ function App() {
               ].map(chip => (
                 <button
                   key={chip.key}
-                  className={`bh-chip${batchFilterTab === chip.key ? ' bh-chip--active' : ''}`}
+                  className={`sakura-chip${batchFilterTab === chip.key ? ' sakura-chip--active' : ''}`}
                   onClick={() => setBatchFilterTab(chip.key)}
                 >
                   {chip.label}
@@ -5097,57 +5132,68 @@ function App() {
             }
 
             return (
-              <div className="bh-carousel">
+              <div className="sakura-grid">
                 {sorted.map((batch, idx) => {
                   const studentCount = isViewer
                     ? batch.students.filter(s => !s.isArchived && s.status === 'Selected').length
                     : batch.students.filter(s => !s.isArchived).length;
-                  const theme = BATCH_THEMES[idx % BATCH_THEMES.length];
+                  const variant = SAKURA_CARD_VARIANTS[idx % SAKURA_CARD_VARIANTS.length];
                   return (
-                    <div key={batch._id} className="bh-hero-card bh-carousel-item">
-                      <div className="bh-hero-top">
-                        <BatchThemeArt theme={theme} />
-                        {!isViewer && !isKazumi && (
-                          <button
-                            className="bh-hero-badge bh-hero-badge--left"
-                            title="Delete batch"
-                            onClick={(e) => deleteBatch(batch._id, e)}
-                          >
-                            <X size={14} />
-                          </button>
-                        )}
-                        {!isViewer && !isKazumi && (
-                          <button
-                            className={`bh-hero-badge bh-hero-badge--right${batch.isHiddenFromViewer ? ' bh-hero-badge--hidden' : ''}`}
-                            title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
-                                const data = await res.json();
-                                if (data.success) {
-                                  setBatches(prev => prev.map(b =>
-                                    b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
-                                  ));
-                                } else {
-                                  alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
+                    <div key={batch._id} className="sakura-card" style={{ background: variant.bg }}>
+                      <div className="sakura-card-top" style={{ background: variant.top }} />
+                      <div className="sakura-card-body">
+                        <div className="sakura-card-head">
+                          <span className="sakura-card-tag" style={{ background: variant.tagBg, color: variant.tagText }}>
+                            {displayName(batch)}
+                          </span>
+                          <div className="sakura-card-icons">
+                            {!isViewer && !isKazumi && (
+                              <button className="sakura-card-icon-btn" title="Delete batch" onClick={(e) => deleteBatch(batch._id, e)}>
+                                <X size={12} style={{ color: '#c090a8' }} />
+                              </button>
+                            )}
+                            {!isViewer && !isKazumi && (
+                              <button
+                                className="sakura-card-icon-btn"
+                                title={batch.isHiddenFromViewer ? 'Show to PHGIC/Viewers' : 'Hide from PHGIC/Viewers'}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const res = await fetch(`${API}/batches/${batch._id}/toggle-hide`, { method: 'PATCH' });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      setBatches(prev => prev.map(b =>
+                                        b._id === batch._id ? { ...b, isHiddenFromViewer: data.isHiddenFromViewer } : b
+                                      ));
+                                    } else {
+                                      alert('Toggle failed: ' + (data.error || JSON.stringify(data)));
+                                    }
+                                  } catch(err) {
+                                    alert('Toggle error: ' + err.message);
+                                  }
+                                }}
+                              >
+                                {batch.isHiddenFromViewer
+                                  ? <EyeOff size={12} style={{ color: '#c090a8' }} />
+                                  : <Eye size={12} style={{ color: variant.top }} />
                                 }
-                              } catch(err) {
-                                alert('Toggle error: ' + err.message);
-                              }
-                            }}
-                          >
-                            {batch.isHiddenFromViewer ? <EyeOff size={14} /> : <Eye size={14} />}
-                          </button>
-                        )}
-                        <div className="bh-hero-info">
-                          <p className="bh-hero-name">{displayName(batch)}</p>
-                          <p className="bh-hero-sub">{studentCount} student{studentCount !== 1 ? 's' : ''}</p>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <h3 className="sakura-card-name">{displayName(batch)}</h3>
+                          <div className="sakura-card-count">
+                            <Users size={11} />
+                            <span>{studentCount} student{studentCount !== 1 ? 's' : ''}</span>
+                          </div>
                         </div>
                       </div>
-                      <button className="bh-hero-footer" onClick={() => goToStudents(batch)}>
-                        <span className="bh-hero-footer-label">See students</span>
-                        <span className="bh-hero-arrow"><ChevronRight size={17} /></span>
+                      <button className="sakura-card-footer" onClick={() => goToStudents(batch)}>
+                        <span className="sakura-card-footer-label" style={{ color: variant.tagText }}>See students</span>
+                        <span className="sakura-card-arrow" style={{ background: variant.top }}>
+                          <ChevronRight size={12} color="#fff" />
+                        </span>
                       </button>
                     </div>
                   );
@@ -5157,19 +5203,19 @@ function App() {
           })()}
 
           <div className="bh-bottom-spacer" />
-          <div className="bh-bottom-bar">
+          <div className="sakura-bottom-bar">
             {!isViewer && !isKazumi && (
-              <button className="bh-bottom-btn" onClick={() => openModal('batch')}>
-                <Plus size={17} /> {t('addNewBatch')}
+              <button className="sakura-bottom-btn sakura-bottom-btn--dark" onClick={() => openModal('batch')}>
+                <Plus size={16} /> New Batch
               </button>
             )}
-            <button className="bh-bottom-btn bh-bottom-btn--accent" onClick={() => setShowQRScanner(true)}>
-              <Camera size={17} /> Scan QR
+            <button className="sakura-bottom-btn sakura-bottom-btn--accent" onClick={() => setShowQRScanner(true)}>
+              <Camera size={16} /> Scan QR
             </button>
           </div>
         </>
       )}
-    </>
+    </div>
     );
   };
 
