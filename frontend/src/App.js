@@ -3973,6 +3973,12 @@ function App() {
     } catch { setEvaluations([]); }
   };
 
+  useEffect(() => {
+    if (view === 'categories' && selectedStudent && selectedBatch) {
+      fetchEvaluations();
+    }
+  }, [view, selectedStudent?._id, selectedBatch?._id]);
+
   const goBack = () => {
     const role = safeLocalGet(ROLE_KEY);
     const isKumiai = ['setouchi','wbc','gyoumusuishin','greenservices'].includes(role);
@@ -5385,7 +5391,10 @@ function App() {
             <span className="sp-tab-card-link">View full →</span>
           </div>
           {n === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>No exam data yet</p>
+            <div style={{ textAlign: 'center', padding: '18px 0 8px', color: 'var(--text-tertiary)' }}>
+              <TrendingUp size={30} strokeWidth={1.3} style={{ opacity: 0.4, marginBottom: 6 }} />
+              <p style={{ fontSize: 13, margin: 0 }}>No exam data yet</p>
+            </div>
           ) : (
             <>
               <div className="progress-summary-stats">
@@ -5404,8 +5413,12 @@ function App() {
                   </p>
                 </div>
               </div>
-              <div className="progress-bar-track">
-                <div className="progress-bar-fill" style={{ width: `${Math.min(avg, 100)}%` }} />
+              <div className="sp-mini-chart">
+                {allExamsFlat.slice(-8).map((ex, i) => (
+                  <div key={i} className="sp-mini-chart-col" title={`${ex.pct}%`}>
+                    <div className="sp-mini-chart-bar" style={{ height: `${Math.max(ex.pct, 4)}%` }} />
+                  </div>
+                ))}
               </div>
             </>
           )}
@@ -5457,9 +5470,33 @@ function App() {
               <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} className="sp-tab-card-add" style={{ background: 'var(--green)', boxShadow: '0 3px 10px rgba(16,185,129,0.3)' }}>+ Add</button>
             )}
           </div>
-          <button onClick={goToEvaluations} style={{ width: '100%', background: 'var(--surface2)', border: 'none', borderRadius: 10, padding: '10px 14px', textAlign: 'left', fontSize: 14, color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 500 }}>
-            {t('viewAllEvaluations')}
-          </button>
+
+          {evaluations.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '18px 0 8px', color: 'var(--text-tertiary)' }}>
+              <FileText size={30} strokeWidth={1.3} style={{ opacity: 0.4, marginBottom: 6 }} />
+              <p style={{ fontSize: 13, margin: 0 }}>{t('noEvaluationsYet')}</p>
+            </div>
+          ) : (
+            <>
+              {evaluations.slice(0, 3).map(ev => (
+                <button
+                  key={ev._id}
+                  className="sp-eval-row"
+                  onClick={() => goToEvaluationDetail(ev)}
+                >
+                  <span className="sp-eval-row-icon"><FileText size={14} /></span>
+                  <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    <span className="sp-eval-row-title">{ev.ordinal} Evaluation — {ev.title}</span>
+                    <span className="sp-eval-row-date">📅 {ev.date}</span>
+                  </span>
+                  <ChevronRight size={16} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                </button>
+              ))}
+              <button onClick={goToEvaluations} className="sp-eval-viewall">
+                {t('viewAllEvaluations')} ({evaluations.length}) →
+              </button>
+            </>
+          )}
         </div>
       )}
 
