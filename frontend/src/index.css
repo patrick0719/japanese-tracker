@@ -2114,6 +2114,7 @@
 .sp-tab-card {
   background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px;
   padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
+  margin-top: 125px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .sp-tab-card-header { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
