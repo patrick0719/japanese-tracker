@@ -125,12 +125,13 @@
    }
    
    /* ── PAGE SHELL ──────────────────────────────────────── */
-   #root > div {
+   #root, #root > div, .app-shell {
      max-width: var(--page-max);
      margin: 0 auto;
      padding: var(--page-pad);
      padding-bottom: max(48px, calc(env(safe-area-inset-bottom) + 24px));
    }
+   #root { padding: 0; }
    
    /* ── TYPOGRAPHY ──────────────────────────────────────── */
    .title {
@@ -1629,7 +1630,7 @@
    @media (max-width: 400px) { :root { --page-pad: 14px; } .title { font-size: 22px; } }
    @media (min-width: 481px) {
      body { background: #d8d8de; }
-     #root > div { background: var(--bg); min-height: 100dvh; box-shadow: 0 0 80px rgba(0,0,0,0.18); }
+     #root, .app-shell { background: var(--bg); min-height: 100dvh; box-shadow: 0 0 80px rgba(0,0,0,0.18); }
    }
    @media print { body { background: #fff !important; } .no-print { display: none !important; } }
 

@@ -6816,6 +6816,7 @@ function App() {
 
   return (
     <div
+      className="app-shell"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
