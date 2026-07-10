@@ -2114,7 +2114,6 @@
 .sp-tab-card {
   background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px;
   padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow-sm);
-  margin-top: 125px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .sp-tab-card-header { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
@@ -2164,3 +2163,34 @@
   width: 100%; background: none; border: none; color: var(--brand);
   font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 0 0; text-align: center;
 }
+
+/* ── Student List cards ── */
+.st-card {
+  position: relative; display: flex; align-items: center; gap: 8px; width: 100%;
+  background: var(--surface); border: 1.5px solid var(--border); border-radius: 18px;
+  padding: 12px 12px 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+.st-card:hover { border-color: var(--brand-soft); box-shadow: var(--shadow-md); }
+.st-card-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
+  background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+  font-family: var(--font);
+}
+.st-avatar { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex-shrink: 0; cursor: pointer; }
+.st-avatar--icon {
+  display: flex; align-items: center; justify-content: center; cursor: default;
+  background: var(--brand-soft); color: var(--brand);
+}
+.st-card-text { flex: 1; min-width: 0; }
+.st-badge-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.st-card-name { font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 0; }
+.st-card-sub { font-size: 12px; color: var(--text-tertiary); margin: 3px 0 0; }
+.st-badge { font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 20px; }
+.st-badge--selected { background: var(--brand); color: #fff; cursor: pointer; }
+.st-badge--regular { background: var(--surface3); color: var(--text-tertiary); cursor: pointer; }
+.st-badge--kumiai { background: #fff3cd; color: #856404; }
+.st-badge--company { background: #e8f5e9; color: #2e7d32; }
+
+[data-theme="dark"] .st-badge--kumiai { background: rgba(255,193,7,0.15); color: #ffd54f; }
+[data-theme="dark"] .st-badge--company { background: rgba(76,175,80,0.15); color: #81c784; }
