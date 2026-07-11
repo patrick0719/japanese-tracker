@@ -6286,50 +6286,67 @@ function App() {
     const score = selectedExam.score ?? 0;
     const total = selectedExam.totalScore ?? 100;
     const pct = Math.round((score / total) * 100);
-    const pctColor = pct >= 60 ? 'var(--green)' : 'var(--red)';
-    const pctBg    = pct >= 60 ? 'var(--green-soft)' : 'var(--red-soft)';
 
     return (
-      <>
-        <div className="sticky-header sticky-header--back">
-          <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
+      <div className="sakura-page">
+        <div className="sakura-header" style={{ paddingBottom: 0 }}>
+          <button onClick={goBack} className="sakura-back-btn"><ArrowLeft size={16} /></button>
         </div>
 
+        <div style={{ padding: '14px var(--page-pad) 0' }}>
+
         {/* Hero score card */}
-        <div className="exam-detail-hero">
-          <div className="exam-detail-hero-left">
-            <h1 className="exam-detail-title">{displayName(selectedExam)}</h1>
-            <p className="exam-detail-date">📅 {selectedExam.date}</p>
+        <div className="sakura-tab-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 14 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 900, color: '#0d0508', margin: '0 0 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName(selectedExam)}</h1>
+            <p style={{ fontSize: 12, color: '#c090a8', margin: 0, fontWeight: 500 }}>📅 {selectedExam.date}</p>
           </div>
-          <div className="exam-detail-score-ring" style={{ background: pctBg, borderColor: pctColor }}>
-            <span className="exam-detail-score-num" style={{ color: pctColor }}>{score}</span>
-            <span className="exam-detail-score-total" style={{ color: pctColor }}>/{total}</span>
-            <span className="exam-detail-score-pct" style={{ color: pctColor }}>{pct}%</span>
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            width: 76, height: 76, borderRadius: 20, flexShrink: 0,
+            background: pct >= 60 ? '#e8f8e8' : '#fde8e8', border: `2.5px solid ${pct >= 60 ? '#7ac87a' : '#c0392b'}`,
+          }}>
+            <span style={{ fontSize: 22, fontWeight: 900, fontFamily: 'var(--font-display)', color: pct >= 60 ? '#4a8a4a' : '#c0392b', lineHeight: 1 }}>{score}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, color: pct >= 60 ? '#4a8a4a' : '#c0392b', lineHeight: 1, marginTop: 1 }}>/{total}</span>
+            <span style={{ fontSize: 11, fontWeight: 800, opacity: 0.9, color: pct >= 60 ? '#4a8a4a' : '#c0392b', lineHeight: 1, marginTop: 3 }}>{pct}%</span>
           </div>
         </div>
 
         {/* Action buttons */}
         {!isViewer && !isKazumi && (
-          <div className="exam-action-row">
-            <button className="exam-action-btn scan" onClick={() => openScanner(selectedExam._id)}>
-              <Camera size={16} style={{ marginRight: 6 }} />{t('scanPage')}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+            <button onClick={() => openScanner(selectedExam._id)} style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              padding: '13px 12px', borderRadius: 16, border: '1.5px solid rgba(192,57,80,0.15)',
+              background: '#fff', fontFamily: 'var(--font)', fontSize: 13.5, fontWeight: 800,
+              color: '#c0392b', cursor: 'pointer', boxShadow: '0 2px 10px rgba(180,80,100,0.08)',
+            }}>
+              <Camera size={16} />{t('scanPage')}
             </button>
-            <button className="exam-action-btn upload" onClick={() => triggerFileInput(selectedExam._id)}>
-              <Image size={16} style={{ marginRight: 6 }} />{t('upload')}
+            <button onClick={() => triggerFileInput(selectedExam._id)} style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              padding: '13px 12px', borderRadius: 16, border: '1.5px solid rgba(192,57,80,0.15)',
+              background: '#fff', fontFamily: 'var(--font)', fontSize: 13.5, fontWeight: 800,
+              color: '#608090', cursor: 'pointer', boxShadow: '0 2px 10px rgba(180,80,100,0.08)',
+            }}>
+              <Image size={16} />{t('upload')}
             </button>
           </div>
         )}
 
         {/* Pages */}
-        <h2 className="section-title">
-          {t('examPages')} {rawImages.length > 0 && `· ${rawImages.length} page${rawImages.length !== 1 ? 's' : ''}`}
-        </h2>
+        <div className="sakura-section-row" style={{ margin: '0 0 12px' }}>
+          <span className="sakura-section-title">
+            {t('examPages')}
+            {rawImages.length > 0 && <span className="sakura-section-count">{rawImages.length}</span>}
+          </span>
+        </div>
 
         {rawImages.length === 0 ? (
-          <div className="exam-empty-pages">
-            <div style={{ marginBottom: 14 }}><File size={52} strokeWidth={1.2} color='#8e8e93' /></div>
-            <p style={{ fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>{t('noPagesYet')}</p>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>{t('scanOrUpload')}</p>
+          <div style={{ textAlign: 'center', padding: '40px 24px', background: '#fff', borderRadius: 20, border: '2px dashed rgba(192,57,80,0.2)' }}>
+            <div className="sakura-eval-empty-icon"><File size={26} /></div>
+            <p style={{ fontWeight: 700, color: '#0d0508', margin: 0, fontSize: 14 }}>{t('noPagesYet')}</p>
+            <p style={{ fontSize: 12, color: '#c090a8', marginTop: 4 }}>{t('scanOrUpload')}</p>
           </div>
         ) : (
           <div className="exam-pages-grid">
@@ -6358,7 +6375,7 @@ function App() {
                     />
                   ) : (
                     <div className="exam-page-loading">
-                      <Loader size={22} color="#8e8e93" style={{ animation: 'spin 1s linear infinite' }} />
+                      <Loader size={22} color="#c090a8" style={{ animation: 'spin 1s linear infinite' }} />
                       <p>{t('loading')}</p>
                     </div>
                   )}
@@ -6376,11 +6393,17 @@ function App() {
         <div style={{ height: 16 }} />
 
         {!isViewer && !isKazumi && (
-          <button className="btn-danger" style={{ width: '100%', marginTop: 8 }}
+          <button style={{
+            width: '100%', marginTop: 8, marginBottom: 20, padding: 14, borderRadius: 16,
+            background: '#fff0f0', border: 'none', color: '#c0392b',
+            fontFamily: 'var(--font)', fontSize: 14, fontWeight: 800, cursor: 'pointer',
+          }}
             onClick={(e) => deleteExam(selectedExam._id, e)}>
             {t('deleteExam')}
           </button>
         )}
+
+        </div>
 
         <input
           type="file"
@@ -6390,7 +6413,7 @@ function App() {
           multiple
           onChange={handleFileChange}
         />
-      </>
+      </div>
     );
   };
 
