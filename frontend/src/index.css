@@ -2344,3 +2344,132 @@
 }
 .sakura-list-avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0; cursor: pointer; }
 .sakura-list-avatar--icon { display: flex; align-items: center; justify-content: center; cursor: default; }
+
+/* ═══════════════════════════════════════════════════════
+   STUDENT PROFILE — Sakura redesign
+   ═══════════════════════════════════════════════════════ */
+.sakura-profile-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.sakura-profile-photo-wrap { position: relative; flex-shrink: 0; }
+.sakura-profile-photo {
+  width: 56px; height: 56px; border-radius: 18px; object-fit: cover;
+  border: 2.5px solid #fdf6f2; box-shadow: 0 4px 18px rgba(192,57,80,0.25); cursor: pointer;
+}
+.sakura-profile-photo--icon {
+  display: flex; align-items: center; justify-content: center; cursor: default;
+  background: linear-gradient(135deg, #e87090 0%, #c0392b 100%); color: #fff;
+}
+.sakura-profile-status-dot {
+  position: absolute; bottom: -2px; right: -2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #7ac87a; border: 2px solid #fdf6f2;
+}
+.sakura-profile-status-dot--irregular { background: #e8a030; }
+.sakura-profile-name { font-family: var(--font-display); font-size: 18px; font-weight: 900; color: #0d0508; margin: 0; line-height: 1.2; }
+[data-theme="dark"] .sakura-profile-name { color: #fdf0f4; }
+.sakura-profile-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+.sakura-profile-batch { font-size: 12px; color: #c090a8; }
+.sakura-profile-status-badge { font-size: 10px; font-weight: 800; padding: 2px 9px; border-radius: 999px; background: #1a0a0e; color: #fdf0f4; }
+
+.sakura-tab-card {
+  background: var(--surface); border: 1px solid rgba(192,57,80,0.10); border-radius: 22px;
+  padding: 16px; margin-bottom: 14px; box-shadow: 0 4px 20px rgba(180,80,100,0.08);
+}
+.sakura-tab-card-header { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.sakura-tab-card-icon {
+  width: 32px; height: 32px; border-radius: 12px; flex-shrink: 0;
+  background: #fde8ef; color: #c0392b;
+  display: flex; align-items: center; justify-content: center;
+}
+.sakura-tab-card-title { font-family: var(--font-display); font-size: 15.5px; font-weight: 900; color: #0d0508; flex: 1; }
+[data-theme="dark"] .sakura-tab-card-title { color: #fdf0f4; }
+.sakura-tab-card-link { font-size: 12px; font-weight: 800; color: #c0392b; background: none; border: none; cursor: pointer; }
+.sakura-tab-card-add {
+  background: #1a0a0e; color: #fdf0f4; border: none; border-radius: 10px;
+  font-family: var(--font); font-size: 12px; font-weight: 800; padding: 6px 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 4px;
+}
+.sakura-tab-card-add--accent { background: linear-gradient(135deg, #e87090 0%, #c0392b 100%); box-shadow: 0 3px 10px rgba(192,57,80,0.30); }
+
+/* Quick actions grid */
+.sakura-qa-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sakura-qa-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px;
+  border-radius: 16px; border: none; cursor: pointer; transition: transform 0.15s ease;
+  font-family: var(--font); font-size: 10px; font-weight: 800; color: #0d0508; text-align: center;
+}
+.sakura-qa-btn:hover { transform: scale(1.05); }
+.sakura-qa-btn:active { transform: scale(0.95); }
+.sakura-qa-btn--green  { background: #e8f8e8; }
+.sakura-qa-btn--pink   { background: #fde8f2; }
+.sakura-qa-btn--orange { background: #fdf0e0; }
+.sakura-qa-btn--blue   { background: #e8f0f8; }
+.sakura-qa-icon--green  { color: #7ac87a; }
+.sakura-qa-icon--pink   { color: #c0608a; }
+.sakura-qa-icon--orange { color: #c07840; }
+.sakura-qa-icon--blue   { color: #608090; }
+
+/* Student status */
+.sakura-status-label { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #c090a8; margin: 4px 0 10px; }
+.sakura-status-list { display: flex; flex-direction: column; gap: 8px; }
+.sakura-status-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px;
+  border-radius: 16px; border: none; cursor: pointer; font-family: var(--font);
+  font-size: 13.5px; font-weight: 700; transition: opacity 0.15s ease;
+}
+.sakura-status-btn:hover { opacity: 0.85; }
+.sakura-status-btn--move { background: linear-gradient(135deg, #fde8ef, #fdf0f5); color: #c0392b; }
+.sakura-status-btn--hide { background: var(--surface); border: 1px solid rgba(192,57,80,0.12); color: var(--text-primary); }
+.sakura-status-btn--delete { background: #fff0f0; color: #c0392b; }
+
+/* Progress tab */
+.sakura-avg-row { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
+.sakura-avg-label { font-size: 11px; color: #c090a8; margin: 0 0 2px; }
+.sakura-avg-value { font-family: var(--font-display); font-size: 40px; font-weight: 900; color: #0d0508; line-height: 1; margin: 0; }
+[data-theme="dark"] .sakura-avg-value { color: #fdf0f4; }
+.sakura-avg-value sup { font-size: 18px; }
+.sakura-trend-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: #e8f8e8; border: 1px solid rgba(122,200,122,0.3); font-size: 11px; font-weight: 800; color: #4a8a4a; }
+.sakura-trend-pill--down { background: #fde8e8; border-color: rgba(192,57,80,0.3); color: #c0392b; }
+.sakura-exam-count { font-size: 11px; color: #c090a8; margin-top: 4px; }
+
+.sakura-range-row { display: flex; gap: 8px; margin-top: 4px; }
+.sakura-range-stat { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 12px 4px; border-radius: 16px; }
+.sakura-range-value { font-family: var(--font-display); font-size: 17px; font-weight: 900; }
+.sakura-range-label { font-size: 9.5px; font-weight: 700; color: #c090a8; margin-top: 2px; }
+
+/* Exam Categories list */
+.sakura-cat-row { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 16px; margin-bottom: 8px; }
+.sakura-cat-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sakura-cat-name { font-family: var(--font-display); font-size: 13.5px; font-weight: 900; color: #0d0508; margin: 0; }
+[data-theme="dark"] .sakura-cat-name { color: #fdf0f4; }
+.sakura-cat-sub { font-size: 10.5px; color: #c090a8; margin-top: 1px; }
+.sakura-cat-badge { width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; color: #fff; }
+.sakura-cat-action-btn { width: 26px; height: 26px; border-radius: 10px; border: none; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(192,57,80,0.07); }
+.sakura-cat-delete-btn { width: 26px; height: 26px; border-radius: 10px; border: none; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #fff0f0; color: #c0392b; }
+
+/* Evaluations empty state */
+.sakura-eval-empty-icon {
+  width: 64px; height: 64px; border-radius: 22px; margin: 0 auto 14px;
+  background: linear-gradient(135deg, #fde8ef, #fdf0f5); border: 1px solid rgba(192,57,80,0.12);
+  display: flex; align-items: center; justify-content: center; color: #f9b8cc;
+}
+.sakura-eval-empty-cta {
+  display: flex; align-items: center; gap: 8px; margin: 14px auto 0; padding: 10px 20px;
+  border-radius: 16px; border: none; cursor: pointer; background: #1a0a0e; color: #fdf0f4;
+  font-family: var(--font); font-size: 13px; font-weight: 800;
+  box-shadow: 0 3px 12px rgba(10,4,8,0.20);
+}
+
+/* Bottom dock (icon + label) */
+.sakura-dock {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 60;
+  width: calc(100% - 32px); max-width: calc(var(--page-max) - 32px);
+  display: flex; align-items: center; gap: 4px; padding: 7px;
+  background: var(--surface); border: 1px solid rgba(192,57,80,0.12); border-radius: 24px;
+  box-shadow: 0 4px 20px rgba(180,80,100,0.14);
+}
+.sakura-dock-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 9px 4px; border-radius: 16px; border: none; background: none; cursor: pointer;
+  color: #c090a8; transition: all 0.2s ease;
+}
+.sakura-dock-btn-label { font-size: 9px; font-weight: 800; }
+.sakura-dock-btn--active { background: #1a0a0e; color: #f9b8cc; box-shadow: 0 3px 12px rgba(10,4,8,0.25); }

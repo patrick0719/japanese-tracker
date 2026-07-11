@@ -5343,45 +5343,59 @@ function App() {
     let streak = 0;
     for (let i = n - 1; i > 0; i--) { if (allExamsFlat[i].pct > allExamsFlat[i-1].pct) streak++; else break; }
 
+    const examMax = n > 0 ? Math.max(...allExamsFlat.map(e => e.pct)) : null;
+    const examMin = n > 0 ? Math.min(...allExamsFlat.map(e => e.pct)) : null;
+
     return (
-    <>
-      <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
-        <div className="header-with-back sp-header-info">
-          {selectedStudent.photo
-            ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="sp-mini-avatar"
-                onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })} />
-            : <span className="sp-mini-avatar sp-mini-avatar--icon"><User size={20} /></span>
-          }
-          <div style={{ minWidth: 0 }}>
-            <h1 className="title sp-header-name">{selectedStudent.name}</h1>
-            <p className="sp-header-sub">{displayName(selectedBatch)}</p>
+    <div className="sakura-page">
+      <div className="sakura-header" style={{ paddingBottom: 0 }}>
+        <div className="sakura-profile-header">
+          <button onClick={goBack} className="sakura-back-btn"><ArrowLeft size={17} /></button>
+          <div className="sakura-profile-photo-wrap">
+            {selectedStudent.photo
+              ? <img src={selectedStudent.photo} alt={selectedStudent.name} className="sakura-profile-photo"
+                  onClick={() => setImageViewer({ images: [selectedStudent.photo], index: 0 })} />
+              : <span className="sakura-profile-photo sakura-profile-photo--icon"><User size={22} /></span>
+            }
+            <span className={`sakura-profile-status-dot${selectedStudent.status !== 'Selected' ? ' sakura-profile-status-dot--irregular' : ''}`} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h1 className="sakura-profile-name">{selectedStudent.name}</h1>
+            <div className="sakura-profile-meta">
+              <span className="sakura-profile-batch">{displayName(selectedBatch)}</span>
+              <span className="sakura-profile-status-badge">{selectedStudent.status === 'Selected' ? t('statusSelected') : t('statusRegular')}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="sp-tabs-spacer" />
+      <div className="sakura-divider" style={{ margin: '16px var(--page-pad)' }}>
+        <span className="sakura-divider-line" />
+        <span className="sakura-divider-icon">✿</span>
+        <span className="sakura-divider-line" />
+      </div>
+
+      <div style={{ padding: '0 var(--page-pad)' }}>
 
       {/* ══════════════ TAB: PROFILE ══════════════ */}
       {profileTab === 'profile' && (
-        <div className="sp-tab-card">
-          <div className="sp-tab-card-header">
-            <span className="sp-tab-card-icon"><User size={16} /></span>
-            <span className="sp-tab-card-title">Quick Actions</span>
+        <div className="sakura-tab-card">
+          <div className="sakura-tab-card-header">
+            <span className="sakura-tab-card-icon"><User size={16} /></span>
+            <span className="sakura-tab-card-title">Quick Actions</span>
           </div>
-          {/* ── Admin Quick Actions ── */}
           {!isViewer && !isKazumi ? (
             <>
-              <div className="profile-icon-grid">
-                <button className="profile-icon-btn" onClick={() => setShowQuickAddExam(true)}>
-                  <span className="profile-icon-circle profile-icon-circle--green"><Plus size={18} /></span>
+              <div className="sakura-qa-grid">
+                <button className="sakura-qa-btn sakura-qa-btn--green" onClick={() => setShowQuickAddExam(true)}>
+                  <Plus size={20} className="sakura-qa-icon--green" />
                   <span>Quick Add</span>
                 </button>
-                <button className="profile-icon-btn" onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}>
-                  <span className="profile-icon-circle profile-icon-circle--purple"><KeyRound size={18} /></span>
+                <button className="sakura-qa-btn sakura-qa-btn--pink" onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}>
+                  <KeyRound size={20} className="sakura-qa-icon--pink" />
                   <span>Parent QR</span>
                 </button>
-                <button className="profile-icon-btn" onClick={async () => {
+                <button className="sakura-qa-btn sakura-qa-btn--orange" onClick={async () => {
                   if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
                   try {
                     const res = await fetch(`${API}/archive/student/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
@@ -5390,10 +5404,10 @@ function App() {
                     else alert('Error: ' + (data.error || 'Unknown'));
                   } catch (e) { alert('Failed: ' + e.message); }
                 }}>
-                  <span className="profile-icon-circle profile-icon-circle--gray"><Layers size={18} /></span>
+                  <Layers size={20} className="sakura-qa-icon--orange" />
                   <span>Archive Imgs</span>
                 </button>
-                <button className="profile-icon-btn" onClick={async () => {
+                <button className="sakura-qa-btn sakura-qa-btn--blue" onClick={async () => {
                   if (!window.confirm(`Restore all images of ${selectedStudent.name} back to main storage?`)) return;
                   try {
                     const res = await fetch(`${API}/archive/restore/${selectedBatch._id}/${selectedStudent._id}`, { method: 'POST' });
@@ -5402,51 +5416,8 @@ function App() {
                     else alert('Error: ' + (data.error || 'Unknown'));
                   } catch (e) { alert('Failed: ' + e.message); }
                 }}>
-                  <span className="profile-icon-circle profile-icon-circle--blue"><RefreshCw size={18} /></span>
+                  <RefreshCw size={20} className="sakura-qa-icon--blue" />
                   <span>Restore Imgs</span>
-                </button>
-              </div>
-
-              <p className="profile-action-label" style={{ marginTop: 14 }}>Student Status</p>
-              <div className="profile-danger-row">
-                <button
-                  className="profile-danger-btn"
-                  style={{ color: '#007AFF' }}
-                  onClick={openMoveModal}
-                >
-                  <ArrowRightLeft size={15} />
-                  Move to Batch
-                </button>
-                <button className="profile-danger-btn" onClick={() => toggleArchiveStudent(selectedStudent)}>
-                  {selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}
-                </button>
-                <button className="profile-danger-btn profile-danger-btn--red" onClick={async () => {
-                  if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
-                  if (!window.confirm(`Are you sure? This is irreversible.`)) return;
-                  try {
-                    const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
-                    const data = await res.json();
-                    if (data.success) {
-                      alert(`${selectedStudent.name} permanently deleted.`);
-                      const deletedStudentId = selectedStudent._id;
-                      const deletedBatchId = selectedBatch._id;
-                      setBatches(prev => prev.map(b =>
-                        b._id === deletedBatchId
-                          ? { ...b, students: b.students.filter(s => s._id !== deletedStudentId) }
-                          : b
-                      ));
-                      try {
-                        const dismissed = JSON.parse(localStorage.getItem('sage_dismissed_reminders') || '[]');
-                        const cleaned = dismissed.filter(id => !id.includes(deletedStudentId));
-                        localStorage.setItem('sage_dismissed_reminders', JSON.stringify(cleaned));
-                      } catch {}
-                      goBack();
-                    }
-                    else alert('Error: ' + (data.error || 'Unknown'));
-                  } catch (e) { alert('Failed: ' + e.message); }
-                }}>
-                  <Trash2 size={15} />
-                  {t('deleteStudent')}
                 </button>
               </div>
             </>
@@ -5456,13 +5427,57 @@ function App() {
         </div>
       )}
 
+      {profileTab === 'profile' && !isViewer && !isKazumi && (
+        <div className="sakura-tab-card">
+          <p className="sakura-status-label">Student Status</p>
+          <div className="sakura-status-list">
+            <button className="sakura-status-btn sakura-status-btn--move" onClick={openMoveModal}>
+              <ArrowRightLeft size={15} />
+              Move to Batch
+            </button>
+            <button className="sakura-status-btn sakura-status-btn--hide" onClick={() => toggleArchiveStudent(selectedStudent)}>
+              <EyeOff size={15} style={{ color: '#7a6080' }} />
+              {selectedStudent.isArchived ? t('unarchiveStudent') : t('hideFromKumiai')}
+            </button>
+            <button className="sakura-status-btn sakura-status-btn--delete" onClick={async () => {
+              if (!window.confirm(`⚠️ PERMANENT DELETE: This will delete ALL images and the student record of ${selectedStudent.name}. This cannot be undone!`)) return;
+              if (!window.confirm(`Are you sure? This is irreversible.`)) return;
+              try {
+                const res = await fetch(`${API}/archive/permanent/${selectedBatch._id}/${selectedStudent._id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                  alert(`${selectedStudent.name} permanently deleted.`);
+                  const deletedStudentId = selectedStudent._id;
+                  const deletedBatchId = selectedBatch._id;
+                  setBatches(prev => prev.map(b =>
+                    b._id === deletedBatchId
+                      ? { ...b, students: b.students.filter(s => s._id !== deletedStudentId) }
+                      : b
+                  ));
+                  try {
+                    const dismissed = JSON.parse(localStorage.getItem('sage_dismissed_reminders') || '[]');
+                    const cleaned = dismissed.filter(id => !id.includes(deletedStudentId));
+                    localStorage.setItem('sage_dismissed_reminders', JSON.stringify(cleaned));
+                  } catch {}
+                  goBack();
+                }
+                else alert('Error: ' + (data.error || 'Unknown'));
+              } catch (e) { alert('Failed: ' + e.message); }
+            }}>
+              <Trash2 size={15} />
+              {t('deleteStudent')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ══════════════ TAB: PROGRESS ══════════════ */}
       {profileTab === 'progress' && (
-        <div className="sp-tab-card" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }} style={{ cursor: 'pointer' }}>
-          <div className="sp-tab-card-header">
-            <span className="sp-tab-card-icon"><TrendingUp size={16} /></span>
-            <span className="sp-tab-card-title">{t('progressChart')}</span>
-            <span className="sp-tab-card-link">View full →</span>
+        <div className="sakura-tab-card">
+          <div className="sakura-tab-card-header">
+            <span className="sakura-tab-card-icon"><TrendingUp size={16} /></span>
+            <span className="sakura-tab-card-title">Progress Chart</span>
+            <button className="sakura-tab-card-link" onClick={() => { setProgressChartStudent(selectedStudent); setShowProgressChart(true); }}>View full →</button>
           </div>
           {n === 0 ? (
             <div style={{ textAlign: 'center', padding: '18px 0 8px', color: 'var(--text-tertiary)' }}>
@@ -5471,26 +5486,30 @@ function App() {
             </div>
           ) : (
             <>
-              <div className="progress-summary-stats">
+              <div className="sakura-avg-row">
                 <div>
-                  <p className="progress-stat-label">Avg score</p>
-                  <p className="progress-stat-value">{avg}%</p>
+                  <p className="sakura-avg-label">Avg score</p>
+                  <p className="sakura-avg-value">{avg}<sup>%</sup></p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   {recentTrend !== null && (
-                    <span className={`progress-trend-pill ${recentTrend >= 0 ? 'progress-trend-pill--up' : 'progress-trend-pill--down'}`}>
+                    <span className={`sakura-trend-pill${recentTrend < 0 ? ' sakura-trend-pill--down' : ''}`}>
                       {recentTrend >= 0 ? '↑' : '↓'} {Math.abs(recentTrend)}% trend
                     </span>
                   )}
-                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                    {n} exam{n !== 1 ? 's' : ''}{streak > 1 ? ` · 🔥 ${streak}-streak` : ''}
-                  </p>
+                  <p className="sakura-exam-count">{n} exam{n !== 1 ? 's' : ''}{streak > 1 ? ` · 🔥 ${streak}-streak` : ''}</p>
                 </div>
               </div>
               <div className="sp-mini-chart">
-                {allExamsFlat.slice(-8).map((ex, i) => (
+                {allExamsFlat.slice(-8).map((ex, i, arr) => (
                   <div key={i} className="sp-mini-chart-col" title={`${ex.pct}%`}>
-                    <div className="sp-mini-chart-bar" style={{ height: `${Math.max(ex.pct, 4)}%` }} />
+                    <div
+                      className="sp-mini-chart-bar"
+                      style={{
+                        height: `${Math.max(ex.pct, 4)}%`,
+                        background: i === arr.length - 1 ? '#c0392b' : i >= arr.length - 3 ? '#e87090' : '#fcd0de',
+                      }}
+                    />
                   </div>
                 ))}
               </div>
@@ -5499,56 +5518,82 @@ function App() {
         </div>
       )}
 
+      {profileTab === 'progress' && n > 0 && (
+        <div className="sakura-tab-card">
+          <p className="sakura-status-label">Score Range</p>
+          <div className="sakura-range-row">
+            <div className="sakura-range-stat" style={{ background: '#e8f8e8' }}>
+              <span className="sakura-range-value" style={{ color: '#4a8a4a' }}>{examMax}%</span>
+              <span className="sakura-range-label">Highest</span>
+            </div>
+            <div className="sakura-range-stat" style={{ background: '#fde8ef' }}>
+              <span className="sakura-range-value" style={{ color: '#c0392b' }}>{avg}%</span>
+              <span className="sakura-range-label">Average</span>
+            </div>
+            <div className="sakura-range-stat" style={{ background: '#fdf0e0' }}>
+              <span className="sakura-range-value" style={{ color: '#c07840' }}>{examMin}%</span>
+              <span className="sakura-range-label">Lowest</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ══════════════ TAB: EXAMS ══════════════ */}
       {profileTab === 'exams' && (
-        <div className="sp-tab-card">
-          <div className="sp-tab-card-header">
-            <span className="sp-tab-card-icon"><Folder size={16} /></span>
-            <span className="sp-tab-card-title">{t('examCategoriesTitle')}</span>
+        <div className="sakura-tab-card">
+          <div className="sakura-tab-card-header">
+            <span className="sakura-tab-card-icon"><Folder size={16} /></span>
+            <span className="sakura-tab-card-title">{t('examCategoriesTitle')}</span>
             {!isViewer && !isKazumi && (
-              <button onClick={() => openModal('category')} className="sp-tab-card-add">+ Add</button>
+              <button onClick={() => openModal('category')} className="sakura-tab-card-add"><Plus size={12} /> Add</button>
             )}
           </div>
           {(selectedStudent.categories || []).length === 0
             ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0, textAlign: 'center', padding: '12px 0' }}>{t('noExamCategories')}</p>
-            : (selectedStudent.categories || []).map(cat => (
-              <div key={cat._id} className="card exam-card clickable" style={{ margin: '0 0 8px 0' }} onClick={() => goToExamItems(cat)}>
-                <div className="card-content">
-                  <div>
-                    <h3 className="card-title"><Folder size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />{displayName(cat)}</h3>
-                    <p className="card-subtitle">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
+            : (selectedStudent.categories || []).map((cat, idx) => {
+              const variant = SAKURA_CARD_VARIANTS[idx % SAKURA_CARD_VARIANTS.length];
+              return (
+                <div key={cat._id} className="sakura-cat-row" style={{ background: variant.bg, cursor: 'pointer' }} onClick={() => goToExamItems(cat)}>
+                  <span className="sakura-cat-icon" style={{ background: variant.tagBg, color: variant.tagText }}><Folder size={18} /></span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="sakura-cat-name">{displayName(cat)}</p>
+                    <p className="sakura-cat-sub">{cat.items?.length || 0} exam{cat.items?.length !== 1 ? 's' : ''}</p>
                   </div>
-                  <div className="exam-right">
-                    {!isViewer && !isKazumi && (
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
-                          onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
-                        <button className="delete-btn-icon" onClick={(e) => deleteCategory(cat._id, e)}><X size={14} /></button>
-                      </div>
-                    )}
-                  </div>
+                  <span className="sakura-cat-badge" style={{ background: variant.top }}>{cat.items?.length || 0}</span>
+                  {!isViewer && !isKazumi && (
+                    <>
+                      <button className="sakura-cat-action-btn" style={{ color: variant.tagText }}
+                        onClick={(e) => { e.stopPropagation(); setEditingCategory(cat); setNewName(cat.name); setNewNameJa(cat.name_ja || ''); setModalType('editCategory'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
+                      <button className="sakura-cat-delete-btn" onClick={(e) => deleteCategory(cat._id, e)}><X size={13} /></button>
+                    </>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           }
         </div>
       )}
 
       {/* ══════════════ TAB: EVALUATIONS ══════════════ */}
       {profileTab === 'evaluations' && (
-        <div className="sp-tab-card">
-          <div className="sp-tab-card-header">
-            <span className="sp-tab-card-icon"><FileText size={16} /></span>
-            <span className="sp-tab-card-title">{t('evaluationsTitle')}</span>
+        <div className="sakura-tab-card">
+          <div className="sakura-tab-card-header">
+            <span className="sakura-tab-card-icon"><FileText size={16} /></span>
+            <span className="sakura-tab-card-title">{t('evaluationsTitle')}</span>
             {!isViewer && !isKazumi && (
-              <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} className="sp-tab-card-add" style={{ background: 'var(--green)', boxShadow: '0 3px 10px rgba(16,185,129,0.3)' }}>+ Add</button>
+              <button onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }} className="sakura-tab-card-add sakura-tab-card-add--accent"><Plus size={12} /> Add</button>
             )}
           </div>
 
           {evaluations.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '18px 0 8px', color: 'var(--text-tertiary)' }}>
-              <FileText size={30} strokeWidth={1.3} style={{ opacity: 0.4, marginBottom: 6 }} />
-              <p style={{ fontSize: 13, margin: 0 }}>{t('noEvaluationsYet')}</p>
+            <div style={{ textAlign: 'center', padding: '18px 0 8px' }}>
+              <div className="sakura-eval-empty-icon"><FileX size={26} /></div>
+              <p style={{ fontSize: 13.5, fontWeight: 700, color: '#0d0508', margin: 0 }}>{t('noEvaluationsYet')}</p>
+              {!isViewer && !isKazumi && (
+                <button className="sakura-eval-empty-cta" onClick={() => { setEvalTitle(''); setEvalDate(new Date().toISOString().split('T')[0]); openModal('evaluation'); }}>
+                  <Plus size={14} /> Add First Evaluation
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -5574,23 +5619,29 @@ function App() {
         </div>
       )}
 
+      </div>
+
       {/* ══════════════ BOTTOM DOCK ══════════════ */}
       <div className="sp-bottom-spacer" />
-      <div className="sp-dock">
-        <button className={`sp-dock-btn${profileTab === 'profile' ? ' sp-dock-btn--active' : ''}`} onClick={() => setProfileTab('profile')} title="Profile">
-          <User size={19} />
+      <div className="sakura-dock">
+        <button className={`sakura-dock-btn${profileTab === 'profile' ? ' sakura-dock-btn--active' : ''}`} onClick={() => setProfileTab('profile')}>
+          <User size={18} />
+          <span className="sakura-dock-btn-label">Profile</span>
         </button>
-        <button className={`sp-dock-btn${profileTab === 'progress' ? ' sp-dock-btn--active' : ''}`} onClick={() => setProfileTab('progress')} title="Progress">
-          <TrendingUp size={19} />
+        <button className={`sakura-dock-btn${profileTab === 'progress' ? ' sakura-dock-btn--active' : ''}`} onClick={() => setProfileTab('progress')}>
+          <TrendingUp size={18} />
+          <span className="sakura-dock-btn-label">Progress</span>
         </button>
-        <button className={`sp-dock-btn${profileTab === 'exams' ? ' sp-dock-btn--active' : ''}`} onClick={() => setProfileTab('exams')} title="Exam Categories">
-          <Folder size={19} />
+        <button className={`sakura-dock-btn${profileTab === 'exams' ? ' sakura-dock-btn--active' : ''}`} onClick={() => setProfileTab('exams')}>
+          <Folder size={18} />
+          <span className="sakura-dock-btn-label">Categories</span>
         </button>
-        <button className={`sp-dock-btn${profileTab === 'evaluations' ? ' sp-dock-btn--active' : ''}`} onClick={() => setProfileTab('evaluations')} title="Evaluations">
-          <FileText size={19} />
+        <button className={`sakura-dock-btn${profileTab === 'evaluations' ? ' sakura-dock-btn--active' : ''}`} onClick={() => setProfileTab('evaluations')}>
+          <FileText size={18} />
+          <span className="sakura-dock-btn-label">Evaluations</span>
         </button>
       </div>
-    </>
+    </div>
     );
   };
 
