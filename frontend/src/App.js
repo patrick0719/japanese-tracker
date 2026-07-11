@@ -64,7 +64,10 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
         }
         canvas.width = width;
         canvas.height = height;
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.src = e.target.result;
@@ -6576,7 +6579,7 @@ function App() {
                   onChange={async (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
-                    const compressed = await compressImage(file, 400, 0.7);
+                    const compressed = await compressImage(file, 600, 0.8);
                     setNewStudentPhoto(compressed);
                     e.target.value = '';
                   }}
