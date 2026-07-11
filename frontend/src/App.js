@@ -9,7 +9,7 @@ import {
   Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
   Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
   Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
-  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal, MoreVertical
+  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal, MoreVertical, FileX
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
