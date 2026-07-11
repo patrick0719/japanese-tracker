@@ -3624,6 +3624,7 @@ function App() {
   const [batchSort, setBatchSort] = useState('name');
   const [profileTab, setProfileTab] = useState('profile');
   const [studentMenuOpenId, setStudentMenuOpenId] = useState(null);
+  const [examMenuOpenId, setExamMenuOpenId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [cloudName, setCloudName] = useState('');
@@ -6111,49 +6112,52 @@ function App() {
   const renderExamItems = () => {
     const displayItems = reorderMode ? dragItems : (selectedCategory?.items || []);
     return (
-    <>
-      <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={reorderMode ? exitReorderMode : goBack}>
-          {reorderMode ? <X size={18} /> : <ArrowLeft size={18} />}
-        </button>
-        <div className="header-with-back">
-          <h1 className="title"><Folder size={16} style={{ marginRight: 8, verticalAlign: "middle" }} />{displayName(selectedCategory)}</h1>
+    <div className="sakura-page">
+      <div className="sakura-header" style={{ paddingBottom: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={reorderMode ? exitReorderMode : goBack} className="sakura-back-btn">
+            {reorderMode ? <X size={16} /> : <ArrowLeft size={16} />}
+          </button>
+          <h1 className="sakura-greeting-name" style={{ fontSize: 19, flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Folder size={17} color="#c0392b" />{displayName(selectedCategory)}
+          </h1>
+          {reorderMode && (
+            <button
+              onClick={saveReorder}
+              className="sakura-tab-card-add"
+              style={{ borderRadius: 999, padding: '8px 16px' }}
+            >Done</button>
+          )}
         </div>
-        {/* Reorder mode: show Done button in header */}
-        {reorderMode && (
-          <button
-            onClick={saveReorder}
-            style={{
-              marginLeft: 'auto', marginRight: 8,
-              background: '#8B0000', color: '#fff',
-              border: 'none', borderRadius: 10, padding: '6px 16px',
-              fontWeight: 700, fontSize: 14, cursor: 'pointer',
-            }}
-          >Done</button>
-        )}
       </div>
 
       {/* Reorder mode banner */}
       {reorderMode && (
         <div style={{
-          background: 'linear-gradient(135deg, #8B0000, #c0392b)',
-          color: '#fff', textAlign: 'center', padding: '10px 16px',
-          fontSize: 14, fontWeight: 600, letterSpacing: 0.3,
+          background: 'linear-gradient(135deg, #e87090, #c0392b)',
+          color: '#fff', textAlign: 'center', padding: '10px 16px', margin: '14px var(--page-pad) 0',
+          fontSize: 13, fontWeight: 700, letterSpacing: 0.3, borderRadius: 14,
+          boxShadow: '0 4px 16px rgba(192,57,80,0.28)',
         }}>
           ☰ Hold and drag to reorder exams
         </div>
       )}
 
-      <h2 className="section-title">{t('exams')}</h2>
+      <div className="sakura-section-row" style={{ marginTop: 16 }}>
+        <span className="sakura-section-title">
+          {t('exams')}
+          <span className="sakura-section-count">{displayItems.length}</span>
+        </span>
+      </div>
       {displayItems.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon"><FileText size={40} strokeWidth={1.2} /></div>
-          <p className="empty-state-text">{t('noExamsYet')}</p>
-          <p className="empty-state-sub">{t('addExamHint')}</p>
+        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div className="sakura-eval-empty-icon"><FileText size={26} /></div>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#0d0508', margin: 0 }}>{t('noExamsYet')}</p>
+          <p style={{ fontSize: 12, color: '#c090a8', marginTop: 4 }}>{t('addExamHint')}</p>
         </div>
       ) : (
         <div
-          className="exam-list"
+          style={{ padding: '0 var(--page-pad)' }}
           onTouchMove={reorderMode ? handleDragTouchMove : undefined}
           onTouchEnd={reorderMode ? handleDragTouchEnd : undefined}
         >
@@ -6161,28 +6165,30 @@ function App() {
             const score = item.score ?? 0;
             const total = item.totalScore ?? 100;
             const pct = Math.round((score / total) * 100);
-            const color = pct >= 60 ? 'var(--green)' : 'var(--red)';
-            const bg   = pct >= 60 ? 'var(--green-soft)' : 'var(--red-soft)';
+            const pass = pct >= 60;
+            const color = pass ? '#4a8a4a' : '#c0392b';
+            const bg = pass ? '#e8f8e8' : '#fde8e8';
             const isDragging = reorderMode && draggingIdx === idx;
             const isOver = reorderMode && dragOverIdx === idx && draggingIdx !== idx;
             return (
               <div
                 key={item._id}
                 ref={el => itemRefs.current[idx] = el}
-                className="exam-list-card clickable"
-                onClick={reorderMode ? undefined : () => goToExamDetail(item)}
-                onTouchStart={reorderMode ? (e) => handleDragTouchStart(e, idx) : undefined}
+                className="sakura-list-card"
                 style={{
+                  background: '#fff',
                   transition: reorderMode ? 'transform 0.15s, box-shadow 0.15s, opacity 0.15s' : undefined,
                   opacity: isDragging ? 0.5 : 1,
                   transform: isOver ? 'scaleY(1.04)' : isDragging ? 'scale(1.03)' : 'none',
-                  boxShadow: isDragging ? '0 8px 24px rgba(139,0,0,0.25)' : undefined,
-                  borderLeft: isOver ? '3px solid #8B0000' : undefined,
+                  boxShadow: isDragging ? '0 8px 24px rgba(192,57,80,0.25)' : undefined,
+                  borderLeft: isOver ? '3px solid #c0392b' : undefined,
                   cursor: reorderMode ? 'grab' : 'pointer',
                   userSelect: 'none',
                   touchAction: reorderMode ? 'none' : undefined,
+                  zIndex: examMenuOpenId === item._id ? 100 : 'auto',
                 }}
-                // Long press on normal mode to enter reorder
+                onClick={reorderMode ? undefined : () => goToExamDetail(item)}
+                onTouchStart={reorderMode ? (e) => handleDragTouchStart(e, idx) : undefined}
                 onTouchStartCapture={!isViewer && !isKazumi && !reorderMode ? (() => {
                   const handler = () => {
                     clearTimeout(longPressTimer.current);
@@ -6196,51 +6202,66 @@ function App() {
                 onTouchEndCapture={!isViewer && !isKazumi && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
                 onTouchMoveCapture={!isViewer && !isKazumi && !reorderMode ? () => clearTimeout(longPressTimer.current) : undefined}
               >
-                {/* Drag handle — visible only in reorder mode */}
                 {reorderMode && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    width: 32, flexShrink: 0, color: '#8B0000', fontSize: 20, fontWeight: 700,
-                    cursor: 'grab',
-                  }}>☰</div>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, flexShrink: 0, color: '#c0392b', fontSize: 18, fontWeight: 700, cursor: 'grab' }}>☰</span>
                 )}
-                {/* Score badge */}
-                <div className="exam-score-badge" style={{ background: bg, color }}>
-                  <span className="exam-score-num">{score}</span>
-                  <span className="exam-score-sep">/{total}</span>
-                </div>
-                {/* Info */}
-                <div className="exam-list-info">
-                  <p className="exam-list-name">{displayName(item)}</p>
-                  <p className="exam-list-meta">{item.date}</p>
+                <span className="sakura-cat-badge" style={{ background: color, width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                  <span style={{ fontSize: 13 }}>{score}</span>
+                  <span style={{ fontSize: 8, opacity: 0.85 }}>/{total}</span>
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p className="sakura-cat-name">{displayName(item)}</p>
+                  <p className="sakura-cat-sub">{item.date}</p>
                   {item.images?.length > 0 && (
-                    <span className="exam-photo-chip"><Camera size={12} style={{ marginRight: 3, verticalAlign: "middle" }} />{item.images.length} page{item.images.length !== 1 ? 's' : ''}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 3, fontSize: 10, color: '#c090a8' }}>
+                      <Camera size={11} />{item.images.length} page{item.images.length !== 1 ? 's' : ''}
+                    </span>
                   )}
                 </div>
-                {/* Pct pill + action buttons (hidden in reorder mode) */}
                 {!reorderMode && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-                    <span className="exam-pct-pill" style={{ background: bg, color }}>{pct}%</span>
+                  <>
+                    <span style={{ background: bg, color, fontSize: 12, fontWeight: 800, padding: '5px 10px', borderRadius: 10, flexShrink: 0 }}>{pct}%</span>
                     {!isViewer && !isKazumi && (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="delete-btn-icon" style={{ background: '#e5f1ff', color: '#007AFF', border: 'none' }}
-                          onClick={(e) => { e.stopPropagation(); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}><MoreHorizontal size={13} /></button>
-                        <button className="delete-btn-icon" onClick={(e) => deleteExamItem(item._id, e)}><X size={14} /></button>
+                      <div className="tc-card-menu-wrap">
+                        <button className="sakura-cat-action-btn" onClick={(e) => { e.stopPropagation(); setExamMenuOpenId(examMenuOpenId === item._id ? null : item._id); }}>
+                          <MoreHorizontal size={14} style={{ color: '#c090a8' }} />
+                        </button>
+                        {examMenuOpenId === item._id && (
+                          <>
+                            <div className="tc-menu-backdrop" onClick={(e) => { e.stopPropagation(); setExamMenuOpenId(null); }} />
+                            <div className="tc-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                              <button className="tc-menu-item" onClick={(e) => { e.stopPropagation(); setExamMenuOpenId(null); setEditingExam(item); setNewExamName(item.name); setNewNameJa(item.name_ja || ''); setNewScore(String(item.score ?? '')); setNewTotalScore(String(item.totalScore ?? 100)); setNewExamDate(item.date || ''); setModalType('editExam'); setShowModal(true); }}>
+                                <PenLine size={14} /> Edit
+                              </button>
+                              <button className="tc-menu-item tc-menu-item--danger" onClick={(e) => { setExamMenuOpenId(null); deleteExamItem(item._id, e); }}>
+                                <Trash2 size={14} /> {t('delete') || 'Delete'}
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
-                {/* In reorder mode, just show % */}
                 {reorderMode && (
-                  <span className="exam-pct-pill" style={{ background: bg, color, flexShrink: 0 }}>{pct}%</span>
+                  <span style={{ background: bg, color, fontSize: 12, fontWeight: 800, padding: '5px 10px', borderRadius: 10, flexShrink: 0 }}>{pct}%</span>
                 )}
               </div>
             );
           })}
         </div>
       )}
-      {!isViewer && !isKazumi && !reorderMode && <button className="add-button" onClick={() => openModal('exam')}>{t('addExam')}</button>}
-    </>
+      {!isViewer && !isKazumi && !reorderMode && (
+        <>
+          <div className="bh-bottom-spacer" />
+          <div className="sakura-bottom-bar">
+            <button className="sakura-bottom-btn sakura-bottom-btn--dark" onClick={() => openModal('exam')} style={{ flex: 1 }}>
+              <Plus size={16} /> {t('addExam')}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
     );
   };
 
