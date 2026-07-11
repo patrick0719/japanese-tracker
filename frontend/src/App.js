@@ -446,9 +446,9 @@ function ProgressChart({ student, batch, onClose }) {
 
     // Read CSS vars at render time so SVG respects dark mode
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const chartBg    = isDark ? '#2c2c2e' : '#f8f9fa';
-    const gridStroke = isDark ? '#48484a' : '#e5e5ea';
-    const labelFill  = isDark ? 'rgba(235,235,245,0.5)' : '#8e8e93';
+    const chartBg    = isDark ? '#2c2c2e' : '#fdf6f2';
+    const gridStroke = isDark ? '#48484a' : '#f0d8e0';
+    const labelFill  = isDark ? 'rgba(235,235,245,0.5)' : '#c090a8';
     const dotFill    = isDark ? '#2c2c2e' : '#fff';
 
     return (
@@ -464,15 +464,15 @@ function ProgressChart({ student, batch, onClose }) {
         ))}
         
         {trendPath && (
-          <path d={trendPath} fill="none" stroke="#8B0000" strokeWidth={2} strokeDasharray="6,4" opacity={0.6} />
+          <path d={trendPath} fill="none" stroke="#e87090" strokeWidth={2} strokeDasharray="6,4" opacity={0.7} />
         )}
         
-        <path d={scorePath} fill="none" stroke="#007AFF" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        <path d={scorePath} fill="none" stroke="#c0392b" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
         
         <defs>
           <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#007AFF" stopOpacity={0.3} />
-            <stop offset="100%" stopColor="#007AFF" stopOpacity={0.05} />
+            <stop offset="0%" stopColor="#c0392b" stopOpacity={0.25} />
+            <stop offset="100%" stopColor="#c0392b" stopOpacity={0.03} />
           </linearGradient>
         </defs>
         <path 
@@ -482,7 +482,7 @@ function ProgressChart({ student, batch, onClose }) {
         
         {exams.map((e, i) => (
           <g key={i}>
-            <circle cx={scaleX(i)} cy={scaleY(e.percentage)} r={5} fill={dotFill} stroke="#007AFF" strokeWidth={2} />
+            <circle cx={scaleX(i)} cy={scaleY(e.percentage)} r={5} fill={dotFill} stroke="#c0392b" strokeWidth={2} />
             <title>{`${e.examName}\n${e.category}: ${e.score}/${e.total} (${e.percentage}%)\n${e.dateStr}`}</title>
           </g>
         ))}
@@ -566,43 +566,43 @@ function ProgressChart({ student, batch, onClose }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'var(--bg-primary, #f2f2f7)', zIndex: 9999,
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'linear-gradient(160deg, #fce8f0 0%, #fdf6f0 50%, #fce8e8 100%)',
       display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif'
     }}>
       <div style={{
-        background: 'linear-gradient(135deg, #8B0000, #c0392b)',
-        padding: '16px 20px',
-        paddingTop: 'env(safe-area-inset-top, 16px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '16px 20px 12px',
+        paddingTop: 'calc(env(safe-area-inset-top, 16px) + 16px)',
+        display: 'flex', alignItems: 'center', gap: 12,
         flexShrink: 0,
-        boxShadow: '0 2px 12px rgba(139,0,0,0.3)'
       }}>
         <button onClick={onClose} style={{
-          background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff',
-          borderRadius: 10, padding: '8px 16px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
-        }}>{t('back')}</button>
-        <span style={{ color: '#fff', fontSize: 18, fontWeight: 700, letterSpacing: -0.3, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={18} /> {t('progressChart')}</span>
-        <div style={{ width: 72 }} />
+          width: 38, height: 38, borderRadius: 13, flexShrink: 0,
+          background: '#1a0a0e', border: 'none', color: '#fdf0f4',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        }}><ArrowLeft size={17} /></button>
+        <span style={{ color: '#0d0508', fontSize: 17, fontWeight: 900, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={18} color="#c0392b" /> {t('progressChart')}</span>
       </div>
 
       <div style={{
-        background: 'var(--bg-card, #fff)', padding: '16px 20px', borderBottom: '1px solid var(--border-color, #e5e5ea)',
+        padding: '4px 20px 16px',
         display: 'flex', alignItems: 'center', gap: 14
       }}>
         {student.photo ? (
           <img src={student.photo} alt={student.name} style={{
-            width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid #8B0000'
+            width: 56, height: 56, borderRadius: 18, objectFit: 'cover', border: '2.5px solid #fdf6f2',
+            boxShadow: '0 4px 18px rgba(192,57,80,0.25)',
           }} />
         ) : (
-          <span style={{ fontSize: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: '50%', background: 'var(--bg-card2, #f2f2f7)', color: '#8e8e93' }}><User size={28} /></span>
+          <span style={{ fontSize: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: 18, background: 'linear-gradient(135deg, #e87090 0%, #c0392b 100%)', color: '#fff' }}><User size={26} /></span>
         )}
         <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary, #8e8e93)' }}>{batch?.name}</p>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#0d0508' }}>{student.name}</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c090a8' }}>{batch?.name}</p>
           {student.companyName && (
             <span style={{
               display: 'inline-block', marginTop: 4,
-              background: 'var(--green-soft, #e8f5e9)', color: 'var(--green, #2e7d32)',
+              background: '#e8f5e9', color: '#2e7d32',
               fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12
             }}><Building2 size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{student.companyName}</span>
           )}
@@ -624,7 +624,7 @@ function ProgressChart({ student, batch, onClose }) {
           const dashOffset = circumference * (1 - (ptrTriggered ? 1 : progress));
           return (
             <div style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 99, display: 'flex', justifyContent: 'center', paddingTop: 6, paddingBottom: 6, pointerEvents: 'none', marginTop: -20, marginBottom: 8 }}>
-              <div style={{ width: circleSize, height: circleSize, borderRadius: '50%', background: ptrTriggered || ptrRefreshing ? 'linear-gradient(135deg,#8B0000,#c0392b)' : 'rgba(255,255,255,0.97)', boxShadow: ptrTriggered || ptrRefreshing ? '0 4px 20px rgba(139,0,0,0.4)' : '0 2px 14px rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `scale(${0.65 + progress * 0.35})`, transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s' }}>
+              <div style={{ width: circleSize, height: circleSize, borderRadius: '50%', background: ptrTriggered || ptrRefreshing ? 'linear-gradient(135deg,#e87090,#c0392b)' : 'rgba(255,255,255,0.97)', boxShadow: ptrTriggered || ptrRefreshing ? '0 4px 20px rgba(192,57,80,0.4)' : '0 2px 14px rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `scale(${0.65 + progress * 0.35})`, transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s' }}>
                 {ptrRefreshing ? (
                   <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute', animation: 'ptr-spin 0.75s linear infinite' }}>
                     <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" />
@@ -632,12 +632,12 @@ function ProgressChart({ student, batch, onClose }) {
                   </svg>
                 ) : (
                   <svg width={circleSize} height={circleSize} viewBox={`0 0 ${circleSize} ${circleSize}`} style={{ position: 'absolute' }}>
-                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="rgba(139,0,0,0.12)" strokeWidth="2.5" />
-                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke={ptrTriggered ? '#fff' : '#8B0000'} strokeWidth="2.5" strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} style={{ transition: 'stroke-dashoffset 0.06s, stroke 0.2s' }} />
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke="rgba(192,57,80,0.12)" strokeWidth="2.5" />
+                    <circle cx={circleSize/2} cy={circleSize/2} r={radius} fill="none" stroke={ptrTriggered ? '#fff' : '#c0392b'} strokeWidth="2.5" strokeDasharray={circumference} strokeDashoffset={dashOffset} strokeLinecap="round" transform={`rotate(-90 ${circleSize/2} ${circleSize/2})`} style={{ transition: 'stroke-dashoffset 0.06s, stroke 0.2s' }} />
                   </svg>
                 )}
                 <svg width="16" height="16" viewBox="0 0 16 16" style={{ position: 'relative', zIndex: 1, transform: `rotate(${ptrTriggered || ptrRefreshing ? 180 : progress * 200}deg)`, transition: ptrTriggered ? 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1)' : 'transform 0.1s' }}>
-                  <path d="M8 2 L8 11 M4 7 L8 11 L12 7" stroke={ptrTriggered || ptrRefreshing ? '#fff' : '#8B0000'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" style={{ transition: 'stroke 0.2s' }} />
+                  <path d="M8 2 L8 11 M4 7 L8 11 L12 7" stroke={ptrTriggered || ptrRefreshing ? '#fff' : '#c0392b'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" style={{ transition: 'stroke 0.2s' }} />
                 </svg>
               </div>
             </div>
@@ -646,33 +646,35 @@ function ProgressChart({ student, batch, onClose }) {
         {!loading && chartData && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
-              { label: t('totalExams'), value: chartData.stats.totalExams, icon: <FileText size={22} color="#007AFF" />, color: '#007AFF', sub: null },
-              { label: t('averageScore'), value: chartData.stats.avgScore + '%', icon: <BarChart2 size={22} color="#34C759" />, color: '#34C759', sub: null },
-              { label: t('bestScore'), value: chartData.stats.bestScore + '%', icon: <Trophy size={22} color="#FF9500" />, color: '#FF9500', sub: null },
+              { label: t('totalExams'), value: chartData.stats.totalExams, icon: <FileText size={22} color="#608090" />, color: '#0d0508', bg: '#e8f0f8', sub: null },
+              { label: t('averageScore'), value: chartData.stats.avgScore + '%', icon: <BarChart2 size={22} color="#7ac87a" />, color: '#0d0508', bg: '#e8f8e8', sub: null },
+              { label: t('bestScore'), value: chartData.stats.bestScore + '%', icon: <Trophy size={22} color="#c07840" />, color: '#0d0508', bg: '#fdf0e0', sub: null },
               chartData.stats.recentTrend !== null
                 ? {
                     label: 'Improvement',
                     value: (chartData.stats.recentTrend > 0 ? '+' : '') + chartData.stats.recentTrend + '%',
-                    icon: chartData.stats.recentTrend > 0 ? <TrendingUp size={22} color="#34C759" /> : chartData.stats.recentTrend < 0 ? <TrendingDown size={22} color="#FF3B30" /> : <Minus size={22} color="#8e8e93" />,
-                    color: chartData.stats.recentTrend > 0 ? '#34C759' : chartData.stats.recentTrend < 0 ? '#FF3B30' : '#8e8e93',
+                    icon: chartData.stats.recentTrend > 0 ? <TrendingUp size={22} color="#7ac87a" /> : chartData.stats.recentTrend < 0 ? <TrendingDown size={22} color="#c0392b" /> : <Minus size={22} color="#c090a8" />,
+                    color: '#0d0508',
+                    bg: chartData.stats.recentTrend > 0 ? '#e8f8e8' : chartData.stats.recentTrend < 0 ? '#fde8e8' : '#f2f2f6',
                     sub: chartData.stats.recentTrendLabel,
                   }
                 : {
                     label: t('latestScore'),
                     value: chartData.stats.latestScore + '%',
-                    icon: <Target size={22} color="#8B0000" />,
-                    color: '#8B0000',
+                    icon: <Target size={22} color="#c0392b" />,
+                    color: '#0d0508',
+                    bg: '#fde8ef',
                     sub: null,
                   },
             ].map((stat, i) => (
               <div key={i} style={{
-                background: 'var(--bg-card, #fff)', borderRadius: 14, padding: '16px 14px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.06)', textAlign: 'center'
+                background: stat.bg, borderRadius: 18, padding: '16px 14px',
+                border: '1px solid rgba(10,4,8,0.06)', textAlign: 'center'
               }}>
                 <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}>{stat.icon}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary, #8e8e93)', marginTop: 4, fontWeight: 500 }}>{stat.label}</div>
-                {stat.sub && <div style={{ fontSize: 10, color: 'var(--text-tertiary, #c7c7cc)', marginTop: 2 }}>{stat.sub}</div>}
+                <div style={{ fontSize: 22, fontWeight: 900, color: stat.color, lineHeight: 1, fontFamily: 'var(--font-display)' }}>{stat.value}</div>
+                <div style={{ fontSize: 11, color: '#c090a8', marginTop: 4, fontWeight: 700 }}>{stat.label}</div>
+                {stat.sub && <div style={{ fontSize: 10, color: '#d0a0b0', marginTop: 2 }}>{stat.sub}</div>}
               </div>
             ))}
           </div>
@@ -715,10 +717,10 @@ function ProgressChart({ student, batch, onClose }) {
         })()}
 
         <div style={{
-          background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+          background: '#fff', borderRadius: 18, padding: 12, marginBottom: 16,
+          border: '1px solid rgba(192,57,80,0.10)', boxShadow: '0 4px 16px rgba(180,80,100,0.08)'
         }}>
-          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'flex', alignItems: 'center', gap: 6 }}><Clock size={13} /> Time Range</p>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: '#0d0508', display: 'flex', alignItems: 'center', gap: 6 }}><Clock size={13} /> Time Range</p>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
               { id: 'all', label: 'All Time' },
@@ -726,10 +728,10 @@ function ProgressChart({ student, batch, onClose }) {
               { id: '1month', label: '1 Month' }
             ].map(opt => (
               <button key={opt.id} onClick={() => setTimeRange(opt.id)} style={{
-                flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none',
-                fontSize: 13, fontWeight: timeRange === opt.id ? 700 : 500,
-                background: timeRange === opt.id ? '#8B0000' : 'var(--bg-card2, #f2f2f7)',
-                color: timeRange === opt.id ? '#fff' : 'var(--text-primary, #3a3a3c)',
+                flex: 1, padding: '10px 12px', borderRadius: 12, border: 'none',
+                fontSize: 13, fontWeight: timeRange === opt.id ? 800 : 600,
+                background: timeRange === opt.id ? '#1a0a0e' : '#f7eef0',
+                color: timeRange === opt.id ? '#fdf0f4' : '#b07088',
                 cursor: 'pointer', transition: 'all 0.2s'
               }}>{opt.label}</button>
             ))}
@@ -738,33 +740,33 @@ function ProgressChart({ student, batch, onClose }) {
 
         {!loading && chartData && chartData.categories.length > 0 && (
           <div style={{
-            background: 'var(--bg-card, #fff)', borderRadius: 12, padding: 12, marginBottom: 16,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+            background: '#fff', borderRadius: 18, padding: 12, marginBottom: 16,
+            border: '1px solid rgba(192,57,80,0.10)', boxShadow: '0 4px 16px rgba(180,80,100,0.08)'
           }}>
-            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'flex', alignItems: 'center', gap: 6 }}><Folder size={13} /> Categories</p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: '#0d0508', display: 'flex', alignItems: 'center', gap: 6 }}><Folder size={13} /> Categories</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {chartData.categories.map(cat => {
                 const colors = {
-                  'Kanji': '#FF6B6B', 'Grammar': '#4ECDC4', 'Vocabulary': '#45B7D1',
-                  'Reading': '#96CEB4', 'Listening': '#FFEAA7', 'Speaking': '#DDA0DD'
+                  'Kanji': '#e87090', 'Grammar': '#c0608a', 'Vocabulary': '#c0392b',
+                  'Reading': '#c07840', 'Listening': '#d63a6a', 'Speaking': '#8a6090'
                 };
-                const color = colors[cat] || '#8B0000';
+                const color = colors[cat] || '#c0392b';
                 const isSelected = selectedCategories.includes(cat);
                 return (
                   <button key={cat} onClick={() => toggleCategory(cat)} style={{
                     padding: '6px 14px', borderRadius: 20, border: 'none',
-                    fontSize: 12, fontWeight: isSelected ? 700 : 500,
-                    background: isSelected ? color : '#f2f2f7',
-                    color: isSelected ? '#fff' : '#3a3a3c',
+                    fontSize: 12, fontWeight: isSelected ? 800 : 600,
+                    background: isSelected ? color : '#f7eef0',
+                    color: isSelected ? '#fff' : '#b07088',
                     cursor: 'pointer', transition: 'all 0.2s'
                   }}>{cat}</button>
                 );
               })}
               {selectedCategories.length > 0 && (
                 <button onClick={() => setSelectedCategories([])} style={{
-                  padding: '6px 14px', borderRadius: 20, border: '1.5px solid #8e8e93',
-                  fontSize: 12, fontWeight: 500, background: '#fff',
-                  color: '#8e8e93', cursor: 'pointer'
+                  padding: '6px 14px', borderRadius: 20, border: '1.5px solid #d0a0b0',
+                  fontSize: 12, fontWeight: 600, background: '#fff',
+                  color: '#c090a8', cursor: 'pointer'
                 }}>Clear</button>
               )}
             </div>
@@ -772,18 +774,18 @@ function ProgressChart({ student, batch, onClose }) {
         )}
 
         <div style={{
-          background: 'var(--bg-card, #fff)', borderRadius: 16, padding: '20px 16px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 16
+          background: '#fff', borderRadius: 22, padding: '20px 16px',
+          border: '1px solid rgba(192,57,80,0.10)', boxShadow: '0 4px 20px rgba(180,80,100,0.08)', marginBottom: 16
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)', display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={15} /> Score Trend</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--text-secondary, #3a3a3c)' }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#0d0508', display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={15} color="#c0392b" /> Score Trend</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: '#c090a8' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 12, height: 3, background: '#007AFF', borderRadius: 2 }} />
+                <span style={{ width: 12, height: 3, background: '#c0392b', borderRadius: 2 }} />
                 Actual
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 12, height: 3, background: '#8B0000', borderRadius: 2, opacity: 0.6 }} />
+                <span style={{ width: 12, height: 3, background: '#e87090', borderRadius: 2, opacity: 0.7 }} />
                 Trend
               </span>
             </div>
@@ -794,15 +796,15 @@ function ProgressChart({ student, batch, onClose }) {
               <div style={{ display: 'flex', gap: 6 }}>
                 {[0,1,2].map(i => (
                   <div key={i} style={{
-                    width: 8, height: 8, borderRadius: '50%', background: '#8B0000',
+                    width: 8, height: 8, borderRadius: '50%', background: '#c0392b',
                     animation: `dotPulse 1.1s ease-in-out ${i*0.18}s infinite`
                   }} />
                 ))}
               </div>
             </div>
           ) : chartData?.exams.length === 0 ? (
-            <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary, #8e8e93)' }}>
-              <span style={{ marginBottom: 10, color: '#8e8e93', display: 'flex' }}><BarChart2 size={40} /></span>
+            <div style={{ height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#c090a8' }}>
+              <span style={{ marginBottom: 10, color: '#e8b0c0', display: 'flex' }}><BarChart2 size={40} /></span>
               <p style={{ margin: 0, fontSize: 14 }}>No exam data available</p>
               <p style={{ margin: '4px 0 0', fontSize: 12 }}>Add exams with dates to see progress</p>
             </div>
@@ -815,32 +817,32 @@ function ProgressChart({ student, batch, onClose }) {
 
         {!loading && chartData && chartData.exams.length > 0 && (
           <div style={{
-            background: 'var(--bg-card, #fff)', borderRadius: 16, padding: 16,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+            background: '#fff', borderRadius: 22, padding: 16,
+            border: '1px solid rgba(192,57,80,0.10)', boxShadow: '0 4px 20px rgba(180,80,100,0.08)'
           }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)', display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={15} /> Recent Exams</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 900, color: '#0d0508', display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={15} color="#c0392b" /> Recent Exams</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {chartData.exams.slice(-5).reverse().map((exam, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 14px', background: 'var(--bg-card2, #f9f9f9)', borderRadius: 10
+                  padding: '12px 14px', background: '#faf6f2', borderRadius: 14
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{
                       width: 36, height: 36, borderRadius: '50%',
-                      background: exam.percentage >= 60 ? 'var(--green-soft, #e8f5e9)' : 'var(--red-soft, #ffebee)',
-                      color: exam.percentage >= 60 ? 'var(--green, #2e7d32)' : 'var(--red, #c62828)',
+                      background: exam.percentage >= 60 ? '#e8f8e8' : '#fde8e8',
+                      color: exam.percentage >= 60 ? '#4a8a4a' : '#c0392b',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 13, fontWeight: 700
+                      fontSize: 13, fontWeight: 800
                     }}>{exam.percentage}%</span>
                     <div>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary, #1c1c1e)' }}>{exam.examName}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary, #8e8e93)' }}>{exam.category} • {exam.dateStr}</p>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0d0508' }}>{exam.examName}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#c090a8' }}>{exam.category} • {exam.dateStr}</p>
                     </div>
                   </div>
                   <span style={{
-                    fontSize: 13, fontWeight: 700, color: 'var(--text-secondary, #3a3a3c)',
-                    background: 'var(--bg-primary, #f2f2f7)', padding: '4px 10px', borderRadius: 8
+                    fontSize: 13, fontWeight: 800, color: '#0d0508',
+                    background: '#f2ecec', padding: '4px 10px', borderRadius: 8
                   }}>{exam.score}/{exam.total}</span>
                 </div>
               ))}
