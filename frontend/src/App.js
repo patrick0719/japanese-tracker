@@ -5249,7 +5249,11 @@ function App() {
         {visibleStudents.map((student, idx) => {
           const variant = SAKURA_CARD_VARIANTS[idx % SAKURA_CARD_VARIANTS.length];
           return (
-            <div key={student._id} className="sakura-list-card" style={{ background: variant.bg }}>
+            <div
+              key={student._id}
+              className="sakura-list-card"
+              style={{ background: variant.bg, zIndex: studentMenuOpenId === student._id ? 100 : 'auto' }}
+            >
               <button className="sakura-list-card-main" onClick={() => goToCategories(student)}>
                 {student.photo
                   ? <img src={student.photo} alt={student.name} className="sakura-list-avatar"
