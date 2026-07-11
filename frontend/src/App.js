@@ -5230,81 +5230,94 @@ function App() {
     else if (isViewer) visibleStudents = visibleStudents.filter(s => !s.isArchived && s.status === 'Selected');
     visibleStudents = visibleStudents.slice().sort((a, b) => a.name.localeCompare(b.name));
     return (
-    <>
-      <div className="sticky-header sticky-header--back">
-        <button className="back-btn" onClick={goBack}><ArrowLeft size={18} /></button>
-        <div className="header-with-back">
-          <h1 className="title">{displayName(selectedBatch)}</h1>
+    <div className="sakura-page">
+      <div className="sakura-header" style={{ paddingBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={goBack} className="sakura-back-btn"><ArrowLeft size={17} /></button>
+          <h1 className="sakura-greeting-name" style={{ fontSize: 21 }}>{displayName(selectedBatch)}</h1>
         </div>
       </div>
-      <h2 className="section-title">{t('students')}</h2>
-      {visibleStudents.map(student => (
-        <div key={student._id} className="st-card">
-          <button className="st-card-main" onClick={() => goToCategories(student)}>
-            {student.photo
-              ? <img src={student.photo} alt={student.name} className="st-avatar"
-                  onClick={(e) => { e.stopPropagation(); setImageViewer({ images: [student.photo], index: 0 }); }} />
-              : <span className="st-avatar st-avatar--icon"><User size={20} /></span>
-            }
-            <div className="st-card-text">
-              <div className="st-badge-row">
-                <h3 className="st-card-name">{student.name}</h3>
-                <span
-                  onClick={!isViewer && !isKazumi ? (e) => { e.stopPropagation(); toggleStudentStatus(student, e); } : undefined}
-                  className={`st-badge${student.status === 'Selected' ? ' st-badge--selected' : ' st-badge--regular'}`}
-                >
-                  {student.status === 'Selected' ? t('statusSelected') : t('statusRegular')}
-                </span>
-                {student.status === 'Selected' && student.kumiai && (
-                  <span className="st-badge st-badge--kumiai">{student.kumiai}</span>
-                )}
-                {student.status === 'Selected' && student.companyName && (
-                  <span className="st-badge st-badge--company">{student.companyName}</span>
-                )}
-              </div>
-              <p className="st-card-sub">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
-            </div>
-          </button>
 
-          {!isViewer && !isKazumi && (
-            <div className="tc-card-menu-wrap">
-              <button
-                className="tc-menu-btn"
-                onClick={(e) => { e.stopPropagation(); setStudentMenuOpenId(studentMenuOpenId === student._id ? null : student._id); }}
-              >
-                <MoreHorizontal size={16} />
-              </button>
-              {studentMenuOpenId === student._id && (
-                <>
-                  <div className="tc-menu-backdrop" onClick={() => setStudentMenuOpenId(null)} />
-                  <div className="tc-menu-dropdown">
-                    <button className="tc-menu-item" onClick={(e) => { setStudentMenuOpenId(null); openEditStudent(student, e); }}>
-                      <PenLine size={14} /> Edit
-                    </button>
-                    <button className="tc-menu-item tc-menu-item--danger" onClick={(e) => { setStudentMenuOpenId(null); deleteStudent(student._id, e); }}>
-                      <Trash2 size={14} /> {t('delete') || 'Delete'}
-                    </button>
+      <div className="sakura-section-row" style={{ marginTop: 8 }}>
+        <span className="sakura-section-title">
+          {t('students')}
+          <span className="sakura-section-count">{visibleStudents.length}</span>
+        </span>
+      </div>
+
+      <div style={{ padding: '0 var(--page-pad)' }}>
+        {visibleStudents.map((student, idx) => {
+          const variant = SAKURA_CARD_VARIANTS[idx % SAKURA_CARD_VARIANTS.length];
+          return (
+            <div key={student._id} className="sakura-list-card" style={{ background: variant.bg }}>
+              <button className="sakura-list-card-main" onClick={() => goToCategories(student)}>
+                {student.photo
+                  ? <img src={student.photo} alt={student.name} className="sakura-list-avatar"
+                      onClick={(e) => { e.stopPropagation(); setImageViewer({ images: [student.photo], index: 0 }); }} />
+                  : <span className="sakura-list-avatar sakura-list-avatar--icon" style={{ background: variant.tagBg, color: variant.tagText }}><User size={19} /></span>
+                }
+                <div className="st-card-text">
+                  <div className="st-badge-row">
+                    <h3 className="st-card-name">{student.name}</h3>
+                    <span
+                      onClick={!isViewer && !isKazumi ? (e) => { e.stopPropagation(); toggleStudentStatus(student, e); } : undefined}
+                      className={`st-badge${student.status === 'Selected' ? ' st-badge--selected' : ' st-badge--regular'}`}
+                      style={student.status === 'Selected' ? { background: variant.top } : undefined}
+                    >
+                      {student.status === 'Selected' ? t('statusSelected') : t('statusRegular')}
+                    </span>
+                    {student.status === 'Selected' && student.kumiai && (
+                      <span className="st-badge st-badge--kumiai">{student.kumiai}</span>
+                    )}
+                    {student.status === 'Selected' && student.companyName && (
+                      <span className="st-badge st-badge--company">{student.companyName}</span>
+                    )}
                   </div>
-                </>
+                  <p className="st-card-sub">{student.categories?.length || 0} categor{student.categories?.length !== 1 ? "ies" : "y"}</p>
+                </div>
+              </button>
+
+              {!isViewer && !isKazumi && (
+                <div className="tc-card-menu-wrap">
+                  <button
+                    className="sakura-card-icon-btn"
+                    onClick={(e) => { e.stopPropagation(); setStudentMenuOpenId(studentMenuOpenId === student._id ? null : student._id); }}
+                  >
+                    <MoreHorizontal size={15} style={{ color: variant.tagText }} />
+                  </button>
+                  {studentMenuOpenId === student._id && (
+                    <>
+                      <div className="tc-menu-backdrop" onClick={() => setStudentMenuOpenId(null)} />
+                      <div className="tc-menu-dropdown">
+                        <button className="tc-menu-item" onClick={(e) => { setStudentMenuOpenId(null); openEditStudent(student, e); }}>
+                          <PenLine size={14} /> Edit
+                        </button>
+                        <button className="tc-menu-item tc-menu-item--danger" onClick={(e) => { setStudentMenuOpenId(null); deleteStudent(student._id, e); }}>
+                          <Trash2 size={14} /> {t('delete') || 'Delete'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
-      ))}
+          );
+        })}
+      </div>
       <div className="bh-bottom-spacer" />
-      <div className="bh-bottom-bar">
+      <div className="sakura-bottom-bar">
         {!isViewer && !isKazumi && (
-          <button className="bh-bottom-btn" onClick={() => openModal('student')}>
-            <Plus size={17} /> {t('addStudent')}
+          <button className="sakura-bottom-btn sakura-bottom-btn--dark" onClick={() => openModal('student')}>
+            <Plus size={16} /> {t('addStudent')}
           </button>
         )}
         {selectedBatch.students.length > 0 && !isViewer && !isKazumi && (
-          <button className="bh-bottom-btn bh-bottom-btn--accent" onClick={generateBatchQRs}>
-            <FileText size={17} /> {t('printQrCodes')}
+          <button className="sakura-bottom-btn sakura-bottom-btn--accent" onClick={generateBatchQRs}>
+            <FileText size={16} /> {t('printQrCodes')}
           </button>
         )}
       </div>
-    </>
+    </div>
     );
   };
 
