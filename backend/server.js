@@ -622,17 +622,22 @@ app.post('/api/student-upload/:token/login', rateLimit({ windowMs: 60_000, max: 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Student: submit a photo of their exam into a category (creates a new exam entry).
-// Score is left for the teacher to fill in later — the student is only submitting
-// the paper itself, not grading it.
+// Student: submit photo(s) of their exam into a category (creates a new exam
+// entry, possibly with several pages). Score is left for the teacher to verify
+// later unless the student fills it in themselves.
 app.post('/api/student-upload/:token/exam', rateLimit({ windowMs: 60_000, max: 20, message: 'Sobrang dami ng upload. Subukan ulit mamaya.' }), async (req, res) => {
   try {
     const session = await verifyStudentSession(getBearer(req), req.params.token);
     if (!session) return res.status(401).json({ error: 'session_expired' });
     const { batch, student } = session;
 
-    const image = req.body.image; // base64 data URL from camera/file input — required
-    if (!image) return res.status(400).json({ error: 'Photo is required' });
+    // Accept either a single `image` (backward compat) or an `images` array
+    // (multiple pages of the same exam).
+    let images = Array.isArray(req.body.images) ? req.body.images.filter(Boolean) : [];
+    if (images.length === 0 && req.body.image) images = [req.body.image];
+    if (images.length === 0) return res.status(400).json({ error: 'At least one photo is required' });
+    if (images.length > 15) return res.status(400).json({ error: 'Too many pages (max 15 per exam)' });
+
     const name = sanitizeStr(req.body.name, 300);
     if (!name) return res.status(400).json({ error: 'Exam name is required' });
     const name_ja = sanitizeStr(req.body.name_ja, 300);
@@ -652,9 +657,14 @@ app.post('/api/student-upload/:token/exam', rateLimit({ windowMs: 60_000, max: 2
       return res.status(400).json({ error: 'Category is required' });
     }
 
-    const { url, publicId } = await cloudinaryUpload(image);
-    const img = new Image({ url, publicId });
-    await img.save();
+    // Upload every page to Cloudinary, in order
+    const imageIds = [];
+    for (const dataUrl of images) {
+      const { url, publicId } = await cloudinaryUpload(dataUrl);
+      const img = new Image({ url, publicId });
+      await img.save();
+      imageIds.push(img._id.toString());
+    }
 
     // Total score / score can come from a scanned exam QR or manual entry (Quick
     // Add Exam parity) — default totalScore to 100, score to 0 if left blank.
@@ -663,11 +673,11 @@ app.post('/api/student-upload/:token/exam', rateLimit({ windowMs: 60_000, max: 2
     if (score === null) score = 0;
     if (score > totalScore) score = totalScore;
 
-    cat.items.push({ name, name_ja, date, score, totalScore, images: [img._id.toString()] });
+    cat.items.push({ name, name_ja, date, score, totalScore, images: imageIds });
     batch.markModified('students');
     await batch.save();
 
-    res.json({ success: true, category: { _id: cat._id.toString(), name: cat.name } });
+    res.json({ success: true, category: { _id: cat._id.toString(), name: cat.name }, pages: imageIds.length });
   } catch (err) {
     console.error('[student self-upload]', err.message);
     res.status(500).json({ error: err.message });

@@ -7,30 +7,41 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
   :root {
-    --accent: #8B0000;
-    --accent-light: #b91c1c;
-    --bg: #f7f7f9;
-    --card: #ffffff;
-    --text: #1c1c1e;
-    --text-dim: #6b6b70;
+    --red: #8B0000;
+    --red-light: #c0392b;
+    --green: #2e7d32;
+    --green-soft: #e8f5e9;
+    --surface: #ffffff;
+    --surface2: #f7f7f9;
+    --bg: #f2f2f5;
     --border: #e5e5ea;
+    --border-med: #d8d8dd;
+    --text-primary: #1c1c1e;
+    --text-secondary: #3a3a3c;
+    --text-tertiary: #8e8e93;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 18px rgba(0,0,0,0.08);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
     margin: 0; min-height: 100vh; background: var(--bg);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", Roboto, sans-serif;
-    color: var(--text); display: flex; justify-content: center;
+    color: var(--text-primary); display: flex; justify-content: center;
   }
   .wrap { width: 100%; max-width: 440px; padding: 28px 20px 60px; }
   .logo { text-align: center; margin-bottom: 22px; }
   .logo .icon { font-size: 34px; }
-  .logo h1 { font-size: 16px; font-weight: 700; margin: 6px 0 0; }
+  .logo h1 { font-size: 16px; font-weight: 700; margin: 6px 0 0; color: var(--text-primary); }
   .card {
-    background: var(--card); border-radius: 18px; padding: 24px 20px;
-    box-shadow: 0 2px 18px rgba(0,0,0,0.06); border: 1px solid var(--border);
+    background: var(--surface); border-radius: var(--radius-xl); padding: 24px 20px;
+    box-shadow: var(--shadow-md); border: 1px solid var(--border);
   }
   .center { text-align: center; }
-  .student-name { font-size: 18px; font-weight: 700; margin: 2px 0 0; }
+  .student-name { font-size: 18px; font-weight: 700; margin: 2px 0 0; color: var(--text-primary); }
   .student-photo {
     width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
     margin: 0 auto 8px; display: block; border: 2px solid var(--border);
@@ -38,46 +49,69 @@
   .student-avatar {
     width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 8px;
     display: flex; align-items: center; justify-content: center;
-    background: #f0f0f2; font-size: 26px;
+    background: var(--surface2); font-size: 26px;
   }
-  label { display: block; font-size: 13px; font-weight: 600; color: var(--text-dim); margin: 16px 0 6px; }
-  label:first-of-type { margin-top: 0; }
-  input[type="text"], input[type="date"], select {
-    width: 100%; padding: 13px 14px; border-radius: 12px; border: 1.5px solid var(--border);
-    font-size: 15px; background: #fff; color: var(--text);
+  .form-group { margin-bottom: 16px; }
+  .form-group:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+  input[type="text"], input[type="number"], input[type="date"], select {
+    width: 100%; padding: 13px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border-med);
+    font-size: 15px; background: var(--surface2); color: var(--text-primary);
+    font-family: inherit; -webkit-appearance: none; appearance: none;
   }
-  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input:focus, select:focus { outline: none; border-color: var(--red); background: var(--surface); }
+  .row { display: flex; gap: 10px; }
+  .row .form-group { flex: 1; }
   .pin-row { display: flex; gap: 10px; justify-content: center; margin: 20px 0 4px; }
   .pin-row input {
     width: 46px; height: 56px; text-align: center; font-size: 26px; font-weight: 700;
-    border-radius: 12px; border: 1.5px solid var(--border); padding: 0;
+    border-radius: var(--radius-md); border: 1.5px solid var(--border-med); padding: 0; background: var(--surface2);
   }
-  .pin-row input:focus { border-color: var(--accent); }
-  button.primary {
-    width: 100%; margin-top: 22px; padding: 15px; border: none; border-radius: 14px;
-    background: var(--accent); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+  .pin-row input:focus { border-color: var(--red); }
+  .btn-primary {
+    width: 100%; margin-top: 8px; padding: 15px; border: none; border-radius: var(--radius-md);
+    background: linear-gradient(135deg, var(--red), var(--red-light));
+    color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 3px 12px rgba(139,0,0,0.25); font-family: inherit;
   }
-  button.primary:disabled { background: #c9a3a3; cursor: default; }
-  button.secondary {
-    width: 100%; margin-top: 10px; padding: 13px; border-radius: 14px; cursor: pointer;
-    background: transparent; border: 1.5px solid var(--border); color: var(--text); font-size: 14px; font-weight: 600;
+  .btn-primary:disabled { background: #c9a3a3; box-shadow: none; cursor: default; }
+  .btn-secondary {
+    width: 100%; margin-top: 10px; padding: 13px; border-radius: var(--radius-md); cursor: pointer;
+    background: var(--surface); border: 1.5px solid var(--border-med); color: var(--text-secondary);
+    font-size: 14px; font-weight: 600; font-family: inherit;
   }
+  .btn-secondary:hover { background: var(--surface2); }
   .error {
-    background: #fff3f3; color: #c62828; border-radius: 10px; padding: 10px 14px;
+    background: #fff3f3; color: #c62828; border-radius: var(--radius-sm); padding: 10px 14px;
     font-size: 13px; font-weight: 600; margin-top: 14px; text-align: center;
   }
-  .hint { text-align: center; font-size: 12px; color: var(--text-dim); margin-top: 14px; line-height: 1.6; }
-  .photo-picker {
-    border: 2px dashed var(--border); border-radius: 14px; padding: 22px; text-align: center;
-    cursor: pointer; margin-top: 4px; color: var(--text-dim); font-size: 14px;
+  .hint { text-align: center; font-size: 12px; color: var(--text-tertiary); margin-top: 14px; line-height: 1.6; }
+
+  /* Multi-page photo gallery */
+  .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
+  .photo-thumb { position: relative; aspect-ratio: 3/4; border-radius: var(--radius-sm); overflow: hidden; border: 1.5px solid var(--border); }
+  .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-thumb .page-num {
+    position: absolute; top: 4px; left: 4px; background: rgba(0,0,0,0.6); color: #fff;
+    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px;
   }
-  .photo-picker.has-photo { border-style: solid; padding: 8px; }
-  .photo-picker img { width: 100%; border-radius: 10px; display: block; max-height: 260px; object-fit: cover; }
-  .photo-picker .big { font-size: 30px; display: block; margin-bottom: 6px; }
+  .photo-thumb .remove-btn {
+    position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%;
+    background: rgba(0,0,0,0.65); color: #fff; border: none; font-size: 13px; line-height: 1;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .photo-add-tile {
+    aspect-ratio: 3/4; border-radius: var(--radius-sm); border: 2px dashed var(--border-med);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    color: var(--text-tertiary); font-size: 11px; font-weight: 600; cursor: pointer; background: var(--surface2);
+  }
+  .photo-add-tile .plus { font-size: 22px; line-height: 1; }
+  .photo-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; }
+
   .success { text-align: center; padding: 20px 0 6px; }
   .success .big { font-size: 46px; }
-  .success h2 { margin: 10px 0 4px; font-size: 18px; }
-  .success p { color: var(--text-dim); font-size: 14px; margin: 0; }
+  .success h2 { margin: 10px 0 4px; font-size: 18px; color: var(--text-primary); }
+  .success p { color: var(--text-tertiary); font-size: 14px; margin: 0; }
   .cat-new { display: none; margin-top: 8px; }
   .spinner {
     width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,0.4);
@@ -102,7 +136,7 @@
     <div id="screen-pin" class="screen active">
       <div class="center">
         <p style="font-weight:700;font-size:15px;margin:0 0 2px;">PINコードを入力してください</p>
-        <p style="font-size:13px;color:var(--text-dim);margin:0;">Enter your PIN code</p>
+        <p style="font-size:13px;color:var(--text-tertiary);margin:0;">Enter your PIN code</p>
       </div>
       <div class="pin-row">
         <input type="text" inputmode="numeric" maxlength="1" class="pin-digit" />
@@ -110,64 +144,81 @@
         <input type="text" inputmode="numeric" maxlength="1" class="pin-digit" />
         <input type="text" inputmode="numeric" maxlength="1" class="pin-digit" />
       </div>
-      <button class="primary" id="btn-login" disabled>確認 / Confirm</button>
+      <button class="btn-primary" id="btn-login" disabled>確認 / Confirm</button>
       <div id="pin-error"></div>
       <p class="hint">先生から渡されたPINを使ってください。<br/>Use the PIN your teacher gave you.</p>
     </div>
 
     <!-- STEP 2: UPLOAD FORM -->
     <div id="screen-form" class="screen">
-      <div class="center">
+      <div class="center" style="margin-bottom:18px;">
         <div id="student-photo-wrap"></div>
         <p class="student-name" id="student-name"></p>
-        <p style="font-size:12px;color:var(--text-dim);margin:2px 0 0;" id="batch-name"></p>
+        <p style="font-size:12px;color:var(--text-tertiary);margin:2px 0 0;" id="batch-name"></p>
       </div>
 
-      <label>カテゴリー / Category</label>
-      <select id="category-select"></select>
-      <div class="cat-new" id="cat-new-wrap">
-        <input type="text" id="cat-new-input" placeholder="新しいカテゴリー名 / New category name" />
-      </div>
-
-      <label>試験名 (English) / Exam Name</label>
-      <button type="button" class="secondary" id="btn-scan-qr" style="margin-top:0;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">
-        📷 QRコードをスキャン / Scan Exam QR <span style="font-weight:400;color:var(--text-dim);font-size:12px;">(auto-fills fields below)</span>
-      </button>
-      <div id="qr-scanner-wrap" style="display:none;margin-bottom:12px;">
-        <div style="position:relative;border-radius:14px;overflow:hidden;background:#000;">
-          <video id="qr-video" playsinline muted style="width:100%;display:block;max-height:280px;object-fit:cover;"></video>
-          <div style="position:absolute;inset:0;border:3px solid rgba(255,255,255,0.5);border-radius:14px;pointer-events:none;"></div>
+      <div class="form-group">
+        <label>カテゴリー / Category</label>
+        <select id="category-select"></select>
+        <div class="cat-new" id="cat-new-wrap">
+          <input type="text" id="cat-new-input" placeholder="新しいカテゴリー名 / New category name" style="margin-top:8px;" />
         </div>
-        <button type="button" class="secondary" id="btn-close-scanner" style="margin-top:8px;">✕ Close Scanner</button>
-        <p id="qr-scan-status" style="text-align:center;font-size:12px;color:var(--text-dim);margin:8px 0 0;">カメラを起動中... / Starting camera...</p>
       </div>
-      <input type="text" id="exam-name" placeholder="e.g. Chapter 3 Quiz" />
 
-      <label>試験名（日本語） / Exam Name (Japanese)</label>
-      <input type="text" id="exam-name-ja" placeholder="例：第3章テスト" />
+      <div class="form-group">
+        <button type="button" class="btn-secondary" id="btn-scan-qr" style="margin-top:0;display:flex;align-items:center;justify-content:center;gap:6px;">
+          📷 QRコードをスキャン / Scan Exam QR
+        </button>
+        <p style="font-size:11px;color:var(--text-tertiary);text-align:center;margin:6px 0 0;">auto-fills the fields below</p>
+        <div id="qr-scanner-wrap" style="display:none;margin-top:10px;">
+          <div style="position:relative;border-radius:var(--radius-lg);overflow:hidden;background:#000;">
+            <video id="qr-video" playsinline muted style="width:100%;display:block;max-height:280px;object-fit:cover;"></video>
+            <div style="position:absolute;inset:0;border:3px solid rgba(255,255,255,0.5);border-radius:var(--radius-lg);pointer-events:none;"></div>
+          </div>
+          <button type="button" class="btn-secondary" id="btn-close-scanner" style="margin-top:8px;">✕ Close Scanner</button>
+          <p id="qr-scan-status" style="text-align:center;font-size:12px;color:var(--text-tertiary);margin:8px 0 0;">カメラを起動中... / Starting camera...</p>
+        </div>
+      </div>
 
-      <div style="display:flex; gap:10px;">
-        <div style="flex:1;">
+      <div class="form-group">
+        <label>試験名 (English) / Exam Name</label>
+        <input type="text" id="exam-name" placeholder="e.g. Chapter 3 Quiz" />
+      </div>
+
+      <div class="form-group">
+        <label>試験名（日本語） / Exam Name (Japanese)</label>
+        <input type="text" id="exam-name-ja" placeholder="例：第3章テスト" />
+      </div>
+
+      <div class="row">
+        <div class="form-group">
           <label>点数 / Score</label>
           <input type="number" min="0" id="exam-score" placeholder="85" />
         </div>
-        <div style="flex:1;">
+        <div class="form-group">
           <label>満点 / Total</label>
           <input type="number" min="1" id="exam-total" placeholder="100" />
         </div>
       </div>
 
-      <label>日付 / Date</label>
-      <input type="date" id="exam-date" />
-
-      <label>写真 / Photo</label>
-      <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" />
-      <div class="photo-picker" id="photo-picker">
-        <span class="big">📷</span>
-        写真を撮る / タップして写真を選ぶ<br/>Tap to take or choose a photo
+      <div class="form-group">
+        <label>日付 / Date</label>
+        <input type="date" id="exam-date" />
       </div>
 
-      <button class="primary" id="btn-submit">アップロード / Upload</button>
+      <div class="form-group">
+        <label>写真 / Photo <span style="font-weight:400;color:var(--text-tertiary);">— add every page</span></label>
+        <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" />
+        <div class="photo-grid" id="photo-grid">
+          <div class="photo-add-tile" id="photo-add-tile">
+            <span class="plus">＋</span>
+            <span>ページ追加<br/>Add Page</span>
+          </div>
+        </div>
+        <p class="photo-hint">複数ページの試験は1ページずつ追加してください。 (Multi-page exams: add one photo per page)</p>
+      </div>
+
+      <button class="btn-primary" id="btn-submit">アップロード / Upload</button>
       <div id="form-error"></div>
     </div>
 
@@ -178,7 +229,7 @@
         <h2>アップロード完了！</h2>
         <p>Uploaded! Your teacher can now see it.</p>
       </div>
-      <button class="primary" id="btn-again">もう一枚 / Upload Another</button>
+      <button class="btn-primary" id="btn-again">もう一枚 / Upload Another</button>
     </div>
 
   </div>
@@ -205,7 +256,7 @@
 
   if (!uploadToken) {
     document.querySelector('.card').innerHTML =
-      '<div class="center"><p style="font-weight:700;">無効なQRコードです。</p><p style="color:var(--text-dim);font-size:13px;">Invalid QR code. Please ask your teacher for a new one.</p></div>';
+      '<div class="center"><p style="font-weight:700;">無効なQRコードです。</p><p style="color:var(--text-tertiary);font-size:13px;">Invalid QR code. Please ask your teacher for a new one.</p></div>';
     return;
   }
 
@@ -389,22 +440,44 @@
 
   btnCloseScanner.addEventListener('click', stopScanner);
 
-  // ── STEP 2: upload form ──────────────────────────────────────────────────
+  // ── STEP 2: upload form — multi-page photo gallery ──────────────────────
   const photoInput = document.getElementById('photo-input');
-  const photoPicker = document.getElementById('photo-picker');
-  let photoDataUrl = null;
+  const photoGrid = document.getElementById('photo-grid');
+  const photoAddTile = document.getElementById('photo-add-tile');
+  let photoPages = []; // array of data URLs, one per page
 
-  photoPicker.addEventListener('click', () => photoInput.click());
+  function renderPhotoGrid() {
+    // Remove existing thumbs, keep the add-tile
+    Array.from(photoGrid.querySelectorAll('.photo-thumb')).forEach(el => el.remove());
+    photoPages.forEach((dataUrl, i) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'photo-thumb';
+      thumb.innerHTML = `
+        <img src="${dataUrl}" />
+        <span class="page-num">${i + 1}</span>
+        <button type="button" class="remove-btn" data-idx="${i}">✕</button>
+      `;
+      photoGrid.insertBefore(thumb, photoAddTile);
+    });
+    photoGrid.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        photoPages.splice(parseInt(btn.dataset.idx), 1);
+        renderPhotoGrid();
+      });
+    });
+  }
+
+  photoAddTile.addEventListener('click', () => photoInput.click());
   photoInput.addEventListener('change', () => {
     const file = photoInput.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      photoDataUrl = reader.result;
-      photoPicker.classList.add('has-photo');
-      photoPicker.innerHTML = `<img src="${photoDataUrl}" />`;
+      photoPages.push(reader.result);
+      renderPhotoGrid();
     };
     reader.readAsDataURL(file);
+    photoInput.value = ''; // allow picking/capturing the same way again for the next page
   });
 
   const btnSubmit = document.getElementById('btn-submit');
@@ -423,7 +496,7 @@
 
     if (isNewCat && !newCategoryName) return formError.innerHTML = '<div class="error">カテゴリー名を入力してください。 (Enter a category name)</div>';
     if (!name) return formError.innerHTML = '<div class="error">試験名を入力してください。 (Enter the exam name)</div>';
-    if (!photoDataUrl) return formError.innerHTML = '<div class="error">写真を選んでください。 (Please choose a photo)</div>';
+    if (photoPages.length === 0) return formError.innerHTML = '<div class="error">写真を1枚以上選んでください。 (Please add at least one photo)</div>';
 
     btnSubmit.disabled = true;
     btnSubmit.innerHTML = '<span class="spinner"></span>送信中...';
@@ -434,7 +507,7 @@
         body: JSON.stringify({
           categoryId: isNewCat ? undefined : sel.value,
           newCategoryName: isNewCat ? newCategoryName : undefined,
-          name, date, image: photoDataUrl,
+          name, date, images: photoPages,
           name_ja: nameJa || undefined,
           score: scoreVal !== '' ? parseInt(scoreVal) : undefined,
           totalScore: totalVal !== '' ? parseInt(totalVal) : undefined,
@@ -469,9 +542,8 @@
     document.getElementById('exam-name-ja').value = '';
     document.getElementById('exam-score').value = '';
     document.getElementById('exam-total').value = '';
-    photoDataUrl = null;
-    photoPicker.classList.remove('has-photo');
-    photoPicker.innerHTML = '<span class="big">📷</span>写真を撮る / タップして写真を選ぶ<br/>Tap to take or choose a photo';
+    photoPages = [];
+    renderPhotoGrid();
     document.getElementById('exam-date').value = new Date().toISOString().split('T')[0];
     show('form');
   });
