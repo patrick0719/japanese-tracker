@@ -169,6 +169,8 @@ const batchSchema = new mongoose.Schema({
     kumiai: { type: String, default: '' },
     scholarship: { type: String, default: 'no' },
     scholarshipType: { type: String, default: '' },
+    pin: { type: String, default: '' },           // self-upload PIN, set by admin/teacher
+    uploadToken: { type: String, default: null },  // permanent token embedded in the student's upload QR
     categories: [{
       name: String,
       name_ja: { type: String, default: '' },
@@ -511,6 +513,159 @@ app.delete('/api/parent-token/:token', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+// ── STUDENT SELF-UPLOAD (QR + PIN — no login/app install needed) ─────────────
+// Each student gets a permanent, unguessable `uploadToken` embedded in a printed
+// QR code. Scanning it opens a tiny static page (student-upload.html) where the
+// student enters the PIN their teacher/admin set for them, then can upload
+// photos of their own exam papers into a category — nothing else is accessible.
+
+const genUploadToken = () => crypto.randomBytes(16).toString('hex');
+
+// Admin/teacher: set or change a student's self-upload PIN (4-6 digits)
+app.patch('/api/batches/:batchId/students/:studentId/pin', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    const pin = sanitizeStr(req.body.pin, 6);
+    if (!/^\d{4,6}$/.test(pin)) return res.status(400).json({ error: 'PIN must be 4-6 digits' });
+    student.pin = pin;
+    await batch.save();
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin/teacher: get (and create if missing) the student's permanent upload token
+app.post('/api/batches/:batchId/students/:studentId/upload-token', rateLimit({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    if (!student.uploadToken || req.body.regenerate) {
+      student.uploadToken = genUploadToken();
+      await batch.save();
+    }
+    res.json({ token: student.uploadToken, hasPin: !!student.pin });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin/teacher: revoke — kills the printed QR immediately (student must be re-issued a new one)
+app.delete('/api/batches/:batchId/students/:studentId/upload-token', async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const student = batch.students.id(req.params.studentId);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    student.uploadToken = null;
+    await batch.save();
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Stateless session tokens for the student-facing upload page. The signature is
+// keyed off the student's CURRENT pin, so changing the PIN instantly invalidates
+// any session issued under the old one — no server-side session storage needed.
+const STUDENT_SESSION_SECRET = (process.env.AUTH_SECRET || process.env.ADMIN_SECRET || 'dev-insecure-auth-secret-change-me').trim();
+const STUDENT_SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 3; // 3-hour session after PIN entry
+
+const signStudentSession = (uploadToken, pin) => {
+  const payload = { ut: uploadToken, iat: Date.now() };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', STUDENT_SESSION_SECRET + pin).update(body).digest('hex');
+  return `${body}.${sig}`;
+};
+
+const findStudentByUploadToken = async (uploadToken) => {
+  if (!uploadToken) return null;
+  const batch = await Batch.findOne({ 'students.uploadToken': uploadToken });
+  if (!batch) return null;
+  const student = batch.students.find(s => s.uploadToken === uploadToken);
+  if (!student) return null;
+  return { batch, student };
+};
+
+// Verifies a session token against a specific upload token (the one in the URL the
+// student scanned) and returns the live { batch, student } docs, or null.
+const verifyStudentSession = async (sessionToken, expectedUploadToken) => {
+  if (!sessionToken || typeof sessionToken !== 'string' || !sessionToken.includes('.')) return null;
+  const [body, sig] = sessionToken.split('.');
+  let payload;
+  try { payload = JSON.parse(Buffer.from(body, 'base64url').toString()); } catch { return null; }
+  if (!payload || !payload.ut || payload.ut !== expectedUploadToken) return null;
+  if (!payload.iat || Date.now() - payload.iat > STUDENT_SESSION_MAX_AGE_MS) return null;
+  const found = await findStudentByUploadToken(payload.ut);
+  if (!found) return null;
+  const expected = crypto.createHmac('sha256', STUDENT_SESSION_SECRET + (found.student.pin || '')).update(body).digest('hex');
+  return safeEqualHex(sig, expected) ? found : null;
+};
+
+// Student: enter PIN → get a session token + the bits needed to fill the upload form
+app.post('/api/student-upload/:token/login', rateLimit({ windowMs: 60_000, max: 10, message: 'Sobrang dami ng pagsubok. Subukan ulit mamaya.' }), async (req, res) => {
+  try {
+    const pin = typeof req.body.pin === 'string' ? req.body.pin.trim() : '';
+    const found = await findStudentByUploadToken(req.params.token);
+    if (!found) return res.status(404).json({ error: 'invalid_qr' });
+    const { batch, student } = found;
+    if (!student.pin) return res.status(400).json({ error: 'no_pin_set' });
+    if (!pin || pin !== student.pin) return res.status(401).json({ error: 'wrong_pin' });
+
+    const sessionToken = signStudentSession(req.params.token, student.pin);
+    res.json({
+      sessionToken,
+      student: { name: student.name, photo: student.photo || null },
+      batch: { name: batch.name },
+      categories: (student.categories || []).map(c => ({ _id: c._id.toString(), name: c.name, name_ja: c.name_ja })),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Student: submit a photo of their exam into a category (creates a new exam entry).
+// Score is left for the teacher to fill in later — the student is only submitting
+// the paper itself, not grading it.
+app.post('/api/student-upload/:token/exam', rateLimit({ windowMs: 60_000, max: 20, message: 'Sobrang dami ng upload. Subukan ulit mamaya.' }), async (req, res) => {
+  try {
+    const session = await verifyStudentSession(getBearer(req), req.params.token);
+    if (!session) return res.status(401).json({ error: 'session_expired' });
+    const { batch, student } = session;
+
+    const image = req.body.image; // base64 data URL from camera/file input — required
+    if (!image) return res.status(400).json({ error: 'Photo is required' });
+    const name = sanitizeStr(req.body.name, 300);
+    if (!name) return res.status(400).json({ error: 'Exam name is required' });
+    const name_ja = sanitizeStr(req.body.name_ja, 300);
+    const dateInput = req.body.date;
+    const date = (dateInput && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) ? dateInput : new Date().toISOString().split('T')[0];
+
+    let cat;
+    const categoryId = sanitizeStr(req.body.categoryId, 50);
+    const newCategoryName = sanitizeStr(req.body.newCategoryName, 200);
+    if (categoryId) {
+      cat = student.categories.id(categoryId);
+      if (!cat) return res.status(404).json({ error: 'Category not found' });
+    } else if (newCategoryName) {
+      student.categories.push({ name: newCategoryName, name_ja: '', items: [] });
+      cat = student.categories[student.categories.length - 1];
+    } else {
+      return res.status(400).json({ error: 'Category is required' });
+    }
+
+    const { url, publicId } = await cloudinaryUpload(image);
+    const img = new Image({ url, publicId });
+    await img.save();
+
+    cat.items.push({ name, name_ja, date, score: 0, totalScore: 100, images: [img._id.toString()] });
+    batch.markModified('students');
+    await batch.save();
+
+    res.json({ success: true, category: { _id: cat._id.toString(), name: cat.name } });
+  } catch (err) {
+    console.error('[student self-upload]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/api/teachers', async (req, res) => {
   try { res.json(await Teacher.find().select('-signature')); } catch (err) { res.status(500).json({ error: err.message }); }
