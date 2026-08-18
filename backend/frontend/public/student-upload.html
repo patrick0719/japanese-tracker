@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>試験アップロード / Exam Upload</title>
+<style>
+  :root {
+    --accent: #8B0000;
+    --accent-light: #b91c1c;
+    --bg: #f7f7f9;
+    --card: #ffffff;
+    --text: #1c1c1e;
+    --text-dim: #6b6b70;
+    --border: #e5e5ea;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", Roboto, sans-serif;
+    color: var(--text); display: flex; justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 440px; padding: 28px 20px 60px; }
+  .logo { text-align: center; margin-bottom: 22px; }
+  .logo .icon { font-size: 34px; }
+  .logo h1 { font-size: 16px; font-weight: 700; margin: 6px 0 0; }
+  .card {
+    background: var(--card); border-radius: 18px; padding: 24px 20px;
+    box-shadow: 0 2px 18px rgba(0,0,0,0.06); border: 1px solid var(--border);
+  }
+  .center { text-align: center; }
+  .student-name { font-size: 18px; font-weight: 700; margin: 2px 0 0; }
+  .student-photo {
+    width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+    margin: 0 auto 8px; display: block; border: 2px solid var(--border);
+  }
+  .student-avatar {
+    width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: #f0f0f2; font-size: 26px;
+  }
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--text-dim); margin: 16px 0 6px; }
+  label:first-of-type { margin-top: 0; }
+  input[type="text"], input[type="date"], select {
+    width: 100%; padding: 13px 14px; border-radius: 12px; border: 1.5px solid var(--border);
+    font-size: 15px; background: #fff; color: var(--text);
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .pin-row { display: flex; gap: 10px; justify-content: center; margin: 20px 0 4px; }
+  .pin-row input {
+    width: 46px; height: 56px; text-align: center; font-size: 26px; font-weight: 700;
+    border-radius: 12px; border: 1.5px solid var(--border); padding: 0;
+  }
+  .pin-row input:focus { border-color: var(--accent); }
+  button.primary {
+    width: 100%; margin-top: 22px; padding: 15px; border: none; border-radius: 14px;
+    background: var(--accent); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+  }
+  button.primary:disabled { background: #c9a3a3; cursor: default; }
+  button.secondary {
+    width: 100%; margin-top: 10px; padding: 13px; border-radius: 14px; cursor: pointer;
+    background: transparent; border: 1.5px solid var(--border); color: var(--text); font-size: 14px; font-weight: 600;
+  }
+  .error {
+    background: #fff3f3; color: #c62828; border-radius: 10px; padding: 10px 14px;
+    font-size: 13px; font-weight: 600; margin-top: 14px; text-align: center;
+  }
+  .hint { text-align: center; font-size: 12px; color: var(--text-dim); margin-top: 14px; line-height: 1.6; }
+  .photo-picker {
+    border: 2px dashed var(--border); border-radius: 14px; padding: 22px; text-align: center;
+    cursor: pointer; margin-top: 4px; color: var(--text-dim); font-size: 14px;
+  }
+  .photo-picker.has-photo { border-style: solid; padding: 8px; }
+  .photo-picker img { width: 100%; border-radius: 10px; display: block; max-height: 260px; object-fit: cover; }
+  .photo-picker .big { font-size: 30px; display: block; margin-bottom: 6px; }
+  .success { text-align: center; padding: 20px 0 6px; }
+  .success .big { font-size: 46px; }
+  .success h2 { margin: 10px 0 4px; font-size: 18px; }
+  .success p { color: var(--text-dim); font-size: 14px; margin: 0; }
+  .cat-new { display: none; margin-top: 8px; }
+  .spinner {
+    width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,0.4);
+    border-top-color: #fff; border-radius: 50%; display: inline-block;
+    animation: spin 0.7s linear infinite; vertical-align: -3px; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .screen { display: none; }
+  .screen.active { display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">
+    <div class="icon">🌸</div>
+    <h1>試験アップロード / Exam Upload</h1>
+  </div>
+
+  <div class="card">
+
+    <!-- STEP 1: PIN -->
+    <div id="screen-pin" class="screen active">
+      <div class="center">
+        <p style="font-weight:700;font-size:15px;margin:0 0 2px;">PINコードを入力してください</p>
+        <p style="font-size:13px;color:var(--text-dim);margin:0;">Enter your PIN code</p>
+      </div>
+      <div class="pin-row">
+        <input type="text" inputmode="numeric" maxlength="1" class="pin-digit" />
+        <input type="text" inputmode="numeric" maxlength="1" class="pin-digit" />
+        <input type="text" inputmode="numeric" maxlength="1" class="pin-digit" />
+        <input type="text" inputmode="numeric" maxlength="1" class="pin-digit" />
+      </div>
+      <button class="primary" id="btn-login" disabled>確認 / Confirm</button>
+      <div id="pin-error"></div>
+      <p class="hint">先生から渡されたPINを使ってください。<br/>Use the PIN your teacher gave you.</p>
+    </div>
+
+    <!-- STEP 2: UPLOAD FORM -->
+    <div id="screen-form" class="screen">
+      <div class="center">
+        <div id="student-photo-wrap"></div>
+        <p class="student-name" id="student-name"></p>
+        <p style="font-size:12px;color:var(--text-dim);margin:2px 0 0;" id="batch-name"></p>
+      </div>
+
+      <label>カテゴリー / Category</label>
+      <select id="category-select"></select>
+      <div class="cat-new" id="cat-new-wrap">
+        <input type="text" id="cat-new-input" placeholder="新しいカテゴリー名 / New category name" />
+      </div>
+
+      <label>試験名 / Exam Name</label>
+      <input type="text" id="exam-name" placeholder="例: Matome Test 1" />
+
+      <label>日付 / Date</label>
+      <input type="date" id="exam-date" />
+
+      <label>写真 / Photo</label>
+      <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" />
+      <div class="photo-picker" id="photo-picker">
+        <span class="big">📷</span>
+        写真を撮る / タップして写真を選ぶ<br/>Tap to take or choose a photo
+      </div>
+
+      <button class="primary" id="btn-submit">アップロード / Upload</button>
+      <div id="form-error"></div>
+    </div>
+
+    <!-- STEP 3: SUCCESS -->
+    <div id="screen-success" class="screen">
+      <div class="success">
+        <div class="big">✅</div>
+        <h2>アップロード完了！</h2>
+        <p>Uploaded! Your teacher can now see it.</p>
+      </div>
+      <button class="primary" id="btn-again">もう一枚 / Upload Another</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  const API = window.location.origin + '/api';
+  const params = new URLSearchParams(window.location.search);
+  const uploadToken = params.get('token');
+
+  const screens = {
+    pin: document.getElementById('screen-pin'),
+    form: document.getElementById('screen-form'),
+    success: document.getElementById('screen-success'),
+  };
+  function show(name) {
+    Object.values(screens).forEach(s => s.classList.remove('active'));
+    screens[name].classList.add('active');
+  }
+
+  if (!uploadToken) {
+    document.querySelector('.card').innerHTML =
+      '<div class="center"><p style="font-weight:700;">無効なQRコードです。</p><p style="color:var(--text-dim);font-size:13px;">Invalid QR code. Please ask your teacher for a new one.</p></div>';
+    return;
+  }
+
+  // ── STEP 1: PIN entry ────────────────────────────────────────────────────
+  const digits = Array.from(document.querySelectorAll('.pin-digit'));
+  const btnLogin = document.getElementById('btn-login');
+  const pinError = document.getElementById('pin-error');
+
+  function currentPin() { return digits.map(d => d.value).join(''); }
+  function updateBtn() { btnLogin.disabled = currentPin().length !== 4; }
+
+  digits.forEach((d, i) => {
+    d.addEventListener('input', () => {
+      d.value = d.value.replace(/\D/g, '').slice(0, 1);
+      if (d.value && digits[i + 1]) digits[i + 1].focus();
+      updateBtn();
+    });
+    d.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !d.value && digits[i - 1]) digits[i - 1].focus();
+    });
+  });
+  digits[0].focus();
+
+  let sessionToken = null;
+  let categories = [];
+
+  btnLogin.addEventListener('click', async () => {
+    pinError.innerHTML = '';
+    btnLogin.disabled = true;
+    btnLogin.innerHTML = '<span class="spinner"></span>確認中...';
+    try {
+      const res = await fetch(`${API}/student-upload/${uploadToken}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: currentPin() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = data.error === 'wrong_pin' ? '間違ったPINです。もう一度お試しください。 (Wrong PIN)'
+          : data.error === 'invalid_qr' ? '無効なQRコードです。 (Invalid QR)'
+          : data.error === 'no_pin_set' ? 'PINがまだ設定されていません。先生に連絡してください。 (No PIN set — ask your teacher)'
+          : 'エラーが発生しました。 (Something went wrong)';
+        pinError.innerHTML = `<div class="error">${msg}</div>`;
+        digits.forEach(d => d.value = '');
+        digits[0].focus();
+        return;
+      }
+      sessionToken = data.sessionToken;
+      categories = data.categories || [];
+
+      const photoWrap = document.getElementById('student-photo-wrap');
+      photoWrap.innerHTML = data.student.photo
+        ? `<img class="student-photo" src="${data.student.photo}" />`
+        : `<div class="student-avatar">🧑‍🎓</div>`;
+      document.getElementById('student-name').textContent = data.student.name;
+      document.getElementById('batch-name').textContent = data.batch.name;
+
+      const sel = document.getElementById('category-select');
+      sel.innerHTML = categories.map(c => `<option value="${c._id}">${c.name}</option>`).join('')
+        + '<option value="__new__">＋ 新しいカテゴリー / New category</option>';
+      sel.onchange = () => {
+        document.getElementById('cat-new-wrap').style.display = sel.value === '__new__' ? 'block' : 'none';
+      };
+      if (categories.length === 0) {
+        sel.value = '__new__';
+        document.getElementById('cat-new-wrap').style.display = 'block';
+      }
+
+      document.getElementById('exam-date').value = new Date().toISOString().split('T')[0];
+      show('form');
+    } catch (e) {
+      pinError.innerHTML = '<div class="error">接続エラー。もう一度お試しください。 (Connection error)</div>';
+    } finally {
+      btnLogin.disabled = false;
+      btnLogin.textContent = '確認 / Confirm';
+    }
+  });
+
+  // ── STEP 2: upload form ──────────────────────────────────────────────────
+  const photoInput = document.getElementById('photo-input');
+  const photoPicker = document.getElementById('photo-picker');
+  let photoDataUrl = null;
+
+  photoPicker.addEventListener('click', () => photoInput.click());
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      photoDataUrl = reader.result;
+      photoPicker.classList.add('has-photo');
+      photoPicker.innerHTML = `<img src="${photoDataUrl}" />`;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const btnSubmit = document.getElementById('btn-submit');
+  const formError = document.getElementById('form-error');
+
+  btnSubmit.addEventListener('click', async () => {
+    formError.innerHTML = '';
+    const sel = document.getElementById('category-select');
+    const isNewCat = sel.value === '__new__';
+    const newCategoryName = document.getElementById('cat-new-input').value.trim();
+    const name = document.getElementById('exam-name').value.trim();
+    const date = document.getElementById('exam-date').value;
+
+    if (isNewCat && !newCategoryName) return formError.innerHTML = '<div class="error">カテゴリー名を入力してください。 (Enter a category name)</div>';
+    if (!name) return formError.innerHTML = '<div class="error">試験名を入力してください。 (Enter the exam name)</div>';
+    if (!photoDataUrl) return formError.innerHTML = '<div class="error">写真を選んでください。 (Please choose a photo)</div>';
+
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<span class="spinner"></span>送信中...';
+    try {
+      const res = await fetch(`${API}/student-upload/${uploadToken}/exam`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+        body: JSON.stringify({
+          categoryId: isNewCat ? undefined : sel.value,
+          newCategoryName: isNewCat ? newCategoryName : undefined,
+          name, date, image: photoDataUrl,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error === 'session_expired') {
+          formError.innerHTML = '<div class="error">セッションが切れました。もう一度PINを入力してください。 (Session expired — enter PIN again)</div>';
+          setTimeout(() => window.location.reload(), 1800);
+          return;
+        }
+        formError.innerHTML = `<div class="error">${data.error || 'エラーが発生しました。'}</div>`;
+        return;
+      }
+      show('success');
+    } catch (e) {
+      formError.innerHTML = '<div class="error">接続エラー。もう一度お試しください。 (Connection error)</div>';
+    } finally {
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'アップロード / Upload';
+    }
+  });
+
+  document.getElementById('btn-again').addEventListener('click', () => {
+    document.getElementById('exam-name').value = '';
+    photoDataUrl = null;
+    photoPicker.classList.remove('has-photo');
+    photoPicker.innerHTML = '<span class="big">📷</span>写真を撮る / タップして写真を選ぶ<br/>Tap to take or choose a photo';
+    document.getElementById('exam-date').value = new Date().toISOString().split('T')[0];
+    show('form');
+  });
+})();
+</script>
+</body>
+</html>
