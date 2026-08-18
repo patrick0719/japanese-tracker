@@ -3365,6 +3365,23 @@ function ParentQRPopup({ student, batch, teacher, onClose }) {
   );
 }
 
+// Reads a fetch Response safely — surfaces the real HTTP status + body instead of
+// letting Safari's generic "The string did not match the expected pattern" mask
+// what actually went wrong (wrong route, CORS block, HTML error page, etc).
+async function readJsonSafe(res) {
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+  if (!res.ok) {
+    const detail = (data && data.error) || (text ? text.slice(0, 160) : `HTTP ${res.status}`);
+    throw new Error(`(${res.status}) ${detail}`);
+  }
+  if (data === null) {
+    throw new Error(`Server returned a non-JSON response (status ${res.status}). Baka mali ang API URL o may CORS issue.`);
+  }
+  return data;
+}
+
 // ── STUDENT SELF-UPLOAD QR POPUP ───────────────────────────────────────────────
 // Lets the student scan a QR, enter a PIN the teacher set for them, and upload
 // photos of their own exam papers — nothing else in the app is reachable from it.
@@ -3388,7 +3405,7 @@ function StudentUploadQRPopup({ student, batch, onClose, refreshStudent }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin }),
       });
-      const data = await res.json();
+      const data = await readJsonSafe(res);
       if (data.error) throw new Error(data.error);
       setPinSaved(true);
       if (refreshStudent) refreshStudent();
@@ -3404,11 +3421,37 @@ function StudentUploadQRPopup({ student, batch, onClose, refreshStudent }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ regenerate }),
       });
-      const data = await res.json();
+      const data = await readJsonSafe(res);
       if (data.error) throw new Error(data.error);
       const url = `${window.location.origin}/student-upload.html?token=${data.token}`;
-      const dataUrl = await QRCode.toDataURL(url, { width: 360, margin: 2 });
-      setQrDataUrl(dataUrl);
+
+      // Draw the QR onto a canvas, then compose the student's name underneath it
+      // so the printed sheet is never ambiguous about whose QR it is.
+      const qrSize = 360;
+      const nameAreaHeight = 56;
+      const padding = 20;
+      const qrCanvas = document.createElement('canvas');
+      await QRCode.toCanvas(qrCanvas, url, { width: qrSize, margin: 2 });
+
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = qrSize + padding * 2;
+      outCanvas.height = qrSize + padding * 2 + nameAreaHeight;
+      const ctx = outCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+      ctx.drawImage(qrCanvas, padding, padding, qrSize, qrSize);
+
+      ctx.fillStyle = '#1c1c1e';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillText(student.name, outCanvas.width / 2, qrSize + padding + 30, outCanvas.width - padding);
+      if (batch?.name) {
+        ctx.fillStyle = '#8e8e93';
+        ctx.font = '15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillText(batch.name, outCanvas.width / 2, qrSize + padding + 50, outCanvas.width - padding);
+      }
+
+      setQrDataUrl(outCanvas.toDataURL('image/png'));
       setUploadUrl(url);
     } catch (err) { setError(err.message); }
     setGenerating(false);
@@ -3502,7 +3545,7 @@ function StudentUploadQRPopup({ student, batch, onClose, refreshStudent }) {
               background: '#fff', borderRadius: 16, padding: 16, display: 'inline-block',
               boxShadow: '0 2px 16px rgba(0,0,0,0.1)', marginBottom: 12,
             }}>
-              <img src={qrDataUrl} alt="Student Upload QR Code" style={{ width: 200, height: 200, display: 'block' }} />
+              <img src={qrDataUrl} alt="Student Upload QR Code" style={{ width: 200, height: 'auto', display: 'block' }} />
             </div>
             <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <CheckCircle size={14} color="#2e7d32" /> QR ready — print it or share the link
