@@ -203,6 +203,15 @@
   let sessionToken = null;
   let categories = [];
 
+  // Parses a response's body as JSON without throwing — lets us show the real
+  // status/body when the server returns something unexpected (HTML error page,
+  // empty body, etc.) instead of a vague "connection error".
+  async function parseJsonLoose(res) {
+    const text = await res.text();
+    try { return { parsed: true, data: text ? JSON.parse(text) : {} }; }
+    catch { return { parsed: false, raw: text, status: res.status }; }
+  }
+
   btnLogin.addEventListener('click', async () => {
     pinError.innerHTML = '';
     btnLogin.disabled = true;
@@ -213,12 +222,17 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin: currentPin() }),
       });
-      const data = await res.json();
+      const result = await parseJsonLoose(res);
+      if (!result.parsed) {
+        pinError.innerHTML = `<div class="error">サーバーエラー (HTTP ${result.status}). Server returned non-JSON — baka mali pa rin ang route o CORS. Detail: ${(result.raw || '').replace(/</g, '&lt;').slice(0, 150)}</div>`;
+        return;
+      }
+      const data = result.data;
       if (!res.ok) {
         const msg = data.error === 'wrong_pin' ? '間違ったPINです。もう一度お試しください。 (Wrong PIN)'
           : data.error === 'invalid_qr' ? '無効なQRコードです。 (Invalid QR)'
           : data.error === 'no_pin_set' ? 'PINがまだ設定されていません。先生に連絡してください。 (No PIN set — ask your teacher)'
-          : 'エラーが発生しました。 (Something went wrong)';
+          : `エラー (HTTP ${res.status}): ${data.error || 'unknown'}`;
         pinError.innerHTML = `<div class="error">${msg}</div>`;
         digits.forEach(d => d.value = '');
         digits[0].focus();
@@ -248,7 +262,7 @@
       document.getElementById('exam-date').value = new Date().toISOString().split('T')[0];
       show('form');
     } catch (e) {
-      pinError.innerHTML = '<div class="error">接続エラー。もう一度お試しください。 (Connection error)</div>';
+      pinError.innerHTML = `<div class="error">接続エラー: ${(e.message || '').replace(/</g, '&lt;')} (Network/CORS error — check console)</div>`;
     } finally {
       btnLogin.disabled = false;
       btnLogin.textContent = '確認 / Confirm';
@@ -300,19 +314,24 @@
           name, date, image: photoDataUrl,
         }),
       });
-      const data = await res.json();
+      const result = await parseJsonLoose(res);
+      if (!result.parsed) {
+        formError.innerHTML = `<div class="error">サーバーエラー (HTTP ${result.status}). Non-JSON response. Detail: ${(result.raw || '').replace(/</g, '&lt;').slice(0, 150)}</div>`;
+        return;
+      }
+      const data = result.data;
       if (!res.ok) {
         if (data.error === 'session_expired') {
           formError.innerHTML = '<div class="error">セッションが切れました。もう一度PINを入力してください。 (Session expired — enter PIN again)</div>';
           setTimeout(() => window.location.reload(), 1800);
           return;
         }
-        formError.innerHTML = `<div class="error">${data.error || 'エラーが発生しました。'}</div>`;
+        formError.innerHTML = `<div class="error">(HTTP ${res.status}) ${data.error || 'エラーが発生しました。'}</div>`;
         return;
       }
       show('success');
     } catch (e) {
-      formError.innerHTML = '<div class="error">接続エラー。もう一度お試しください。 (Connection error)</div>';
+      formError.innerHTML = `<div class="error">接続エラー: ${(e.message || '').replace(/</g, '&lt;')} (Network/CORS error — check console)</div>`;
     } finally {
       btnSubmit.disabled = false;
       btnSubmit.textContent = 'アップロード / Upload';
