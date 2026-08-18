@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>試験アップロード / Exam Upload</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
   :root {
     --accent: #8B0000;
@@ -337,6 +337,11 @@
   }
 
   btnScanQR.addEventListener('click', async () => {
+    if (typeof jsQR !== 'function') {
+      scanStatus.textContent = 'エラー: QRスキャナーの読み込みに失敗しました。ページを再読み込みしてください。 (QR scanner library failed to load — please reload the page)';
+      scannerWrap.style.display = 'block';
+      return;
+    }
     scannerWrap.style.display = 'block';
     scanStatus.textContent = 'カメラを起動中... / Starting camera...';
     try {
