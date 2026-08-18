@@ -160,7 +160,10 @@
 
 <script>
 (function () {
-  const API = window.location.origin + '/api';
+  // NOTE: this page is served from the Vercel frontend, but the API lives on
+  // Railway — must NOT use window.location.origin here (that would send
+  // requests back to Vercel, which has no /api routes → 405).
+  const API = 'https://japanese-tracker-production.up.railway.app/api';
   const params = new URLSearchParams(window.location.search);
   const uploadToken = params.get('token');
 
