@@ -6288,7 +6288,7 @@ function App() {
 
   // ── Exam drag-and-drop reorder logic ─────────────────────────────────────
   const enterReorderMode = () => {
-    setDragItems([...(selectedCategory?.items || [])]);
+    setDragItems([...(selectedCategory?.items || [])].sort(naturalNameSort));
     setReorderMode(true);
   };
   const exitReorderMode = () => {
@@ -6355,8 +6355,12 @@ function App() {
     setDragOverIdx(null);
   };
 
+  // Natural sort: "Lesson 2" < "Lesson 3" < "Lesson 10" (numeric-aware, not pure string order)
+  const naturalNameSort = (a, b) =>
+    (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+
   const renderExamItems = () => {
-    const displayItems = reorderMode ? dragItems : (selectedCategory?.items || []);
+    const displayItems = reorderMode ? dragItems : [...(selectedCategory?.items || [])].sort(naturalNameSort);
     return (
     <div className="sakura-page">
       <div className="sakura-header" style={{ paddingBottom: 0 }}>
