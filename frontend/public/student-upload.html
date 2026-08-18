@@ -129,9 +129,9 @@
         <input type="text" id="cat-new-input" placeholder="新しいカテゴリー名 / New category name" />
       </div>
 
-      <label>試験名 / Exam Name</label>
+      <label>試験名 (English) / Exam Name</label>
       <button type="button" class="secondary" id="btn-scan-qr" style="margin-top:0;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">
-        📷 QRコードをスキャン / Scan Exam QR <span style="font-weight:400;color:var(--text-dim);font-size:12px;">(auto-fills name, category, score)</span>
+        📷 QRコードをスキャン / Scan Exam QR <span style="font-weight:400;color:var(--text-dim);font-size:12px;">(auto-fills fields below)</span>
       </button>
       <div id="qr-scanner-wrap" style="display:none;margin-bottom:12px;">
         <div style="position:relative;border-radius:14px;overflow:hidden;background:#000;">
@@ -141,7 +141,21 @@
         <button type="button" class="secondary" id="btn-close-scanner" style="margin-top:8px;">✕ Close Scanner</button>
         <p id="qr-scan-status" style="text-align:center;font-size:12px;color:var(--text-dim);margin:8px 0 0;">カメラを起動中... / Starting camera...</p>
       </div>
-      <input type="text" id="exam-name" placeholder="例: Matome Test 1" />
+      <input type="text" id="exam-name" placeholder="e.g. Chapter 3 Quiz" />
+
+      <label>試験名（日本語） / Exam Name (Japanese)</label>
+      <input type="text" id="exam-name-ja" placeholder="例：第3章テスト" />
+
+      <div style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label>点数 / Score</label>
+          <input type="number" min="0" id="exam-score" placeholder="85" />
+        </div>
+        <div style="flex:1;">
+          <label>満点 / Total</label>
+          <input type="number" min="1" id="exam-total" placeholder="100" />
+        </div>
+      </div>
 
       <label>日付 / Date</label>
       <input type="date" id="exam-date" />
@@ -287,8 +301,6 @@
   // ── EXAM QR SCANNER (auto-fills name / category / total score) ─────────────
   // Reads the same "nameEn|nameJa|category|totalScore" format produced by the
   // admin's exam QR generator (Settings → QR Codes).
-  let examNameJa = '';
-  let examTotalScore = null;
   let scanStream = null;
   let scanRAF = null;
 
@@ -316,8 +328,8 @@
     if (!nameEn) return false;
 
     document.getElementById('exam-name').value = nameEn;
-    examNameJa = nameJa;
-    examTotalScore = (total && !isNaN(parseInt(total))) ? parseInt(total) : null;
+    document.getElementById('exam-name-ja').value = nameJa;
+    if (total && !isNaN(parseInt(total))) document.getElementById('exam-total').value = parseInt(total);
 
     if (catName) {
       const sel = document.getElementById('category-select');
@@ -404,6 +416,9 @@
     const isNewCat = sel.value === '__new__';
     const newCategoryName = document.getElementById('cat-new-input').value.trim();
     const name = document.getElementById('exam-name').value.trim();
+    const nameJa = document.getElementById('exam-name-ja').value.trim();
+    const scoreVal = document.getElementById('exam-score').value;
+    const totalVal = document.getElementById('exam-total').value;
     const date = document.getElementById('exam-date').value;
 
     if (isNewCat && !newCategoryName) return formError.innerHTML = '<div class="error">カテゴリー名を入力してください。 (Enter a category name)</div>';
@@ -420,8 +435,9 @@
           categoryId: isNewCat ? undefined : sel.value,
           newCategoryName: isNewCat ? newCategoryName : undefined,
           name, date, image: photoDataUrl,
-          name_ja: examNameJa || undefined,
-          totalScore: examTotalScore || undefined,
+          name_ja: nameJa || undefined,
+          score: scoreVal !== '' ? parseInt(scoreVal) : undefined,
+          totalScore: totalVal !== '' ? parseInt(totalVal) : undefined,
         }),
       });
       const result = await parseJsonLoose(res);
@@ -450,8 +466,9 @@
 
   document.getElementById('btn-again').addEventListener('click', () => {
     document.getElementById('exam-name').value = '';
-    examNameJa = '';
-    examTotalScore = null;
+    document.getElementById('exam-name-ja').value = '';
+    document.getElementById('exam-score').value = '';
+    document.getElementById('exam-total').value = '';
     photoDataUrl = null;
     photoPicker.classList.remove('has-photo');
     photoPicker.innerHTML = '<span class="big">📷</span>写真を撮る / タップして写真を選ぶ<br/>Tap to take or choose a photo';

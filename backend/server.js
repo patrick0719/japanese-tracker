@@ -656,11 +656,14 @@ app.post('/api/student-upload/:token/exam', rateLimit({ windowMs: 60_000, max: 2
     const img = new Image({ url, publicId });
     await img.save();
 
-    // Total score can come from a scanned exam QR (Settings → QR Codes on the
-    // admin side embeds it); default to 100 if not provided/invalid.
+    // Total score / score can come from a scanned exam QR or manual entry (Quick
+    // Add Exam parity) — default totalScore to 100, score to 0 if left blank.
     const totalScore = sanitizeNum(req.body.totalScore, 1, 99999) || 100;
+    let score = sanitizeNum(req.body.score, 0, 99999);
+    if (score === null) score = 0;
+    if (score > totalScore) score = totalScore;
 
-    cat.items.push({ name, name_ja, date, score: 0, totalScore, images: [img._id.toString()] });
+    cat.items.push({ name, name_ja, date, score, totalScore, images: [img._id.toString()] });
     batch.markModified('students');
     await batch.save();
 
