@@ -9,7 +9,7 @@ import {
   Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
   Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
   Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
-  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal, MoreVertical, FileX
+  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal, MoreVertical, FileX, QrCode
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -3365,6 +3365,203 @@ function ParentQRPopup({ student, batch, teacher, onClose }) {
   );
 }
 
+// ── STUDENT SELF-UPLOAD QR POPUP ───────────────────────────────────────────────
+// Lets the student scan a QR, enter a PIN the teacher set for them, and upload
+// photos of their own exam papers — nothing else in the app is reachable from it.
+function StudentUploadQRPopup({ student, batch, onClose, refreshStudent }) {
+  const [pin, setPin] = useState('');
+  const [savingPin, setSavingPin] = useState(false);
+  const [pinSaved, setPinSaved] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState(null);
+  const [uploadUrl, setUploadUrl] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
+
+  const hasExistingPin = !!student.pin;
+
+  const savePin = async () => {
+    if (!/^\d{4,6}$/.test(pin)) { setError('PIN must be 4-6 digits.'); return; }
+    setError(''); setSavingPin(true); setPinSaved(false);
+    try {
+      const res = await fetch(`${API}/batches/${batch._id}/students/${student._id}/pin`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setPinSaved(true);
+      if (refreshStudent) refreshStudent();
+    } catch (err) { setError(err.message); }
+    setSavingPin(false);
+  };
+
+  const generateQR = async (regenerate = false) => {
+    setError(''); setGenerating(true);
+    try {
+      const res = await fetch(`${API}/batches/${batch._id}/students/${student._id}/upload-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regenerate }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const url = `${window.location.origin}/student-upload.html?token=${data.token}`;
+      const dataUrl = await QRCode.toDataURL(url, { width: 360, margin: 2 });
+      setQrDataUrl(dataUrl);
+      setUploadUrl(url);
+    } catch (err) { setError(err.message); }
+    setGenerating(false);
+  };
+
+  const copyLink = () => {
+    if (uploadUrl) navigator.clipboard.writeText(uploadUrl).then(() => alert('Link copied!')).catch(() => {});
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+    }} onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-card, #fff)', borderRadius: '20px 20px 0 0',
+          padding: '24px 20px 40px', width: '100%', maxWidth: 480,
+          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 -4px 32px rgba(0,0,0,0.18)',
+        }}
+      >
+        <div style={{ width: 36, height: 4, background: '#e5e5ea', borderRadius: 2, margin: '0 auto 20px' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          {student.photo
+            ? <img src={student.photo} alt={student.name} style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }} />
+            : <span><User size={36} strokeWidth={1.2} /></span>
+          }
+          <div>
+            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary, #1c1c1e)' }}>{student.name}</h2>
+            <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-tertiary, #8e8e93)' }}><BookOpen size={12} style={{ marginRight: 5, verticalAlign: "middle" }} />{batch.name}</p>
+          </div>
+        </div>
+
+        <div style={{ background: '#f0f7ff', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#1565c0', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Camera size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+          The student can scan this QR to upload photos of their own exams — no app install or login needed. Nothing else in the app is accessible from this link.
+        </div>
+
+        {/* PIN section */}
+        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #3a3a3c)', display: 'block', marginBottom: 6 }}>
+          🔑 {hasExistingPin ? 'Change PIN' : 'Set a PIN'} <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', fontSize: 12 }}>— give this to the student</span>
+        </label>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input
+            type="text" inputMode="numeric" maxLength={6}
+            placeholder={hasExistingPin ? 'Enter new 4-6 digit PIN' : 'Enter 4-6 digit PIN'}
+            value={pin}
+            onChange={e => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setPinSaved(false); }}
+            style={{
+              flex: 1, padding: '11px 14px', borderRadius: 10, border: '1.5px solid #e5e5ea',
+              fontSize: 16, letterSpacing: 2, background: 'var(--bg-card, #fff)', color: 'var(--text-primary, #1c1c1e)',
+            }}
+          />
+          <button
+            onClick={savePin}
+            disabled={savingPin || pin.length < 4}
+            style={{
+              padding: '0 18px', borderRadius: 10, border: 'none',
+              background: pin.length >= 4 ? '#1c1c1e' : '#e5e5ea',
+              color: pin.length >= 4 ? '#fff' : '#aaa', fontWeight: 700, fontSize: 14,
+              cursor: pin.length >= 4 ? 'pointer' : 'default',
+            }}
+          >{savingPin ? '...' : 'Save'}</button>
+        </div>
+        {pinSaved && (
+          <p style={{ margin: '0 0 16px', fontSize: 12, color: '#2e7d32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <CheckCircle size={12} /> PIN saved.
+          </p>
+        )}
+        {!pinSaved && <div style={{ marginBottom: 16 }} />}
+
+        {!hasExistingPin && !pinSaved && (
+          <div style={{ background: '#fff8e6', borderRadius: 10, padding: '9px 14px', marginBottom: 16, fontSize: 12, color: '#8a6300', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <AlertTriangle size={13} style={{ marginTop: 1, flexShrink: 0 }} /> Set a PIN first — the student can't log in without one.
+          </div>
+        )}
+
+        {error && (
+          <div style={{ background: '#fff3f3', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#c62828', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertCircle size={14} /> {error}
+          </div>
+        )}
+
+        {/* Generated QR */}
+        {qrDataUrl && (
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div style={{
+              background: '#fff', borderRadius: 16, padding: 16, display: 'inline-block',
+              boxShadow: '0 2px 16px rgba(0,0,0,0.1)', marginBottom: 12,
+            }}>
+              <img src={qrDataUrl} alt="Student Upload QR Code" style={{ width: 200, height: 200, display: 'block' }} />
+            </div>
+            <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <CheckCircle size={14} color="#2e7d32" /> QR ready — print it or share the link
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={copyLink}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 10,
+                  background: '#007AFF', color: '#fff', border: 'none',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                }}
+              >🔗 Copy Link</button>
+              <a
+                href={qrDataUrl}
+                download={`${student.name}-upload-qr.png`}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 10,
+                  background: '#34C759', color: '#fff', border: 'none',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  textDecoration: 'none', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >⬇️ Save QR</a>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => generateQR(!!qrDataUrl)}
+          disabled={generating}
+          style={{
+            width: '100%', padding: '15px',
+            background: generating ? '#e5e5ea' : 'linear-gradient(135deg, #8B0000, #c0392b)',
+            color: generating ? '#8e8e93' : '#fff',
+            border: 'none', borderRadius: 12,
+            fontSize: 16, fontWeight: 700,
+            cursor: generating ? 'default' : 'pointer',
+          }}
+        >
+          {generating
+            ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6, verticalAlign: 'middle' }} />Generating...</>
+            : qrDataUrl
+              ? <><RefreshCw size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Regenerate QR (old one stops working)</>
+              : <><QrCode size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Generate Upload QR</>
+          }
+        </button>
+
+        <button onClick={onClose} style={{
+          width: '100%', marginTop: 10, padding: '13px',
+          background: 'none', border: '1.5px solid #e5e5ea',
+          borderRadius: 12, fontSize: 15, color: '#8e8e93',
+          cursor: 'pointer', fontWeight: 600,
+        }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 // ── PARENT VIEW PAGE (no login required) ──────────────────────────────────────
 function ParentView({ data, token }) {
   const [resolvedImgs, setResolvedImgs] = useState({});
@@ -3704,6 +3901,8 @@ function App() {
   const [progressChartStudent, setProgressChartStudent] = useState(null);
   const [showParentQR, setShowParentQR] = useState(false); // parent QR popup
   const [parentQRStudent, setParentQRStudent] = useState(null);
+  const [showStudentUploadQR, setShowStudentUploadQR] = useState(false); // student self-upload QR popup
+  const [studentUploadQRStudent, setStudentUploadQRStudent] = useState(null);
   const [parentViewToken, setParentViewToken] = useState(null); // token from URL for parent view
   const [parentViewData, setParentViewData] = useState(null); // { student, batch, expiresAt }
   const [isLoggedIn, setIsLoggedIn] = useState(() => safeLocalGet(AUTH_KEY) === 'true');
@@ -5400,6 +5599,10 @@ function App() {
                 <button className="sakura-qa-btn sakura-qa-btn--pink" onClick={() => { setParentQRStudent(selectedStudent); setShowParentQR(true); }}>
                   <KeyRound size={20} className="sakura-qa-icon--pink" />
                   <span>Parent QR</span>
+                </button>
+                <button className="sakura-qa-btn sakura-qa-btn--blue" onClick={() => { setStudentUploadQRStudent(selectedStudent); setShowStudentUploadQR(true); }}>
+                  <QrCode size={20} className="sakura-qa-icon--blue" />
+                  <span>Upload QR</span>
                 </button>
                 <button className="sakura-qa-btn sakura-qa-btn--orange" onClick={async () => {
                   if (!window.confirm(`Archive all exam images of ${selectedStudent.name}?`)) return;
@@ -7128,6 +7331,14 @@ function App() {
           batch={selectedBatch}
           teacher={selectedTeacher}
           onClose={() => { setShowParentQR(false); setParentQRStudent(null); }}
+        />
+      )}
+      {showStudentUploadQR && studentUploadQRStudent && (
+        <StudentUploadQRPopup
+          student={studentUploadQRStudent}
+          batch={selectedBatch}
+          refreshStudent={() => fetchBatches(selectedTeacher?._id)}
+          onClose={() => { setShowStudentUploadQR(false); setStudentUploadQRStudent(null); }}
         />
       )}
     </div>
