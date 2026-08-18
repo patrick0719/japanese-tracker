@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>試験アップロード / Exam Upload</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <style>
   :root {
     --accent: #8B0000;
@@ -129,6 +130,17 @@
       </div>
 
       <label>試験名 / Exam Name</label>
+      <button type="button" class="secondary" id="btn-scan-qr" style="margin-top:0;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">
+        📷 QRコードをスキャン / Scan Exam QR <span style="font-weight:400;color:var(--text-dim);font-size:12px;">(auto-fills name, category, score)</span>
+      </button>
+      <div id="qr-scanner-wrap" style="display:none;margin-bottom:12px;">
+        <div style="position:relative;border-radius:14px;overflow:hidden;background:#000;">
+          <video id="qr-video" playsinline muted style="width:100%;display:block;max-height:280px;object-fit:cover;"></video>
+          <div style="position:absolute;inset:0;border:3px solid rgba(255,255,255,0.5);border-radius:14px;pointer-events:none;"></div>
+        </div>
+        <button type="button" class="secondary" id="btn-close-scanner" style="margin-top:8px;">✕ Close Scanner</button>
+        <p id="qr-scan-status" style="text-align:center;font-size:12px;color:var(--text-dim);margin:8px 0 0;">カメラを起動中... / Starting camera...</p>
+      </div>
       <input type="text" id="exam-name" placeholder="例: Matome Test 1" />
 
       <label>日付 / Date</label>
@@ -252,7 +264,7 @@
       document.getElementById('batch-name').textContent = data.batch.name;
 
       const sel = document.getElementById('category-select');
-      sel.innerHTML = categories.map(c => `<option value="${c._id}">${c.name}</option>`).join('')
+      sel.innerHTML = categories.map(c => `<option value="${c._id}" data-name="${(c.name || '').replace(/"/g, '&quot;')}">${c.name}</option>`).join('')
         + '<option value="__new__">＋ 新しいカテゴリー / New category</option>';
       sel.onchange = () => {
         document.getElementById('cat-new-wrap').style.display = sel.value === '__new__' ? 'block' : 'none';
@@ -271,6 +283,94 @@
       btnLogin.textContent = '確認 / Confirm';
     }
   });
+
+  // ── EXAM QR SCANNER (auto-fills name / category / total score) ─────────────
+  // Reads the same "nameEn|nameJa|category|totalScore" format produced by the
+  // admin's exam QR generator (Settings → QR Codes).
+  let examNameJa = '';
+  let examTotalScore = null;
+  let scanStream = null;
+  let scanRAF = null;
+
+  const btnScanQR = document.getElementById('btn-scan-qr');
+  const btnCloseScanner = document.getElementById('btn-close-scanner');
+  const scannerWrap = document.getElementById('qr-scanner-wrap');
+  const scanStatus = document.getElementById('qr-scan-status');
+  const qrVideo = document.getElementById('qr-video');
+
+  function stopScanner() {
+    if (scanRAF) cancelAnimationFrame(scanRAF);
+    scanRAF = null;
+    if (scanStream) scanStream.getTracks().forEach(t => t.stop());
+    scanStream = null;
+    scannerWrap.style.display = 'none';
+  }
+
+  function applyScannedExam(text) {
+    // Format: nameEn|nameJa|category|totalScore — trailing parts optional
+    const parts = text.split('|');
+    const nameEn = (parts[0] || '').trim();
+    const nameJa = (parts[1] || '').trim();
+    const catName = (parts[2] || '').trim();
+    const total = (parts[3] || '').trim();
+    if (!nameEn) return false;
+
+    document.getElementById('exam-name').value = nameEn;
+    examNameJa = nameJa;
+    examTotalScore = (total && !isNaN(parseInt(total))) ? parseInt(total) : null;
+
+    if (catName) {
+      const sel = document.getElementById('category-select');
+      const match = Array.from(sel.options).find(
+        o => o.value !== '__new__' && o.dataset.name && o.dataset.name.toLowerCase() === catName.toLowerCase()
+      );
+      if (match) {
+        sel.value = match.value;
+        document.getElementById('cat-new-wrap').style.display = 'none';
+      } else {
+        sel.value = '__new__';
+        document.getElementById('cat-new-wrap').style.display = 'block';
+        document.getElementById('cat-new-input').value = catName;
+      }
+    }
+    return true;
+  }
+
+  btnScanQR.addEventListener('click', async () => {
+    scannerWrap.style.display = 'block';
+    scanStatus.textContent = 'カメラを起動中... / Starting camera...';
+    try {
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      qrVideo.srcObject = scanStream;
+      await qrVideo.play();
+      scanStatus.textContent = 'QRコードを枠内に合わせてください / Point at the exam QR code';
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const scanFrame = () => {
+        if (!scanStream) return;
+        if (qrVideo.readyState === qrVideo.HAVE_ENOUGH_DATA) {
+          canvas.width = qrVideo.videoWidth;
+          canvas.height = qrVideo.videoHeight;
+          ctx.drawImage(qrVideo, 0, 0, canvas.width, canvas.height);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' }) : null;
+          if (code && code.data) {
+            if (applyScannedExam(code.data)) {
+              stopScanner();
+              return;
+            }
+          }
+        }
+        scanRAF = requestAnimationFrame(scanFrame);
+      };
+      scanRAF = requestAnimationFrame(scanFrame);
+    } catch (e) {
+      scanStatus.textContent = 'カメラエラー: ' + (e.message || 'camera unavailable') + ' (Camera error — check permissions)';
+    }
+  });
+
+  btnCloseScanner.addEventListener('click', stopScanner);
 
   // ── STEP 2: upload form ──────────────────────────────────────────────────
   const photoInput = document.getElementById('photo-input');
@@ -315,6 +415,8 @@
           categoryId: isNewCat ? undefined : sel.value,
           newCategoryName: isNewCat ? newCategoryName : undefined,
           name, date, image: photoDataUrl,
+          name_ja: examNameJa || undefined,
+          totalScore: examTotalScore || undefined,
         }),
       });
       const result = await parseJsonLoose(res);
@@ -343,6 +445,8 @@
 
   document.getElementById('btn-again').addEventListener('click', () => {
     document.getElementById('exam-name').value = '';
+    examNameJa = '';
+    examTotalScore = null;
     photoDataUrl = null;
     photoPicker.classList.remove('has-photo');
     photoPicker.innerHTML = '<span class="big">📷</span>写真を撮る / タップして写真を選ぶ<br/>Tap to take or choose a photo';
