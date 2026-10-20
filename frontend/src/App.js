@@ -6824,6 +6824,11 @@ function App() {
                         <option value="NEXT GENERATION CO., LTD">NEXT GENERATION CO., LTD</option>
                         <option value="KYOSHIN TRANSPORT CO., LTD">KYOSHIN TRANSPORT CO., LTD</option>
                         <option value="SAPPORO NISHI TIRE CENTER CO., LTD">SAPPORO NISHI TIRE CENTER CO., LTD</option>
+                      </select>
+                    ) : newKumiai === 'Fujie' ? (
+                      <select value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
+                        <option value="">— Select Company —</option>
                         <option value="KINOSHITA KENSETSU">KINOSHITA KENSETSU</option>
                       </select>
                     ) : newKumiai === 'WBC' ? (
