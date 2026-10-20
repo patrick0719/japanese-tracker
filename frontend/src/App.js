@@ -6745,6 +6745,7 @@ function App() {
                       <option value="Gyoumusuishin">Gyoumusuishin</option>
                       <option value="Green Services">Green Services</option>
                       <option value="Asari Group">Asari Group</option>
+                      <option value="Fujie">Fujie</option>
                     </select>
                   </div>
                   <div className="form-group">
