@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react';
 import QRCode from 'qrcode';
 import './index.css';
 import { t } from './translations';
@@ -3857,6 +3857,615 @@ const SAKURA_CARD_VARIANTS = [
   { top: '#d63a6a', tagBg: '#fbd0de', tagText: '#a02050', bg: 'linear-gradient(145deg, #fde8ef 0%, #fdf0f5 100%)' },
 ];
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PHGIC — EVALUATION REPORT (view in Excel-style table, choose students,
+// download as .xlsx or print). Students from the same company are grouped
+// together and their COMPANY cell is merged, like the kumiai Excel template.
+// Requires: npm install exceljs   (loaded on demand, only when downloading)
+// ═══════════════════════════════════════════════════════════════════════════
+const EVAL_KUMIAI_LIST = [
+  { key: 'Setouchi',       sheet: 'SETOUCHI',       label: 'SETOUCHI TECH COOPERATIVE ASSOCIATION', ja: '瀬戸内テック協同組合の選抜された学生の評価' },
+  { key: 'WBC',            sheet: 'WORLD BUSINESS', label: 'WORLD BUSINESS COOPERATIVE' },
+  { key: 'Gyoumusuishin',  sheet: 'GYOUMU SUISHIN', label: 'GYOUMU SUISHIN COOPERATIVE ASSOCIATION' },
+  { key: 'Green Services', sheet: 'GREEN SERVICES', label: 'GREEN SERVICES' },
+];
+const EVAL_OTHER_KEY = '__other__';
+const EVAL_MONTHS = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+
+// Excel columns (A is an empty margin column, like the template)
+const EVAL_COLUMNS = [
+  { key: null,        header: '',                      width: 3 },
+  { key: 'name',      header: 'NAME（名前）',          width: 36 },
+  { key: 'company',   header: 'COMPANY（会社）',       width: 38 },
+  { key: 'reading',   header: 'READING（読むこと）',   width: 16 },
+  { key: 'listening', header: 'LISTENING（聞くこと）', width: 16 },
+  { key: 'speaking',  header: 'SPEAKING（話すこと）',  width: 16 },
+  { key: 'remarks',   header: 'REMARKS（備考）',       width: 70 },
+  { key: 'from',      header: 'FROM',                  width: 18 },
+  { key: 'to',        header: 'TO',                    width: 18 },
+  { key: 'lesson',    header: 'CURRENT LESSON（現在の課）', width: 22 },
+  { key: 'date',      header: 'EVALUATION DATE（評価日）',  width: 24 },
+];
+
+const evalKumiaiOf = (s) => {
+  if (s.kumiai) return s.kumiai;
+  if (s.companyName === 'Setouchi' || s.companyName === 'WBC') return s.companyName; // legacy records
+  return EVAL_OTHER_KEY;
+};
+const evalKumiaiInfo = (key) =>
+  EVAL_KUMIAI_LIST.find(k => k.key === key) || (key === EVAL_OTHER_KEY
+    ? { key, sheet: 'OTHERS', label: 'OTHER SELECTED STUDENTS' }
+    : { key, sheet: String(key).toUpperCase(), label: String(key).toUpperCase() });
+const evalKumiaiRank = (key) => {
+  const i = EVAL_KUMIAI_LIST.findIndex(k => k.key === key);
+  return i === -1 ? (key === EVAL_OTHER_KEY ? 999 : 500) : i;
+};
+const evalCompanyOf = (s) => {
+  const c = (s.companyName || '').trim();
+  return (!c || c === 'Setouchi' || c === 'WBC') ? '' : c;
+};
+const evalFormatDate = (d) => {
+  if (!d) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
+  return m ? `${EVAL_MONTHS[+m[2] - 1]} ${+m[3]}, ${m[1]}` : String(d);
+};
+const evalNatural = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+const evalScore = (v) => (v === null || v === undefined || v === '' ? '' : Number(v));
+
+// Always the student's LATEST evaluation (newest date; if same date, the one created last)
+const evalPick = (student) => {
+  const evs = (student.evaluations || []).slice();
+  if (!evs.length) return null;
+  evs.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a._id).localeCompare(String(b._id)));
+  return evs[evs.length - 1];
+};
+
+const evalEscape = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Rough row-height estimate so wrapped remarks are fully visible in Excel
+const evalRowHeight = (row) => {
+  const lines = (text, width) => String(text || '').split('\n').reduce((sum, part) => {
+    const len = [...part].reduce((n, ch) => n + (ch.charCodeAt(0) > 255 ? 2 : 1), 0);
+    return sum + Math.max(1, Math.ceil(len / (width * 1.05)));
+  }, 0);
+  const n = Math.max(lines(row.remarks, 70), lines(row.name, 36), row.span === 1 ? lines(row.company, 38) : 1, 1);
+  return Math.max(22, n * 17 + 6);
+};
+
+async function exportEvaluationExcel(report, filename) {
+  const mod = await import('exceljs');
+  const ExcelJS = mod.default || mod;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'SAGE Bulacan';
+  wb.created = new Date();
+
+  const thin = { style: 'thin', color: { argb: 'FF000000' } };
+  const border = { top: thin, left: thin, bottom: thin, right: thin };
+  const LAST = EVAL_COLUMNS.length; // column K
+  const usedNames = new Set();
+
+  report.forEach(sheet => {
+    let name = sheet.info.sheet.replace(/[\\/?*[\]:]/g, '').slice(0, 31) || 'Sheet';
+    let n = 2; const base = name;
+    while (usedNames.has(name)) name = `${base.slice(0, 28)} ${n++}`;
+    usedNames.add(name);
+
+    const ws = wb.addWorksheet(name, {
+      views: [{ state: 'frozen', ySplit: 3 }],
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } },
+    });
+    ws.columns = EVAL_COLUMNS.map(c => ({ width: c.width }));
+    ws.pageSetup.printTitlesRow = '2:3';
+
+    // Title
+    ws.mergeCells(2, 2, 2, LAST);
+    const title = ws.getCell(2, 2);
+    title.value = `EVALUATION OF SELECTED STUDENTS FROM ${sheet.info.label}${sheet.info.ja ? `（${sheet.info.ja}）` : ''}`;
+    title.font = { bold: true, size: 14 };
+    title.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4E4' } };
+    for (let c = 2; c <= LAST; c++) ws.getCell(2, c).border = border;
+    ws.getRow(2).height = 32;
+
+    // Header
+    EVAL_COLUMNS.forEach((col, i) => {
+      if (!col.key) return;
+      const cell = ws.getCell(3, i + 1);
+      cell.value = col.header;
+      cell.font = { bold: true, size: 12 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+      cell.border = border;
+    });
+    ws.getRow(3).height = 34;
+
+    let r = 4;
+    const merges = [];
+    sheet.groups.forEach(g => {
+      // Batch row, e.g. "BATCH 70B (LEVI SENSEI)"
+      merges.push([r, 2, r, LAST]);
+      const bc = ws.getCell(r, 2);
+      bc.value = g.title;
+      bc.font = { bold: true, size: 12 };
+      bc.alignment = { horizontal: 'center', vertical: 'middle' };
+      for (let c = 2; c <= LAST; c++) {
+        const cell = ws.getCell(r, c);
+        cell.border = border;
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+      }
+      ws.getRow(r).height = 24;
+      r++;
+
+      g.rows.forEach(row => {
+        EVAL_COLUMNS.forEach((col, i) => {
+          if (!col.key) return;
+          const cell = ws.getCell(r, i + 1);
+          let v = row[col.key];
+          if (col.key === 'name') v = `${row.no}. ${row.name}`;
+          if (col.key === 'company' && row.span === 0) v = null; // part of merged block
+          if (col.key === 'to' && row.hasEval && !v) v = '-';
+          cell.value = v === '' ? null : v;
+          cell.font = { size: col.key === 'remarks' ? 11 : 12 };
+          cell.alignment = { horizontal: col.key === 'name' ? 'left' : 'center', vertical: 'middle', wrapText: true };
+          cell.border = border;
+          if (col.key === 'lesson' && v) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
+        });
+        if (row.span > 1) merges.push([r, 3, r + row.span - 1, 3]);
+        ws.getRow(r).height = evalRowHeight(row);
+        r++;
+      });
+    });
+    merges.forEach(m => ws.mergeCells(...m));
+  });
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function printEvaluationReport(report) {
+  const tables = report.map((sheet, si) => {
+    const head = EVAL_COLUMNS.filter(c => c.key).map(c => `<th>${evalEscape(c.header)}</th>`).join('');
+    const body = sheet.groups.map(g => {
+      const rows = g.rows.map(row => `<tr>
+        <td class="l">${evalEscape(`${row.no}. ${row.name}`)}</td>
+        ${row.span > 0 ? `<td rowspan="${row.span}">${evalEscape(row.company)}</td>` : ''}
+        <td>${evalEscape(row.reading)}</td><td>${evalEscape(row.listening)}</td><td>${evalEscape(row.speaking)}</td>
+        <td class="rm">${evalEscape(row.remarks)}</td>
+        <td>${evalEscape(row.from)}</td><td>${evalEscape(row.to || (row.hasEval ? '-' : ''))}</td>
+        <td class="${row.lesson ? 'ls' : ''}">${evalEscape(row.lesson)}</td><td>${evalEscape(row.date)}</td>
+      </tr>`).join('');
+      return `<tr class="bt"><td colspan="10">${evalEscape(g.title)}</td></tr>${rows}`;
+    }).join('');
+    const ttl = `EVALUATION OF SELECTED STUDENTS FROM ${sheet.info.label}${sheet.info.ja ? `（${sheet.info.ja}）` : ''}`;
+    return `<table class="${si < report.length - 1 ? 'brk' : ''}">
+      <thead><tr><th colspan="10" class="tt">${evalEscape(ttl)}</th></tr><tr>${head}</tr></thead>
+      <tbody>${body}</tbody></table>`;
+  }).join('');
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Evaluation Report</title><style>
+    @page { size: A4 landscape; margin: 8mm; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: Arial, 'Meiryo', 'Hiragino Sans', 'Noto Sans JP', sans-serif; font-size: 10px; color: #000; margin: 0; }
+    table { border-collapse: collapse; width: 100%; }
+    table.brk { page-break-after: always; }
+    th, td { border: 1px solid #000; padding: 4px 5px; text-align: center; vertical-align: middle; }
+    th { background: #d9d9d9; font-weight: 700; }
+    th.tt { background: #fce4e4; font-size: 12px; padding: 8px; }
+    td.l { text-align: left; white-space: nowrap; }
+    td.rm { white-space: pre-wrap; min-width: 220px; }
+    td.ls { background: #ffff00; }
+    tr.bt td { background: #f2f2f2; font-weight: 700; }
+    tr { page-break-inside: avoid; }
+  </style></head><body>${tables}</body></html>`;
+
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+  setTimeout(() => {
+    try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { window.print(); }
+    setTimeout(() => iframe.remove(), 1500);
+  }, 350);
+}
+
+// students of the same company stay together; students without a company go last
+const evalSortItems = (items) => items.slice().sort((a, b) => {
+  if (!a.company !== !b.company) return a.company ? -1 : 1;
+  return evalNatural(a.company, b.company) || evalNatural(a.student.name, b.student.name);
+});
+
+function EvaluationReportPage({ batches, onClose }) {
+  const [teachers, setTeachers] = useState([]);
+  const [kumiaiFilter, setKumiaiFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('select');
+  const [activeSheet, setActiveSheet] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const initDone = useRef(false);
+
+  useEffect(() => {
+    fetch(`${API}/teachers`).then(r => r.json()).then(d => { if (Array.isArray(d)) setTeachers(d); }).catch(() => {});
+  }, []);
+
+  // Same visibility rules as the PHGIC dashboard: Selected, not archived, batch not hidden
+  const pool = useMemo(() => {
+    const list = [];
+    (batches || []).forEach(b => {
+      if (b.isHiddenFromViewer) return;
+      (b.students || []).forEach(s => {
+        if (s.isArchived || s.status !== 'Selected') return;
+        list.push({ key: `${b._id}:${s._id}`, student: s, batch: b, kumiai: evalKumiaiOf(s), company: evalCompanyOf(s) });
+      });
+    });
+    return list;
+  }, [batches]);
+
+  // Default: pre-check every student who already has an evaluation
+  useEffect(() => {
+    if (initDone.current || pool.length === 0) return;
+    initDone.current = true;
+    setSelected(new Set(pool.filter(p => evalPick(p.student)).map(p => p.key)));
+  }, [pool]);
+
+
+  const kumiaiKeys = useMemo(() =>
+    [...new Set(pool.map(p => p.kumiai))].sort((a, b) => evalKumiaiRank(a) - evalKumiaiRank(b) || evalNatural(a, b)),
+  [pool]);
+
+  const batchTitle = useCallback((batch) => {
+    const name = (batch.name || '').toUpperCase();
+    const teacher = teachers.find(tc => tc._id === batch.teacherId);
+    if (!teacher?.name || /SENSEI/i.test(name)) return name;
+    return `${name} (${teacher.name.toUpperCase()} SENSEI)`;
+  }, [teachers]);
+
+  // kumiai → batch → students (sorted so the same company stays together)
+  const groupPool = useCallback((items) => {
+    const byK = new Map();
+    items.forEach(p => {
+      if (!byK.has(p.kumiai)) byK.set(p.kumiai, new Map());
+      const bm = byK.get(p.kumiai);
+      if (!bm.has(p.batch._id)) bm.set(p.batch._id, { batch: p.batch, items: [] });
+      bm.get(p.batch._id).items.push(p);
+    });
+    return [...byK.keys()]
+      .sort((a, b) => evalKumiaiRank(a) - evalKumiaiRank(b) || evalNatural(a, b))
+      .map(k => ({
+        key: k,
+        info: evalKumiaiInfo(k),
+        groups: [...byK.get(k).values()]
+          .sort((a, b) => evalNatural(a.batch.name, b.batch.name))
+          .map(g => ({ batch: g.batch, items: evalSortItems(g.items) })),
+      }));
+  }, []);
+
+  const report = useMemo(() => {
+    const chosen = pool.filter(p => selected.has(p.key));
+    return groupPool(chosen).map(sheet => ({
+      key: sheet.key,
+      info: sheet.info,
+      groups: sheet.groups.map(g => {
+        const rows = g.items.map((p, i) => {
+          const ev = evalPick(p.student);
+          const f = ev?.fields || {};
+          return {
+            key: p.key, no: i + 1, name: p.student.name || '', company: p.company,
+            reading: evalScore(f.reading), listening: evalScore(f.listening), speaking: evalScore(f.speaking),
+            remarks: f.remarks || '', from: f.from || '', to: f.to || '', lesson: f.currentLesson || '',
+            date: ev ? evalFormatDate(ev.date) : '', hasEval: !!ev, span: 1,
+          };
+        });
+        // merge the COMPANY cell for consecutive students of the same company
+        for (let i = 0; i < rows.length;) {
+          let j = i + 1;
+          while (j < rows.length && rows[i].company && rows[j].company.toLowerCase() === rows[i].company.toLowerCase()) j++;
+          rows[i].span = j - i;
+          for (let x = i + 1; x < j; x++) rows[x].span = 0;
+          i = j;
+        }
+        return { batchId: g.batch._id, title: batchTitle(g.batch), rows };
+      }),
+    }));
+  }, [pool, selected, batchTitle, groupPool]);
+
+  useEffect(() => { if (activeSheet >= report.length) setActiveSheet(0); }, [report.length, activeSheet]);
+
+  const q = search.trim().toLowerCase();
+  const visible = pool.filter(p =>
+    (kumiaiFilter === 'all' || p.kumiai === kumiaiFilter) &&
+    (!q || [p.student.name, p.company, p.batch.name].some(v => (v || '').toLowerCase().includes(q))));
+  const visibleTree = groupPool(visible);
+
+  const toggle = (keys, on) => setSelected(prev => {
+    const next = new Set(prev);
+    keys.forEach(k => (on ? next.add(k) : next.delete(k)));
+    return next;
+  });
+  const allOn = (keys) => keys.length > 0 && keys.every(k => selected.has(k));
+
+  const selectedCount = selected.size;
+  const missingEval = report.reduce((n, s) => n + s.groups.reduce((m, g) => m + g.rows.filter(r => !r.hasEval).length, 0), 0);
+
+  const fileName = () => {
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const scope = report.length === 1 ? `_${report[0].info.sheet.replace(/\s+/g, '_')}` : '';
+    return `EVALUATION_OF_SELECTED_STUDENTS${scope}_${stamp}.xlsx`;
+  };
+
+  const handleDownload = async () => {
+    if (!selectedCount) return alert('Pumili muna ng students na isasama sa Excel file.');
+    setBusy(true);
+    try { await exportEvaluationExcel(report, fileName()); }
+    catch (err) { alert('Hindi ma-generate ang Excel file. Siguraduhing naka-install ang "exceljs" package.\n\n' + (err?.message || err)); }
+    finally { setBusy(false); }
+  };
+  const handlePrint = () => {
+    if (!selectedCount) return alert('Pumili muna ng students na ipi-print.');
+    printEvaluationReport(report);
+  };
+
+  const Box = ({ on, partial }) => (
+    <span className={`evr-box${on ? ' evr-box--on' : partial ? ' evr-box--partial' : ''}`}>
+      {on ? <Check size={13} strokeWidth={3} /> : partial ? <Minus size={13} strokeWidth={3} /> : null}
+    </span>
+  );
+
+  const sheet = report[activeSheet] || report[0];
+
+  return (
+    <div className="evr-page">
+      <style>{`
+        .evr-page { position: fixed; inset: 0; z-index: 2000; background: var(--bg-primary, #f6f3f4); color: var(--text-primary, #1c1c1e); display: flex; flex-direction: column; font-family: inherit; }
+        [data-theme="dark"] .evr-page { background: #121214; color: #f2f2f7; }
+        .evr-top { background: #8B0000; color: #fff; padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px; flex-shrink: 0; }
+        .evr-top-row { display: flex; align-items: center; gap: 12px; }
+        .evr-back { width: 36px; height: 36px; border-radius: 10px; border: none; background: rgba(255,255,255,0.16); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .evr-title { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: 0.2px; }
+        .evr-sub { margin: 2px 0 0; font-size: 12px; opacity: 0.8; }
+        .evr-tabs { display: flex; gap: 6px; margin-top: 12px; background: rgba(0,0,0,0.18); padding: 4px; border-radius: 12px; }
+        .evr-tab { flex: 1; border: none; background: transparent; color: rgba(255,255,255,0.8); padding: 8px 10px; border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
+        .evr-tab--on { background: #fff; color: #8B0000; }
+        .evr-body { flex: 1; overflow-y: auto; padding: 14px 16px 120px; -webkit-overflow-scrolling: touch; }
+        .evr-controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+        .evr-search { display: flex; align-items: center; gap: 8px; background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e5e5ea); border-radius: 12px; padding: 9px 12px; }
+        [data-theme="dark"] .evr-search, [data-theme="dark"] .evr-card, [data-theme="dark"] .evr-select { background: #1c1c1e; border-color: #2c2c2e; color: #f2f2f7; }
+        .evr-search input { border: none; outline: none; background: transparent; flex: 1; font-size: 14px; color: inherit; min-width: 0; }
+        .evr-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .evr-chip { border: 1px solid var(--border-color, #e0d6d9); background: var(--bg-card, #fff); color: inherit; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; }
+        [data-theme="dark"] .evr-chip { background: #1c1c1e; border-color: #3a3a3c; }
+        .evr-chip--on { background: #8B0000 !important; border-color: #8B0000 !important; color: #fff !important; }
+        .evr-select { border: 1px solid var(--border-color, #e5e5ea); background: var(--bg-card, #fff); border-radius: 10px; padding: 7px 10px; font-size: 13px; font-weight: 600; color: inherit; }
+        .evr-label { font-size: 12px; font-weight: 700; color: var(--text-tertiary, #8e8e93); }
+        .evr-link { border: none; background: none; color: #8B0000; font-size: 12px; font-weight: 700; cursor: pointer; padding: 4px 2px; }
+        [data-theme="dark"] .evr-link { color: #ff8a8a; }
+        .evr-k-title { font-size: 12px; font-weight: 800; letter-spacing: 0.6px; color: #8B0000; margin: 18px 0 8px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        [data-theme="dark"] .evr-k-title { color: #ff8a8a; }
+        .evr-card { background: var(--bg-card, #fff); border: 1px solid var(--border-color, #eee5e8); border-radius: 14px; margin-bottom: 10px; overflow: hidden; }
+        .evr-card-head { display: flex; align-items: center; gap: 10px; padding: 11px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color, #f0eaec); font-weight: 800; font-size: 13.5px; }
+        [data-theme="dark"] .evr-card-head, [data-theme="dark"] .evr-stu { border-color: #2c2c2e; }
+        .evr-card-head small { margin-left: auto; font-weight: 600; color: var(--text-tertiary, #8e8e93); font-size: 11.5px; }
+        .evr-stu { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color, #f5f0f2); }
+        .evr-stu:last-child { border-bottom: none; }
+        .evr-stu-name { font-size: 14px; font-weight: 600; margin: 0; }
+        .evr-stu-meta { font-size: 11.5px; color: var(--text-tertiary, #8e8e93); margin: 2px 0 0; display: flex; align-items: center; gap: 4px; }
+        .evr-info { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.45; background: rgba(31,114,68,0.08); color: #1f7244; border-radius: 10px; padding: 9px 12px; }
+        [data-theme="dark"] .evr-info { background: rgba(80,200,130,0.12); color: #7ee0a6; }
+        .evr-stu-remarks { font-size: 12px; color: var(--text-secondary, #5a5a5f); margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        [data-theme="dark"] .evr-stu-remarks { color: #b8b8bf; }
+        .evr-stu > div:nth-child(2) { flex: 1; }
+        .evr-scores { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
+        .evr-score { font-size: 11px; font-weight: 700; background: rgba(139,0,0,0.08); color: #8B0000; border-radius: 6px; padding: 3px 6px; }
+        [data-theme="dark"] .evr-score { background: rgba(255,138,138,0.12); color: #ff9d9d; }
+        .evr-noeval { margin-left: auto; font-size: 10.5px; font-weight: 700; color: #b26a00; background: #fff4e0; border-radius: 6px; padding: 3px 7px; flex-shrink: 0; }
+        .evr-box { width: 20px; height: 20px; border-radius: 6px; border: 2px solid #c9b8bd; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; }
+        .evr-box--on, .evr-box--partial { background: #8B0000; border-color: #8B0000; }
+        .evr-empty { text-align: center; padding: 48px 16px; color: var(--text-tertiary, #8e8e93); font-size: 14px; }
+        .evr-sheet-wrap { background: #fff; border: 1px solid #c8c8c8; border-radius: 6px; overflow: auto; max-height: calc(100vh - 290px); }
+        .evr-sheet { border-collapse: collapse; font-size: 12px; color: #000; min-width: 1180px; width: 100%; font-family: Calibri, Arial, 'Meiryo', sans-serif; }
+        .evr-sheet th, .evr-sheet td { border: 1px solid #9a9a9a; padding: 5px 6px; text-align: center; vertical-align: middle; }
+        .evr-sheet thead th { position: sticky; top: 0; background: #d9d9d9; z-index: 1; font-weight: 700; }
+        .evr-sheet td.l { text-align: left; white-space: nowrap; }
+        .evr-sheet td.rm { white-space: pre-wrap; min-width: 280px; font-size: 11.5px; }
+        .evr-sheet td.ls { background: #ffff00; }
+        .evr-sheet tr.bt td { background: #f2f2f2; font-weight: 700; }
+        .evr-sheet .tt { background: #fce4e4; font-size: 13px; font-weight: 800; padding: 9px; }
+        .evr-sheet .rn { background: #f3f3f3; color: #666; font-size: 10.5px; width: 28px; padding: 0 4px; }
+        .evr-sheet-tabs { display: flex; gap: 2px; overflow-x: auto; margin-top: 8px; }
+        .evr-sheet-tab { border: 1px solid #c8c8c8; border-top: none; background: #ececec; color: #333; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 0 0 6px 6px; cursor: pointer; white-space: nowrap; }
+        .evr-sheet-tab--on { background: #fff; color: #1f7244; font-weight: 800; border-bottom: 3px solid #1f7244; }
+        .evr-note { font-size: 12px; color: #b26a00; background: #fff4e0; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+        .evr-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2001; background: var(--bg-card, #fff); border-top: 1px solid var(--border-color, #e5e5ea); padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 10px); display: flex; align-items: center; gap: 8px; box-shadow: 0 -6px 18px rgba(0,0,0,0.06); }
+        [data-theme="dark"] .evr-bar { background: #1c1c1e; border-color: #2c2c2e; }
+        .evr-count { font-size: 13px; font-weight: 700; margin-right: auto; }
+        .evr-count small { display: block; font-size: 11px; font-weight: 600; color: var(--text-tertiary, #8e8e93); }
+        .evr-btn { border: none; border-radius: 12px; padding: 11px 14px; font-size: 13.5px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .evr-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .evr-btn--print { background: rgba(139,0,0,0.08); color: #8B0000; }
+        [data-theme="dark"] .evr-btn--print { background: rgba(255,138,138,0.12); color: #ff9d9d; }
+        .evr-btn--xls { background: #1f7244; color: #fff; }
+      `}</style>
+
+      <div className="evr-top">
+        <div className="evr-top-row">
+          <button className="evr-back" onClick={onClose} aria-label="Back"><ArrowLeft size={18} /></button>
+          <div style={{ minWidth: 0 }}>
+            <h1 className="evr-title">Evaluation Report</h1>
+            <p className="evr-sub">Piliin ang students → i-preview → i-download o i-print sa Excel format</p>
+          </div>
+        </div>
+        <div className="evr-tabs">
+          <button className={`evr-tab${tab === 'select' ? ' evr-tab--on' : ''}`} onClick={() => setTab('select')}>1. Select students ({selectedCount})</button>
+          <button className={`evr-tab${tab === 'preview' ? ' evr-tab--on' : ''}`} onClick={() => setTab('preview')}>2. Excel preview</button>
+        </div>
+      </div>
+
+      <div className="evr-body">
+        <div className="evr-controls">
+          <div className="evr-info">
+            <CheckCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>Ang <b>pinakahuling (latest) evaluation</b> lang ng bawat student ang ilalagay sa Excel, kasama ang scores at remarks nito.</span>
+          </div>
+          {tab === 'select' && (
+            <>
+              <div className="evr-search">
+                <Search size={15} style={{ color: '#b08c96', flexShrink: 0 }} />
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, company, batch..." />
+                {search && <button className="evr-link" onClick={() => setSearch('')}><X size={14} /></button>}
+              </div>
+              <div className="evr-row">
+                <button className={`evr-chip${kumiaiFilter === 'all' ? ' evr-chip--on' : ''}`} onClick={() => setKumiaiFilter('all')}>All</button>
+                {kumiaiKeys.map(k => (
+                  <button key={k} className={`evr-chip${kumiaiFilter === k ? ' evr-chip--on' : ''}`} onClick={() => setKumiaiFilter(k)}>
+                    {k === EVAL_OTHER_KEY ? 'No Kumiai' : k}
+                  </button>
+                ))}
+              </div>
+              <div className="evr-row">
+                <button className="evr-link" onClick={() => toggle(visible.map(p => p.key), true)}>Select all shown</button>
+                <span style={{ color: '#ccc' }}>·</span>
+                <button className="evr-link" onClick={() => toggle(visible.filter(p => evalPick(p.student)).map(p => p.key), true)}>Select with evaluation</button>
+                <span style={{ color: '#ccc' }}>·</span>
+                <button className="evr-link" onClick={() => toggle(visible.map(p => p.key), false)}>Clear shown</button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {tab === 'select' && (
+          visibleTree.length === 0 ? (
+            <div className="evr-empty"><Users size={38} strokeWidth={1.2} /><p>Walang students na nakita.</p></div>
+          ) : visibleTree.map(k => {
+            const kKeys = k.groups.flatMap(g => g.items.map(p => p.key));
+            const kOn = allOn(kKeys);
+            return (
+              <div key={k.key}>
+                <div className="evr-k-title" onClick={() => toggle(kKeys, !kOn)}>
+                  <Box on={kOn} partial={!kOn && kKeys.some(x => selected.has(x))} />
+                  {k.info.label}
+                </div>
+                {k.groups.map(g => {
+                  const gKeys = g.items.map(p => p.key);
+                  const gOn = allOn(gKeys);
+                  return (
+                    <div key={g.batch._id} className="evr-card">
+                      <div className="evr-card-head" onClick={() => toggle(gKeys, !gOn)}>
+                        <Box on={gOn} partial={!gOn && gKeys.some(x => selected.has(x))} />
+                        <BookOpen size={14} /> {batchTitle(g.batch)}
+                        <small>{gKeys.filter(x => selected.has(x)).length}/{gKeys.length}</small>
+                      </div>
+                      {g.items.map(p => {
+                        const ev = evalPick(p.student);
+                        const f = ev?.fields || {};
+                        const on = selected.has(p.key);
+                        return (
+                          <div key={p.key} className="evr-stu" onClick={() => toggle([p.key], !on)}>
+                            <Box on={on} />
+                            <div style={{ minWidth: 0 }}>
+                              <p className="evr-stu-name">{p.student.name}</p>
+                              <p className="evr-stu-meta"><Building2 size={11} />{p.company || 'No company'}</p>
+                              {ev && (
+                                <p className="evr-stu-meta"><Clock size={11} />Latest: {ev.ordinal} Evaluation · {evalFormatDate(ev.date)}</p>
+                              )}
+                              {ev && f.remarks && <p className="evr-stu-remarks">“{f.remarks}”</p>}
+                            </div>
+                            {ev ? (
+                              <div className="evr-scores">
+                                <span className="evr-score">R {f.reading ?? '—'}</span>
+                                <span className="evr-score">L {f.listening ?? '—'}</span>
+                                <span className="evr-score">S {f.speaking ?? '—'}</span>
+                              </div>
+                            ) : <span className="evr-noeval">No evaluation</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })
+        )}
+
+        {tab === 'preview' && (
+          report.length === 0 ? (
+            <div className="evr-empty"><FileText size={38} strokeWidth={1.2} /><p>Wala pang napiling students. Bumalik sa “Select students”.</p></div>
+          ) : (
+            <>
+              {missingEval > 0 && (
+                <div className="evr-note"><AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 5 }} />
+                  {missingEval} sa napiling students ay wala pang evaluation — blangko ang scores nila sa file.
+                </div>
+              )}
+              <div className="evr-sheet-wrap">
+                <table className="evr-sheet">
+                  <thead>
+                    <tr><th className="rn"></th><th colSpan={10} className="tt" style={{ position: 'static' }}>
+                      EVALUATION OF SELECTED STUDENTS FROM {sheet.info.label}{sheet.info.ja ? `（${sheet.info.ja}）` : ''}
+                    </th></tr>
+                    <tr><th className="rn"></th>{EVAL_COLUMNS.filter(c => c.key).map(c => <th key={c.key}>{c.header}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      let rn = 3;
+                      return sheet.groups.map(g => (
+                        <Fragment key={g.batchId}>
+                          <tr className="bt"><td className="rn">{++rn}</td><td colSpan={10}>{g.title}</td></tr>
+                          {g.rows.map(row => (
+                            <tr key={row.key}>
+                              <td className="rn">{++rn}</td>
+                              <td className="l">{row.no}. {row.name}</td>
+                              {row.span > 0 && <td rowSpan={row.span}>{row.company}</td>}
+                              <td>{row.reading}</td><td>{row.listening}</td><td>{row.speaking}</td>
+                              <td className="rm">{row.remarks}</td>
+                              <td>{row.from}</td><td>{row.to || (row.hasEval ? '-' : '')}</td>
+                              <td className={row.lesson ? 'ls' : ''}>{row.lesson}</td>
+                              <td>{row.date}</td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+              <div className="evr-sheet-tabs">
+                {report.map((s, i) => (
+                  <button key={s.key} className={`evr-sheet-tab${i === activeSheet ? ' evr-sheet-tab--on' : ''}`} onClick={() => setActiveSheet(i)}>
+                    {s.info.sheet}
+                  </button>
+                ))}
+              </div>
+            </>
+          )
+        )}
+      </div>
+
+      <div className="evr-bar">
+        <div className="evr-count">
+          {selectedCount} selected
+          <small>{report.length} sheet{report.length !== 1 ? 's' : ''} · grouped by company</small>
+        </div>
+        <button className="evr-btn evr-btn--print" onClick={handlePrint} disabled={!selectedCount}>
+          <FileText size={15} /> Print
+        </button>
+        <button className="evr-btn evr-btn--xls" onClick={handleDownload} disabled={!selectedCount || busy}>
+          {busy ? <Loader size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Grid size={15} />} {busy ? 'Generating…' : 'Download Excel'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [batches, setBatches] = useState([]);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -3939,6 +4548,7 @@ function App() {
   const pullScrollY = useRef(0);          // window.scrollY at touchstart
   const PULL_THRESHOLD = 80;
   const [showSettings, setShowSettings] = useState(false);
+  const [showEvalReport, setShowEvalReport] = useState(false); // PHGIC evaluation Excel report
   const [showProgressChart, setShowProgressChart] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [progressChartStudent, setProgressChartStudent] = useState(null);
@@ -5186,6 +5796,11 @@ function App() {
                   <button className="tc-menu-item" onClick={() => { setDarkMode(d => !d); setHeaderMenuOpen(false); }}>
                     {darkMode ? <Sun size={14} /> : <Moon size={14} />} {darkMode ? 'Light mode' : 'Dark mode'}
                   </button>
+                  {safeLocalGet(ROLE_KEY) === 'viewer' && (
+                    <button className="tc-menu-item" onClick={() => { setShowEvalReport(true); setHeaderMenuOpen(false); }}>
+                      <Grid size={14} /> Evaluation Report (Excel)
+                    </button>
+                  )}
                   {(safeLocalGet(ROLE_KEY) === 'admin' || isKazumi) && (
                     <button className="tc-menu-item" onClick={() => { setShowSettings(true); setHeaderMenuOpen(false); }}>
                       <Settings size={14} /> Settings
@@ -5455,6 +6070,11 @@ function App() {
             {!isViewer && !isKazumi && (
               <button className="sakura-bottom-btn sakura-bottom-btn--dark" onClick={() => openModal('batch')}>
                 <Plus size={16} /> New Batch
+              </button>
+            )}
+            {safeLocalGet(ROLE_KEY) === 'viewer' && (
+              <button className="sakura-bottom-btn sakura-bottom-btn--dark" onClick={() => setShowEvalReport(true)}>
+                <Grid size={16} /> Evaluation Report
               </button>
             )}
             <button className="sakura-bottom-btn sakura-bottom-btn--accent" onClick={() => setShowQRScanner(true)}>
@@ -7375,6 +7995,12 @@ function App() {
           images={imageViewer.images}
           startIndex={imageViewer.index}
           onClose={() => setImageViewer(null)}
+        />
+      )}
+      {showEvalReport && (
+        <EvaluationReportPage
+          batches={batches}
+          onClose={() => setShowEvalReport(false)}
         />
       )}
       {showSettings && (
