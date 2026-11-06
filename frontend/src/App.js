@@ -9,7 +9,7 @@ import {
   Clock, Folder, Camera, CheckCircle, Loader, Image, File, Layers,
   Users, Grid, Eye, EyeOff, KeyRound, RefreshCw, Lock, Sun, Moon,
   Settings, X, ChevronLeft, ChevronRight, Search, AlertCircle, Flag,
-  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal, MoreVertical, FileX, QrCode
+  BookOpen, Trash2, MoreHorizontal, ArrowLeft, Check, Plus, ArrowRightLeft, PenLine, SlidersHorizontal, MoreVertical, FileX, QrCode, GraduationCap
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BrowserMultiFormatReader } from '@zxing/browser';
@@ -2531,7 +2531,9 @@ function SmartReminders({ batches, onNavigate }) {
   // Compute reminders across all batches
   const reminders = [];
 
-  batches.forEach(batch => {
+  batches
+    .filter(batch => !batch.isGraduated) // graduated batches → walang reminders
+    .forEach(batch => {
     batch.students
       .filter(s => !s.isArchived)
       .forEach(student => {
@@ -6042,6 +6044,40 @@ function App() {
                                 }
                               </button>
                             )}
+                            {!isViewer && !isKazumi && (
+                              <button
+                                className="sakura-card-icon-btn"
+                                title={batch.isGraduated ? 'Graduated — click para ibalik (mag-no-notify ulit)' : 'Mark as Graduated (stop reminders)'}
+                                style={batch.isGraduated ? { background: variant.top } : undefined}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const next = !batch.isGraduated;
+                                  const msg = next
+                                    ? `I-mark ang "${displayName(batch)}" bilang GRADUATED?\n\nTitigil na ang exam at evaluation reminders para sa batch na ito. Hindi mabubura ang records.`
+                                    : `Ibalik ang "${displayName(batch)}" bilang active?\n\nMagno-notify ulit ang reminders para sa batch na ito.`;
+                                  if (!window.confirm(msg)) return;
+                                  try {
+                                    const res = await fetch(`${API}/batches/${batch._id}/graduate`, {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ isGraduated: next }),
+                                    });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      setBatches(prev => prev.map(b =>
+                                        b._id === batch._id ? { ...b, isGraduated: data.isGraduated, graduatedAt: data.graduatedAt } : b
+                                      ));
+                                    } else {
+                                      alert('Graduate toggle failed: ' + (data.error || JSON.stringify(data)));
+                                    }
+                                  } catch (err) {
+                                    alert('Graduate toggle error: ' + err.message);
+                                  }
+                                }}
+                              >
+                                <GraduationCap size={12} style={{ color: batch.isGraduated ? '#fff' : variant.top }} />
+                              </button>
+                            )}
                           </div>
                         </div>
                         <div>
@@ -6050,6 +6086,15 @@ function App() {
                             <Users size={11} />
                             <span>{studentCount} student{studentCount !== 1 ? 's' : ''}</span>
                           </div>
+                          {batch.isGraduated && (
+                            <div style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6,
+                              padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+                              background: variant.tagBg, color: variant.tagText,
+                            }}>
+                              <GraduationCap size={11} /> Graduated · no reminders
+                            </div>
+                          )}
                         </div>
                       </div>
                       <button className="sakura-card-footer" onClick={() => goToStudents(batch)}>
