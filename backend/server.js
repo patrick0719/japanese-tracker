@@ -160,6 +160,8 @@ const batchSchema = new mongoose.Schema({
   name_ja: { type: String, default: '' },
   teacherId: { type: String, default: null },
   isHiddenFromViewer: { type: Boolean, default: false },
+  isGraduated: { type: Boolean, default: false },  // graduated batch → walang reminders
+  graduatedAt: { type: Date, default: null },
   students: [{
     name: String,
     photo: String,
@@ -1315,6 +1317,21 @@ app.patch('/api/batches/:batchId/toggle-hide', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── MARK BATCH AS GRADUATED (stops exam/evaluation reminders) ─────────────────
+// Body: { isGraduated: true | false }  — kapag walang body, i-toggle lang.
+app.patch('/api/batches/:batchId/graduate', async (req, res) => {
+  try {
+    if (!isValidObjectId(req.params.batchId)) return res.status(400).json({ error: 'Invalid batchId' });
+    const batch = await Batch.findById(req.params.batchId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+    const next = typeof req.body.isGraduated === 'boolean' ? req.body.isGraduated : !batch.isGraduated;
+    batch.isGraduated = next;
+    batch.graduatedAt = next ? new Date() : null;
+    await batch.save();
+    res.json({ success: true, isGraduated: batch.isGraduated, graduatedAt: batch.graduatedAt });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── PERMANENT DELETE STUDENT: delete all images + student record ──────────────
 app.delete('/api/archive/permanent/:batchId/:studentId', requireAdmin, async (req, res) => {
   try {
@@ -2005,7 +2022,13 @@ function scheduleDailyReminder() {
 
     try {
       const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const batches = await Batch.find();
+      // Skip graduated batches — hindi na kailangang i-update ang mga students nila.
+      // ($ne: true para kasama pa rin ang lumang batches na wala pang isGraduated field)
+      const batches = await Batch.find({ isGraduated: { $ne: true } });
+
+      // Teacher name lookup (batch only stores teacherId)
+      const teachers = await Teacher.find({}, 'name');
+      const teacherNameById = new Map(teachers.map(t => [t._id.toString(), t.name]));
 
       const flagged = []; // { studentName, batchName, teacherName, daysSince, needsEval }
       batches.forEach(batch => {
@@ -2042,7 +2065,7 @@ function scheduleDailyReminder() {
               flagged.push({
                 studentName:  student.name,
                 batchName:    batch.name,
-                teacherName:  batch.teacherName || 'Unassigned',
+                teacherName:  teacherNameById.get(String(batch.teacherId)) || 'Unassigned',
                 daysSinceExam,
                 hasNoRecentExam,
                 hasNoRecentEval,
