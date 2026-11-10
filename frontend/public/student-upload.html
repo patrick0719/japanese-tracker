@@ -467,17 +467,90 @@
     });
   }
 
+  // ── PHOTO COMPRESSION ──────────────────────────────────────────────────────
+  // Ang raw na camera photo ay 3–10 MB (lalaki pa ng ~33% bilang base64), kaya
+  // sobrang bagal i-upload sa mobile data. Bago i-upload, pinapaliit muna ito sa
+  // max 2000px (malinaw pa rin ang sulat sa exam paper) at JPEG ~75% quality →
+  // karaniwang 300–600 KB na lang bawat page.
+  const MAX_SIDE = 2000;
+  const JPEG_QUALITY = 0.75;
+
+  function readAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Cannot read image'));
+      img.src = src;
+    });
+  }
+
+  async function compressImage(file) {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      // Browsers apply the photo's EXIF rotation automatically when drawing an <img>.
+      const img = await loadImage(objectUrl);
+      const w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h) throw new Error('Empty image');
+      const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+      const cw = Math.round(w * scale), ch = Math.round(h * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; // transparent PNGs → white, not black
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.drawImage(img, 0, 0, cw, ch);
+      const out = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      // Keep whichever is smaller (a tiny original stays as-is)
+      if (file.size && out.length * 0.75 > file.size && /^image\/(jpeg|png|webp)$/.test(file.type)) {
+        return await readAsDataURL(file);
+      }
+      return out;
+    } catch (e) {
+      // Fallback: kung hindi ma-compress (hal. lumang browser), ipadala ang original
+      return await readAsDataURL(file);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  let pendingPhotos = 0; // photos still being compressed
+  function updateSubmitState() {
+    if (pendingPhotos > 0) {
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = '<span class="spinner"></span>写真を準備中... (Preparing photo)';
+    } else if (btnSubmit.dataset.busy !== '1') {
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'アップロード / Upload';
+    }
+  }
+
   photoAddTile.addEventListener('click', () => photoInput.click());
-  photoInput.addEventListener('change', () => {
+  photoInput.addEventListener('change', async () => {
     const file = photoInput.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      photoPages.push(reader.result);
-      renderPhotoGrid();
-    };
-    reader.readAsDataURL(file);
     photoInput.value = ''; // allow picking/capturing the same way again for the next page
+    if (!file) return;
+    pendingPhotos++;
+    updateSubmitState();
+    try {
+      const dataUrl = await compressImage(file);
+      photoPages.push(dataUrl);
+      renderPhotoGrid();
+    } catch (e) {
+      formError.innerHTML = '<div class="error">写真を読み込めませんでした。 (Could not read the photo — please try again)</div>';
+    } finally {
+      pendingPhotos--;
+      updateSubmitState();
+    }
   });
 
   const btnSubmit = document.getElementById('btn-submit');
@@ -497,9 +570,11 @@
     if (isNewCat && !newCategoryName) return formError.innerHTML = '<div class="error">カテゴリー名を入力してください。 (Enter a category name)</div>';
     if (!name) return formError.innerHTML = '<div class="error">試験名を入力してください。 (Enter the exam name)</div>';
     if (photoPages.length === 0) return formError.innerHTML = '<div class="error">写真を1枚以上選んでください。 (Please add at least one photo)</div>';
+    if (pendingPhotos > 0) return; // still compressing — button is disabled anyway
 
+    btnSubmit.dataset.busy = '1';
     btnSubmit.disabled = true;
-    btnSubmit.innerHTML = '<span class="spinner"></span>送信中...';
+    btnSubmit.innerHTML = `<span class="spinner"></span>送信中... (${photoPages.length} page${photoPages.length > 1 ? 's' : ''})`;
     try {
       const res = await fetch(`${API}/student-upload/${uploadToken}/exam`, {
         method: 'POST',
@@ -532,6 +607,7 @@
     } catch (e) {
       formError.innerHTML = `<div class="error">接続エラー: ${(e.message || '').replace(/</g, '&lt;')} (Network/CORS error — check console)</div>`;
     } finally {
+      btnSubmit.dataset.busy = '';
       btnSubmit.disabled = false;
       btnSubmit.textContent = 'アップロード / Upload';
     }

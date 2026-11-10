@@ -162,6 +162,9 @@ const batchSchema = new mongoose.Schema({
   isHiddenFromViewer: { type: Boolean, default: false },
   isGraduated: { type: Boolean, default: false },  // graduated batch → walang reminders
   graduatedAt: { type: Date, default: null },
+  // Huling beses na may student self-upload (QR) sa batch na 'to. Binabantayan ng
+  // teacher app para kusang mag-refresh kapag may bagong upload.
+  lastStudentUploadAt: { type: Date, default: null },
   students: [{
     name: String,
     photo: String,
@@ -193,6 +196,8 @@ const batchSchema = new mongoose.Schema({
     }]
   }]
 });
+// Para mabilis mahanap ang student gamit ang QR upload token (hindi na i-scan lahat ng batch)
+batchSchema.index({ 'students.uploadToken': 1 });
 const Batch = mongoose.model('Batch', batchSchema);
 
 // ── IMAGE MODEL & ROUTES (Cloudinary storage) ─────────────────────────────────
@@ -580,11 +585,17 @@ const signStudentSession = (uploadToken, pin) => {
   return `${body}.${sig}`;
 };
 
+// Loads ONLY the matching student (positional projection) instead of the whole
+// batch with every student's exams/evaluations — much lighter per request.
+// Read-only: the returned docs are not meant to be .save()d.
 const findStudentByUploadToken = async (uploadToken) => {
-  if (!uploadToken) return null;
-  const batch = await Batch.findOne({ 'students.uploadToken': uploadToken });
+  if (!uploadToken || typeof uploadToken !== 'string') return null;
+  const batch = await Batch.findOne(
+    { 'students.uploadToken': uploadToken },
+    { name: 1, 'students.$': 1 }
+  ).lean();
   if (!batch) return null;
-  const student = batch.students.find(s => s.uploadToken === uploadToken);
+  const student = (batch.students || []).find(s => s.uploadToken === uploadToken);
   if (!student) return null;
   return { batch, student };
 };
@@ -631,7 +642,7 @@ app.post('/api/student-upload/:token/exam', rateLimit({ windowMs: 60_000, max: 2
   try {
     const session = await verifyStudentSession(getBearer(req), req.params.token);
     if (!session) return res.status(401).json({ error: 'session_expired' });
-    const { batch, student } = session;
+    const { batch, student } = session; // lean, read-only — writes go through updateOne below
 
     // Accept either a single `image` (backward compat) or an `images` array
     // (multiple pages of the same exam).
@@ -646,26 +657,14 @@ app.post('/api/student-upload/:token/exam', rateLimit({ windowMs: 60_000, max: 2
     const dateInput = req.body.date;
     const date = (dateInput && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) ? dateInput : new Date().toISOString().split('T')[0];
 
-    let cat;
     const categoryId = sanitizeStr(req.body.categoryId, 50);
     const newCategoryName = sanitizeStr(req.body.newCategoryName, 200);
+    let existingCat = null;
     if (categoryId) {
-      cat = student.categories.id(categoryId);
-      if (!cat) return res.status(404).json({ error: 'Category not found' });
-    } else if (newCategoryName) {
-      student.categories.push({ name: newCategoryName, name_ja: '', items: [] });
-      cat = student.categories[student.categories.length - 1];
-    } else {
+      existingCat = (student.categories || []).find(c => c._id.toString() === categoryId);
+      if (!existingCat) return res.status(404).json({ error: 'Category not found' });
+    } else if (!newCategoryName) {
       return res.status(400).json({ error: 'Category is required' });
-    }
-
-    // Upload every page to Cloudinary, in order
-    const imageIds = [];
-    for (const dataUrl of images) {
-      const { url, publicId } = await cloudinaryUpload(dataUrl);
-      const img = new Image({ url, publicId });
-      await img.save();
-      imageIds.push(img._id.toString());
     }
 
     // Total score / score can come from a scanned exam QR or manual entry (Quick
@@ -675,15 +674,72 @@ app.post('/api/student-upload/:token/exam', rateLimit({ windowMs: 60_000, max: 2
     if (score === null) score = 0;
     if (score > totalScore) score = totalScore;
 
-    cat.items.push({ name, name_ja, date, score, totalScore, images: imageIds });
-    batch.markModified('students');
-    await batch.save();
+    // Upload all pages to Cloudinary AT THE SAME TIME (dati isa-isa → ang bagal
+    // kapag maraming pages). Promise.all keeps the page order.
+    const uploaded = await Promise.all(images.map(dataUrl => cloudinaryUpload(dataUrl)));
+    const imgDocs = await Image.insertMany(uploaded.map(({ url, publicId }) => ({ url, publicId })));
+    const imageIds = imgDocs.map(d => d._id.toString());
 
-    res.json({ success: true, category: { _id: cat._id.toString(), name: cat.name }, pages: imageIds.length });
+    const item = { _id: new mongoose.Types.ObjectId(), name, name_ja, date, score, totalScore, images: imageIds };
+    const studentId = student._id;
+    const now = new Date();
+
+    // Atomic write: $push the new exam straight into this student's category.
+    // Dati, binubuksan at sine-save ang BUONG batch (lahat ng students) — mabagal,
+    // at kapag sabay-sabay nag-upload ang mga students sa iisang batch, napapatungan
+    // ng isa ang upload ng iba kaya "success" sa phone pero wala sa app.
+    let catOut;
+    let result;
+    if (existingCat) {
+      result = await Batch.updateOne(
+        { _id: batch._id },
+        {
+          $push: { 'students.$[s].categories.$[c].items': item },
+          $set: { lastStudentUploadAt: now },
+        },
+        { arrayFilters: [{ 's._id': studentId }, { 'c._id': existingCat._id }] }
+      );
+      catOut = { _id: existingCat._id.toString(), name: existingCat.name };
+    } else {
+      const newCat = { _id: new mongoose.Types.ObjectId(), name: newCategoryName, name_ja: '', items: [item] };
+      result = await Batch.updateOne(
+        { _id: batch._id },
+        {
+          $push: { 'students.$[s].categories': newCat },
+          $set: { lastStudentUploadAt: now },
+        },
+        { arrayFilters: [{ 's._id': studentId }] }
+      );
+      catOut = { _id: newCat._id.toString(), name: newCat.name };
+    }
+    if (!result || result.modifiedCount !== 1) {
+      throw new Error('Exam was not saved (student or category not found). Please try again.');
+    }
+
+    res.json({ success: true, category: catOut, pages: imageIds.length });
   } catch (err) {
     console.error('[student self-upload]', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Teacher app: magaan na "may bago ba?" check. Ibinabalik lang ang _id ng mga batch
+// na may student self-upload mula `since` (ms, galing din sa server `now`), para
+// alam ng app kung kailangan nitong i-refresh ang data — hindi na kailangang i-reload.
+app.get('/api/student-upload-changes', rateLimit({ windowMs: 60_000, max: 120 }), async (req, res) => {
+  try {
+    const now = Date.now();
+    const since = Number(req.query.since);
+    if (!since || isNaN(since)) return res.json({ now, changes: [] });
+    const changed = await Batch.find(
+      { lastStudentUploadAt: { $gt: new Date(since) } },
+      { _id: 1, lastStudentUploadAt: 1 }
+    ).lean();
+    res.json({
+      now,
+      changes: changed.map(b => ({ batchId: b._id.toString(), at: new Date(b.lastStudentUploadAt).getTime() })),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/teachers', async (req, res) => {

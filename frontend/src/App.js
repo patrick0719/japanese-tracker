@@ -4520,6 +4520,7 @@ function App() {
   const [imageViewer, setImageViewer] = useState(null); // { images, index }
   const [resolvedImages, setResolvedImages] = useState({}); // imageId -> base64
   const imageCache = useRef({}); // in-memory cache
+  const lastFetchTeacherIdRef = useRef(undefined); // teacherId ng huling fetchBatches (para sa auto-refresh)
   const [selectedCategory, setSelectedCategory] = useState(null);
   // ── Exam reorder (long-press drag-and-drop) ───────────────────────────────
   const [reorderMode, setReorderMode] = useState(false);
@@ -4704,6 +4705,7 @@ function App() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       const url = teacherId ? `${API}/batches?teacherId=${teacherId}` : `${API}/batches`;
+      lastFetchTeacherIdRef.current = teacherId || null; // para alam ng auto-refresh kung ano ang ire-reload
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       const data = await res.json();
@@ -4727,6 +4729,106 @@ function App() {
       setLoading(false);
     }
   };
+
+  // ── AUTO-REFRESH: STUDENT QR UPLOADS ────────────────────────────────────────
+  // Dati, isang beses lang kinukuha ang batches pagbukas ng app, kaya hindi
+  // lumalabas ang bagong upload ng student hangga't hindi nire-reload ang page.
+  // Ngayon: tuwing ~20s (at pagbalik sa tab), magaan na check sa server kung may
+  // bagong student upload; kung meron sa mga batch na hawak natin, tahimik na
+  // nire-refresh ang data at ang kasalukuyang bukas na screen.
+  const batchesRef = useRef(batches);
+  batchesRef.current = batches;
+  const selectedStudentRef = useRef(selectedStudent);
+  selectedStudentRef.current = selectedStudent;
+  const uploadSinceRef = useRef(null);   // server time ng huling check
+  const seenUploadAtRef = useRef({});    // batchId → huling nakitang upload time
+  const silentRefreshingRef = useRef(false);
+
+  const silentRefreshBatches = useCallback(async () => {
+    if (silentRefreshingRef.current || lastFetchTeacherIdRef.current === undefined) return;
+    silentRefreshingRef.current = true;
+    try {
+      const teacherId = lastFetchTeacherIdRef.current;
+      const url = teacherId ? `${API}/batches?teacherId=${teacherId}` : `${API}/batches`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data)) return;
+      data.sort((a, b) => (b._id > a._id ? 1 : -1));
+      setBatches(data);
+      // I-update din ang bukas na batch / student / category / exam para makita agad
+      const freshBatchOf = (b) => (b ? data.find(x => x._id === b._id) || b : b);
+      const freshStudentOf = (s) => {
+        if (!s) return s;
+        for (const b of data) {
+          const st = (b.students || []).find(x => x._id === s._id);
+          if (st) return st;
+        }
+        return s;
+      };
+      setSelectedBatch(prev => freshBatchOf(prev));
+      const freshStudent = freshStudentOf(selectedStudentRef.current);
+      if (freshStudent) {
+        setSelectedStudent(prev => (prev && prev._id === freshStudent._id ? freshStudent : prev));
+        setSelectedCategory(prevCat => {
+          if (!prevCat) return prevCat;
+          return (freshStudent.categories || []).find(c => c._id === prevCat._id) || prevCat;
+        });
+      }
+    } catch {
+      // tahimik lang — susubukan ulit sa susunod na check
+    } finally {
+      silentRefreshingRef.current = false;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let stopped = false;
+
+    const checkForStudentUploads = async () => {
+      if (stopped || document.visibilityState !== 'visible') return;
+      if (lastFetchTeacherIdRef.current === undefined) return; // wala pang na-load na batches
+      try {
+        let since = uploadSinceRef.current;
+        if (!since) {
+          // First run: kunin ang server time bilang panimulang punto (iwas clock mismatch)
+          const r0 = await fetch(`${API}/student-upload-changes`);
+          const d0 = await r0.json();
+          if (!d0 || !d0.now) return;
+          since = uploadSinceRef.current = d0.now;
+        }
+        // 60s overlap para hindi makaligtaan ang upload na natapos habang nagche-check
+        const res = await fetch(`${API}/student-upload-changes?since=${since - 60000}`);
+        if (!res.ok) return;
+        const d = await res.json();
+        if (d && d.now) uploadSinceRef.current = d.now;
+        const myBatchIds = new Set((batchesRef.current || []).map(b => b._id));
+        let needsRefresh = false;
+        (d.changes || []).forEach(({ batchId, at }) => {
+          if ((seenUploadAtRef.current[batchId] || 0) >= at) return;
+          seenUploadAtRef.current[batchId] = at;
+          if (myBatchIds.has(batchId)) needsRefresh = true;
+        });
+        if (needsRefresh) await silentRefreshBatches();
+      } catch {
+        // offline o server error — subukan ulit mamaya
+      }
+    };
+
+    checkForStudentUploads();
+    const intervalId = setInterval(checkForStudentUploads, 20000);
+    const onVisible = () => { if (document.visibilityState === 'visible') checkForStudentUploads(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      stopped = true;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [isLoggedIn, silentRefreshBatches]);
 
   useEffect(() => {
     if (!pendingDeepLink || batches.length === 0) return;
