@@ -7513,6 +7513,7 @@ function App() {
                       <option value="Green Services">Green Services</option>
                       <option value="Asari Group">Asari Group</option>
                       <option value="Fujie">Fujie</option>
+                      <option value="Chubu">Chubu</option>
                     </select>
                   </div>
                   <div className="form-group">
@@ -7540,6 +7541,7 @@ function App() {
                         <option value="LWC CORPORATION">LWC CORPORATION</option>
                         <option value="M FARM CO., LTD">M FARM CO., LTD</option>
                         <option value="MIYABI CORPORATION">MIYABI CORPORATION</option>
+                        <option value="MORITA MASAKATSU">MORITA MASAKATSU</option>
                         <option value="MT SHOJI CO., LTD ">MT SHOJI CO., LTD </option>
                         <option value="NAKAGAWA MANUFACTURING CO., LTD">NAKAGAWA MANUFACTURING CO., LTD</option>
                         <option value="NARIMATSU MASANAO">NARIMATSU MASANAO</option>
@@ -7597,6 +7599,12 @@ function App() {
                         style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
                         <option value="">— Select Company —</option>
                         <option value="KINOSHITA KENSETSU">KINOSHITA KENSETSU</option>
+                      </select>
+                    ) : newKumiai === 'Chubu' ? (
+                      <select value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e5e5ea', fontSize: 15, background: '#fff' }}>
+                        <option value="">— Select Company —</option>
+                        <option value="HANAGAIKE">HANAGAIKE</option>
                       </select>
                     ) : newKumiai === 'WBC' ? (
                       <select value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)}
