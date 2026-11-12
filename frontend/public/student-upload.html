@@ -121,6 +121,63 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .screen { display: none; }
   .screen.active { display: block; }
+
+  /* Edit (crop) button on each page thumbnail */
+  .photo-thumb img { cursor: pointer; }
+  .photo-thumb .edit-btn {
+    position: absolute; left: 4px; right: 4px; bottom: 4px; padding: 4px 0;
+    border: none; border-radius: 6px; background: rgba(0,0,0,0.65); color: #fff;
+    font-size: 10px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+
+  /* ── CROP SCREEN ── */
+  .crop-modal {
+    position: fixed; inset: 0; z-index: 1000; background: #111; color: #fff;
+    display: none; flex-direction: column; height: 100vh; height: 100dvh;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  .crop-modal.open { display: flex; }
+  .crop-head { padding: 14px 16px 8px; text-align: center; flex: 0 0 auto; }
+  .crop-head .t { font-size: 15px; font-weight: 700; }
+  .crop-head .s { font-size: 12px; color: #aaa; margin-top: 2px; }
+  .crop-stage {
+    flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center;
+    padding: 18px; overflow: hidden;
+  }
+  .crop-frame { position: relative; line-height: 0; }
+  .crop-frame canvas { display: block; }
+  .crop-box {
+    position: absolute; border: 2px solid #fff; cursor: move; touch-action: none;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.6);
+  }
+  .crop-box::before, .crop-box::after { /* rule-of-thirds guides */
+    content: ""; position: absolute; pointer-events: none; border: 0 solid rgba(255,255,255,0.35);
+  }
+  .crop-box::before { left: 33.33%; right: 33.33%; top: 0; bottom: 0; border-left-width: 1px; border-right-width: 1px; }
+  .crop-box::after { top: 33.33%; bottom: 33.33%; left: 0; right: 0; border-top-width: 1px; border-bottom-width: 1px; }
+  .crop-h { position: absolute; width: 28px; height: 28px; touch-action: none; z-index: 2; }
+  .crop-h::after { content: ""; position: absolute; width: 14px; height: 14px; background: #fff; border-radius: 3px; left: 7px; top: 7px; box-shadow: 0 0 3px rgba(0,0,0,0.5); }
+  .crop-h[data-h="nw"] { left: -15px; top: -15px; cursor: nwse-resize; }
+  .crop-h[data-h="ne"] { right: -15px; top: -15px; cursor: nesw-resize; }
+  .crop-h[data-h="sw"] { left: -15px; bottom: -15px; cursor: nesw-resize; }
+  .crop-h[data-h="se"] { right: -15px; bottom: -15px; cursor: nwse-resize; }
+  .crop-h[data-h="n"] { left: calc(50% - 14px); top: -15px; cursor: ns-resize; }
+  .crop-h[data-h="s"] { left: calc(50% - 14px); bottom: -15px; cursor: ns-resize; }
+  .crop-h[data-h="w"] { top: calc(50% - 14px); left: -15px; cursor: ew-resize; }
+  .crop-h[data-h="e"] { top: calc(50% - 14px); right: -15px; cursor: ew-resize; }
+  .crop-h[data-h="n"]::after, .crop-h[data-h="s"]::after { width: 22px; height: 6px; left: 3px; top: 11px; }
+  .crop-h[data-h="w"]::after, .crop-h[data-h="e"]::after { width: 6px; height: 22px; left: 11px; top: 3px; }
+  .crop-tools { display: flex; gap: 10px; justify-content: center; padding: 0 16px 10px; flex: 0 0 auto; }
+  .crop-tools button {
+    background: #2a2a2c; color: #fff; border: 1px solid #3a3a3c; border-radius: 999px;
+    padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .crop-actions {
+    display: flex; gap: 10px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); flex: 0 0 auto;
+    max-width: 440px; width: 100%; margin: 0 auto;
+  }
+  .crop-actions button { flex: 1; margin: 0; }
+  .crop-actions .btn-secondary { background: transparent; color: #fff; border-color: #555; }
 </style>
 </head>
 <body>
@@ -232,6 +289,32 @@
       <button class="btn-primary" id="btn-again">もう一枚 / Upload Another</button>
     </div>
 
+  </div>
+</div>
+
+<!-- CROP SCREEN: lumalabas pagkakuha/pagkapili ng photo -->
+<div class="crop-modal" id="crop-modal" aria-hidden="true">
+  <div class="crop-head">
+    <div class="t">トリミング / Crop</div>
+    <div class="s">枠をドラッグして試験用紙だけを選んでください<br/>Drag the corners so only the exam paper is inside</div>
+  </div>
+  <div class="crop-stage" id="crop-stage">
+    <div class="crop-frame" id="crop-frame">
+      <canvas id="crop-canvas"></canvas>
+      <div class="crop-box" id="crop-box" data-h="move">
+        <div class="crop-h" data-h="nw"></div><div class="crop-h" data-h="n"></div><div class="crop-h" data-h="ne"></div>
+        <div class="crop-h" data-h="w"></div><div class="crop-h" data-h="e"></div>
+        <div class="crop-h" data-h="sw"></div><div class="crop-h" data-h="s"></div><div class="crop-h" data-h="se"></div>
+      </div>
+    </div>
+  </div>
+  <div class="crop-tools">
+    <button type="button" id="crop-rotate">↻ 回転 / Rotate</button>
+    <button type="button" id="crop-reset">⟲ リセット / Reset</button>
+  </div>
+  <div class="crop-actions">
+    <button type="button" class="btn-secondary" id="crop-cancel">キャンセル / Cancel</button>
+    <button type="button" class="btn-primary" id="crop-done">✓ 完了 / Done</button>
   </div>
 </div>
 
@@ -445,6 +528,7 @@
   const photoGrid = document.getElementById('photo-grid');
   const photoAddTile = document.getElementById('photo-add-tile');
   let photoPages = []; // array of data URLs, one per page
+  let pageMeta = [];   // per page: { file, rotation, norm } — para ma-crop ulit; null kung hindi ma-edit
 
   function renderPhotoGrid() {
     // Remove existing thumbs, keep the add-tile
@@ -456,14 +540,24 @@
         <img src="${dataUrl}" />
         <span class="page-num">${i + 1}</span>
         <button type="button" class="remove-btn" data-idx="${i}">✕</button>
+        ${pageMeta[i] ? `<button type="button" class="edit-btn" data-idx="${i}">✂ 編集 / Crop</button>` : ''}
       `;
       photoGrid.insertBefore(thumb, photoAddTile);
     });
     photoGrid.querySelectorAll('.remove-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        photoPages.splice(parseInt(btn.dataset.idx), 1);
+        const idx = parseInt(btn.dataset.idx);
+        photoPages.splice(idx, 1);
+        pageMeta.splice(idx, 1);
         renderPhotoGrid();
       });
+    });
+    photoGrid.querySelectorAll('.photo-thumb').forEach((thumb, i) => {
+      const open = () => editPage(i);
+      const img = thumb.querySelector('img');
+      const eb = thumb.querySelector('.edit-btn');
+      if (eb) eb.addEventListener('click', open);
+      if (img && pageMeta[i]) img.addEventListener('click', open);
     });
   }
 
@@ -493,37 +587,221 @@
     });
   }
 
-  async function compressImage(file) {
+  // ── CROP + ROTATE ─────────────────────────────────────────────────────────
+  // Crop rect is kept NORMALIZED (0–1) in the rotated image's space, so it
+  // survives screen resizes and can be re-opened later from the thumbnail.
+  const FULL = { x: 0, y: 0, w: 1, h: 1 };
+  const cropModal = document.getElementById('crop-modal');
+  const cropStage = document.getElementById('crop-stage');
+  const cropFrame = document.getElementById('crop-frame');
+  const cropCanvas = document.getElementById('crop-canvas');
+  const cropBox = document.getElementById('crop-box');
+  let cropState = null; // { img, rotation, norm, dw, dh, resolve }
+  let drag = null;
+
+  const rotatedSize = (img, rot) =>
+    (rot % 180 !== 0) ? [img.naturalHeight, img.naturalWidth] : [img.naturalWidth, img.naturalHeight];
+
+  function drawRotated(ctx, img, rot, rw, rh) {
+    ctx.translate(rw / 2, rh / 2);
+    ctx.rotate(rot * Math.PI / 180);
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  }
+
+  // Final image for upload: crop + rotate + shrink to MAX_SIDE, JPEG
+  function renderPage(img, rot, norm) {
+    const [rw, rh] = rotatedSize(img, rot);
+    const cx = norm.x * rw, cy = norm.y * rh, cw = norm.w * rw, ch = norm.h * rh;
+    const scale = Math.min(1, MAX_SIDE / Math.max(cw, ch));
+    const ow = Math.max(1, Math.round(cw * scale)), oh = Math.max(1, Math.round(ch * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = ow;
+    canvas.height = oh;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; // transparent PNGs → white, not black
+    ctx.fillRect(0, 0, ow, oh);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+    drawRotated(ctx, img, rot, rw, rh);
+    return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+  }
+
+  function placeCropBox() {
+    const s = cropState, n = s.norm;
+    cropBox.style.left = (n.x * s.dw) + 'px';
+    cropBox.style.top = (n.y * s.dh) + 'px';
+    cropBox.style.width = (n.w * s.dw) + 'px';
+    cropBox.style.height = (n.h * s.dh) + 'px';
+  }
+
+  function layoutCropper() {
+    const s = cropState;
+    if (!s) return;
+    const [rw, rh] = rotatedSize(s.img, s.rotation);
+    const cs = getComputedStyle(cropStage);
+    const availW = cropStage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const availH = cropStage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const scale = Math.min(availW / rw, availH / rh);
+    const dw = Math.max(1, Math.floor(rw * scale)), dh = Math.max(1, Math.floor(rh * scale));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cropCanvas.width = Math.round(dw * dpr);
+    cropCanvas.height = Math.round(dh * dpr);
+    cropCanvas.style.width = dw + 'px';
+    cropCanvas.style.height = dh + 'px';
+    const ctx = cropCanvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+    ctx.scale((dw * dpr) / rw, (dh * dpr) / rh);
+    drawRotated(ctx, s.img, s.rotation, rw, rh);
+    s.dw = dw;
+    s.dh = dh;
+    placeCropBox();
+  }
+
+  // Opens the crop screen. Resolves { rotation, norm } on Done, or null on Cancel.
+  function openCropper(img, rotation, norm) {
+    return new Promise(resolve => {
+      cropState = { img, rotation: rotation || 0, norm: { ...(norm || FULL) }, dw: 1, dh: 1, resolve };
+      cropModal.classList.add('open');
+      cropModal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      requestAnimationFrame(layoutCropper);
+    });
+  }
+
+  function closeCropper(result) {
+    const s = cropState;
+    cropState = null;
+    drag = null;
+    cropModal.classList.remove('open');
+    cropModal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    if (s) s.resolve(result);
+  }
+
+  window.addEventListener('resize', () => { if (cropState) layoutCropper(); });
+
+  document.getElementById('crop-cancel').addEventListener('click', () => closeCropper(null));
+  document.getElementById('crop-done').addEventListener('click', () => {
+    if (!cropState) return;
+    closeCropper({ rotation: cropState.rotation, norm: { ...cropState.norm } });
+  });
+  document.getElementById('crop-reset').addEventListener('click', () => {
+    if (!cropState) return;
+    cropState.rotation = 0;
+    cropState.norm = { ...FULL };
+    layoutCropper();
+  });
+  document.getElementById('crop-rotate').addEventListener('click', () => {
+    if (!cropState) return;
+    const n = cropState.norm;
+    // Rotate 90° clockwise — the crop box turns with the photo
+    cropState.norm = { x: 1 - (n.y + n.h), y: n.x, w: n.h, h: n.w };
+    cropState.rotation = (cropState.rotation + 90) % 360;
+    layoutCropper();
+  });
+
+  // Drag the box (move) or a handle (resize)
+  cropFrame.addEventListener('pointerdown', e => {
+    if (!cropState) return;
+    const h = e.target.dataset && e.target.dataset.h;
+    if (!h) return;
+    e.preventDefault();
+    const s = cropState, n = s.norm;
+    drag = {
+      h, id: e.pointerId, sx: e.clientX, sy: e.clientY,
+      b: { x: n.x * s.dw, y: n.y * s.dh, w: n.w * s.dw, h: n.h * s.dh },
+    };
+    try { cropFrame.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  cropFrame.addEventListener('pointermove', e => {
+    if (!drag || !cropState || e.pointerId !== drag.id) return;
+    e.preventDefault();
+    const s = cropState, b = drag.b, dw = s.dw, dh = s.dh;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    const MIN = Math.min(40, dw, dh);
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    let x = b.x, y = b.y, w = b.w, hh = b.h;
+    if (drag.h === 'move') {
+      x = clamp(b.x + dx, 0, dw - b.w);
+      y = clamp(b.y + dy, 0, dh - b.h);
+    } else {
+      if (drag.h.includes('w')) { x = clamp(b.x + dx, 0, b.x + b.w - MIN); w = b.x + b.w - x; }
+      if (drag.h.includes('e')) { w = clamp(b.w + dx, MIN, dw - b.x); }
+      if (drag.h.includes('n')) { y = clamp(b.y + dy, 0, b.y + b.h - MIN); hh = b.y + b.h - y; }
+      if (drag.h.includes('s')) { hh = clamp(b.h + dy, MIN, dh - b.y); }
+    }
+    s.norm = { x: x / dw, y: y / dh, w: w / dw, h: hh / dh };
+    placeCropBox();
+  });
+  const endDrag = e => { if (drag && (!e || e.pointerId === drag.id)) drag = null; };
+  cropFrame.addEventListener('pointerup', endDrag);
+  cropFrame.addEventListener('pointercancel', endDrag);
+
+  const isFull = (rot, n) => rot === 0 && n.x < 0.001 && n.y < 0.001 && n.w > 0.999 && n.h > 0.999;
+
+  // Turn a picked file + crop settings into the upload-ready data URL
+  async function finalizePage(file, img, rotation, norm) {
+    const out = renderPage(img, rotation, norm);
+    // Walang crop/rotate at mas maliit pa ang original → gamitin na lang ang original
+    if (isFull(rotation, norm) && file.size && out.length * 0.75 > file.size && /^image\/(jpeg|png|webp)$/.test(file.type)) {
+      return await readAsDataURL(file);
+    }
+    return out;
+  }
+
+  // Adds a new page: open crop screen first. Returns false if the student cancelled.
+  async function addPageFromFile(file) {
     const objectUrl = URL.createObjectURL(file);
     try {
-      // Browsers apply the photo's EXIF rotation automatically when drawing an <img>.
-      const img = await loadImage(objectUrl);
-      const w = img.naturalWidth, h = img.naturalHeight;
-      if (!w || !h) throw new Error('Empty image');
-      const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
-      const cw = Math.round(w * scale), ch = Math.round(h * scale);
-      const canvas = document.createElement('canvas');
-      canvas.width = cw;
-      canvas.height = ch;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#ffffff'; // transparent PNGs → white, not black
-      ctx.fillRect(0, 0, cw, ch);
-      ctx.drawImage(img, 0, 0, cw, ch);
-      const out = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-      // Keep whichever is smaller (a tiny original stays as-is)
-      if (file.size && out.length * 0.75 > file.size && /^image\/(jpeg|png|webp)$/.test(file.type)) {
-        return await readAsDataURL(file);
+      let img;
+      try {
+        // Browsers apply the photo's EXIF rotation automatically when drawing an <img>.
+        img = await loadImage(objectUrl);
+        if (!img.naturalWidth || !img.naturalHeight) throw new Error('Empty image');
+      } catch (e) {
+        // Hindi mabasa ng browser (hal. lumang phone) → ipadala ang original, walang crop
+        photoPages.push(await readAsDataURL(file));
+        pageMeta.push(null);
+        renderPhotoGrid();
+        return true;
       }
-      return out;
-    } catch (e) {
-      // Fallback: kung hindi ma-compress (hal. lumang browser), ipadala ang original
-      return await readAsDataURL(file);
+      const res = await openCropper(img, 0, FULL);
+      if (!res) return false;
+      photoPages.push(await finalizePage(file, img, res.rotation, res.norm));
+      pageMeta.push({ file, rotation: res.rotation, norm: res.norm });
+      renderPhotoGrid();
+      return true;
     } finally {
       URL.revokeObjectURL(objectUrl);
     }
   }
 
-  let pendingPhotos = 0; // photos still being compressed
+  // Re-crop an already-added page (from the original photo, not the cropped one)
+  async function editPage(i) {
+    const meta = pageMeta[i];
+    if (!meta || pendingPhotos > 0 || btnSubmit.dataset.busy === '1') return;
+    pendingPhotos++;
+    updateSubmitState();
+    const objectUrl = URL.createObjectURL(meta.file);
+    try {
+      const img = await loadImage(objectUrl);
+      const res = await openCropper(img, meta.rotation, meta.norm);
+      if (!res) return;
+      photoPages[i] = await finalizePage(meta.file, img, res.rotation, res.norm);
+      pageMeta[i] = { file: meta.file, rotation: res.rotation, norm: res.norm };
+      renderPhotoGrid();
+    } catch (e) {
+      formError.innerHTML = '<div class="error">写真を読み込めませんでした。 (Could not open the photo — please try again)</div>';
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+      pendingPhotos--;
+      updateSubmitState();
+    }
+  }
+
+  let pendingPhotos = 0; // photos still being cropped/compressed
   function updateSubmitState() {
     if (pendingPhotos > 0) {
       btnSubmit.disabled = true;
@@ -534,17 +812,16 @@
     }
   }
 
-  photoAddTile.addEventListener('click', () => photoInput.click());
+  photoAddTile.addEventListener('click', () => { if (pendingPhotos === 0) photoInput.click(); });
   photoInput.addEventListener('change', async () => {
     const file = photoInput.files[0];
     photoInput.value = ''; // allow picking/capturing the same way again for the next page
     if (!file) return;
+    formError.innerHTML = '';
     pendingPhotos++;
     updateSubmitState();
     try {
-      const dataUrl = await compressImage(file);
-      photoPages.push(dataUrl);
-      renderPhotoGrid();
+      await addPageFromFile(file);
     } catch (e) {
       formError.innerHTML = '<div class="error">写真を読み込めませんでした。 (Could not read the photo — please try again)</div>';
     } finally {
@@ -619,6 +896,7 @@
     document.getElementById('exam-score').value = '';
     document.getElementById('exam-total').value = '';
     photoPages = [];
+    pageMeta = [];
     renderPhotoGrid();
     document.getElementById('exam-date').value = new Date().toISOString().split('T')[0];
     show('form');
